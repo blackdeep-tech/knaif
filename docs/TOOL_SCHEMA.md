@@ -5,20 +5,29 @@ This document is the canonical guide for creating and maintaining a `knaif` skil
 A skill is a self-contained directory under `skills/` that defines:
 
 - the model-visible intent tools in `tools.yaml`
-- deterministic tool behavior as `Step` / `Intent` classes plus a `Skill` subclass in `handlers.py`
+- deterministic tool behavior as `Handler` / `Intent` classes in `python/` (plus an optional `Skill` subclass for hooks)
 - prompt rules and examples in `prompt.yaml`
 - domain metadata, arg value sets, and dataset references in `skill.yaml`
 - optional profiles, presets, fixtures, and datasets used by the tools
 - optional skill-local notebooks under `notebooks/`
 
-A **tool** is a class implementing one of two interfaces:
+A **tool** is a named capability with a YAML contract in `tools.yaml`, either one the model sees
+or an internal one. Its code is a class implementing one of two interfaces:
 
-- a **`Step`** is a leaf — it executes and returns a result dict (`handle`).
-- an **`Intent`** is a macro — it expands into a sub-plan of Steps before execution (`expand`).
+- a **`Handler`** executes and returns a result dict (`handle`).
+- an **`Intent`** expands into a sub-plan of plan steps before execution (`expand`).
 
-A **skill** is a `Skill` subclass that lists its tool classes in `tools = [...]`. `skill.yaml` names the class via `skill_class:`. There are no `HANDLERS` / `EXPANDERS` / `SUMMARIZERS` / `PREFLIGHTS` dicts — every tool is a class, linked to its `tools.yaml` metadata by its `name` attribute.
+A **plan step** is one entry in a plan (`{"tool": …, "args": …}`); the word "step" means only
+that. A **toolkit** (`toolkits/<name>/`) is a shared set of tools with the same `tools.yaml` +
+`python/` layout as a skill, but no prompt or corpus; a skill uses one by declaring
+`toolkits: [fs]` (see [Toolkits](#toolkits-shared-tools)).
 
-The core package `knaif/` stays domain-agnostic. It loads skills, validates JSON plans, expands intent tools, resolves variables, enforces safety categories, and dispatches to `Step.handle`. Domain behavior belongs in skills.
+Every tool is defined **once in YAML and once as a class**, and nothing else. The loader
+discovers the classes in the bundle's `python/` modules and matches each to its `tools.yaml`
+entry by its `name` attribute, strictly 1:1. Nothing lists the classes: there is no
+`tools = [...]`, no `skill_class:`, and no `HANDLERS` / `EXPANDERS` dicts.
+
+The core package `knaif/` stays domain-agnostic. It loads skills, validates JSON plans, expands intent tools, resolves variables, enforces safety categories, and dispatches to `Handler.handle`. Domain behavior belongs in skills and toolkits.
 
 ## Skill Directory Layout
 
@@ -43,8 +52,8 @@ skills/my_skill/
   eval/                  # skill-owned eval code
     fixtures.py · verifiers.py · reviewer.py · README.md
   python/                # the Python implementation (a real package)
-    __init__.py          # required — re-exports the Skill subclass
-    handlers.py          # required
+    __init__.py          # makes python/ a package (relative imports)
+    *.py                 # the tool classes, in any modules (handlers.py, steps.py, …)
     tests/
       test_my_skill.py
   native/                # the Rust implementation, added at the port
@@ -53,7 +62,7 @@ skills/my_skill/
     my_skill_tester.ipynb
 ```
 
-Only `skill.yaml`, `tools.yaml`, `python/__init__.py`, and `python/handlers.py` are
+Only `skill.yaml`, `tools.yaml` and the `python/` modules holding the tool classes are
 required. `SPEC.md`, `prompt.yaml`, `data/`, `eval/`, `profiles/`, `python/tests/`, and
 skill-local notebooks are strongly recommended for a maintainable skill. `native/` is added
 when the skill ships in the native runtime — see [Runtimes](#runtimes-python--native--both).
@@ -94,30 +103,25 @@ skill's `SPEC.md` is discoverable without editing the README. At minimum cover:
 
 The bundle's `python/` directory is a real Python package. Handler code is split across
 modules and pulled together with ordinary **relative imports**
-(`from ._engine import build`). The loader executes `python/__init__.py` as the skill's
-entry point and loads the handler module as a submodule, so relative imports resolve
-through normal import machinery and same-named skill directories under different parents
-never collide.
+(`from ._engine import build`). The loader executes `python/__init__.py`, imports every
+top-level module in `python/` (`handlers` first; `test_*` modules are skipped), and collects the
+classes **defined** there:
+- every `Handler`/`Intent` subclass with a `name`;
+- at most one `Skill` subclass.
 
-```python
-# skills/my_skill/python/__init__.py
-from .handlers import MySkill
-__all__ = ["MySkill"]
-```
+A class imported from somewhere else (core, a toolkit) is not the skill's. Same-named skill
+directories under different parents never collide.
 
-`skill_class: handlers.MySkill` in `skill.yaml` resolves against `python/`.
+**Why discovery, when it was once rejected?** The objection was that deriving the skill from
+Python package structure would make the Python package the canonical skill definition. It
+doesn't here: **`tools.yaml` stays the canonical list of every tool**, and classes are only
+matched against it. A class with no entry, or an entry with no class, is an error. The native
+runtime reads the same `tools.yaml`, and its own entry point is `runtimes.native.crate`. It never
+read `skill_class:`, so the "same string in both worlds" that justified naming the class was
+never used. Reversed 2026-10-09.
 
-**Why declare the class in YAML when `__init__.py` already re-exports it?** Auto-discovery
-was considered and rejected. The manifest is the *cross-language* contract: the native
-runtime reads the same `skill.yaml` and cannot import a Python class, so `skill_class:` and
-`runtimes.python.handlers` are the same `module.ClassName` string in both worlds. Deriving
-the entry point from Python package structure would make the Python package the canonical
-skill definition — exactly the boundary the declarative YAML exists to hold. The
-`__init__.py` re-export is a convenience for humans and `import`, not the binding.
-
-> **Legacy flat layout.** The loader still falls back to handlers sitting alongside the
-> YAML at the bundle top, with no package context (so no relative imports). This is
-> historical back-compat only — author new skills as bundles with a `python/` package.
+> **Flat layout.** The loader also accepts handler modules sitting alongside the YAML at the
+> bundle top (no package, so no relative imports). Author new skills with a `python/` package.
 
 #### Standard module layout
 
@@ -126,9 +130,9 @@ documents both follow it) so every skill is navigated/debugged the same way:
 
 ```text
 skills/<name>/python/
-  __init__.py     # re-export the Skill subclass (entry point)
-  handlers.py     # thin: assembles the Skill subclass + tool list, re-exports the package
-  steps.py        # Step classes (deterministic handlers)
+  __init__.py     # package marker
+  handlers.py     # thin: the optional Skill subclass (hooks), re-exports the package
+  steps.py        # Handler classes (deterministic tools)
   intents.py      # Intent classes (expanders)
   _deps.py        # external tools / optional-import shims — the test patch + debug seam
   _engine.py      # pure domain logic (no I/O): builders, parsers, coercions
@@ -151,9 +155,8 @@ name: my_skill
 description: "One-line description."
 version: 0.1.0
 
-tools: tools.yaml
-skill_class: handlers.MySkill   # ClassName in handlers.py (module-relative)
-prompt: prompt.yaml
+toolkits: [fs]   # optional: shared toolkits whose tools this skill's plans use
+expose: []       # optional: toolkit tools the model may see (internal otherwise)
 
 recommended_model: qwen3-4b  # name in models.yaml (see "Runtime models" below)
 
@@ -196,7 +199,8 @@ file_kinds:
   image: [jpg, jpeg, png]
 ```
 
-Both runtimes read it for chain threading only. When a later step names an earlier step's
+Both runtimes read it for chain threading and for the scratch keep rule (below). When a later
+step names an earlier step's
 source file, core rewrites it onto that step's output ("convert clip.mp4 to mkv then strip
 *its* audio"), but never onto a file of a different kind: "make a thumbnail of clip.mp4 and
 compress *it*" compresses the video. An extension no kind lists is unrestricted, and one
@@ -205,6 +209,22 @@ listed under two kinds fails the skill load.
 Threading also stops when the **user repeats the filename**: "thumbnail of clip.mp4 and
 compress clip.mp4" is two steps over one file, and the plan runs as written. When you write
 corpus rows or examples, a name written twice pins that step to the original file.
+
+`batch_kinds` (optional) lists the kinds whose batch glob covers the whole kind:
+
+```yaml
+batch_kinds: [video]
+```
+
+In a request for many files, an input glob `*.<ext>` whose extension the request does not name
+also reads the other extensions of that kind in its folder: "make all the videos here 720p"
+written as `*.mp4` covers the .mov and .mkv files beside it (`["*.mp4", "*.mkv", "*.mov"]`). An
+extension the request names as the files' type ("every .mov", "the mp4s") is never added. A
+format named once, only as the value of the step's `produces: {arg}` argument, is what the step
+converts *to*, not the files' type: "convert all the videos to mp4" covers the mp4s and the other
+videos alike, whichever glob the model wrote. A one-path `input` given
+several globs this way, or by the model, runs once per file. Each kind must be one `file_kinds`
+declares. Pinned by `contracts/parity/kind_glob_cases.json`.
 
 ### Display metadata
 
@@ -259,7 +279,7 @@ display:
 A `status: stale` skill is **never** published, and `stage:` cannot override that — the
 website must not resurface what the runtime hides from `list_skills()`.
 
-`skill_class` names the `Skill` subclass and is resolved **module-relative** to the skill directory: `skill_class: handlers.MySkill` means class `MySkill` in the skill's `handlers.py`. The part before the dot selects the file (`handlers` → `handlers.py`); a bare `MySkill` (no dot) defaults to `handlers`. The loader fails fast if any class in `MySkill.tools` is not a `Step`/`Intent`, has no matching `tools.yaml` entry, or collides on `name`.
+The file names are fixed (`tools.yaml`, `prompt.yaml`, `python/`), so `skill.yaml` names no files and no classes. A manifest that still declares `skill_class:`, `tools:` or `prompt:` is rejected with a message saying why. The loader fails fast when a `tools.yaml` entry has no class, a class has no entry, two classes share a `name`, a name collides across the skill, its toolkits and core, or the bundle defines more than one `Skill` subclass.
 
 ### `pipeline:` and the `inject` step (optional, advanced)
 
@@ -332,14 +352,13 @@ runtimes:
 
 | Shape | `runtimes:` block | Where handlers live |
 |---|---|---|
-| **Python-only** | `python:` only (or omit `runtimes:` entirely) | `skills/<name>/python/` |
-| **Native-only** | `native:` only | `skills/<name>/native/` |
-| **Both** | `python:` + `native:` | both of the above |
+| **Python-only** | omit `runtimes:` | `skills/<name>/python/` |
+| **Native-only** | `native:`, and no `python/` folder | `skills/<name>/native/` |
+| **Both** | `native:` | both of the above |
 
 - **Omitting `runtimes:` is legal** and means Python-only — `skills/io/skill.yaml` has no block. The
   native runtime lists such a skill but reports no native support.
-- **`runtimes.python.handlers`** is the same `module.ClassName` form as the top-level `skill_class:`
-  and resolves module-relative inside the skill's `python/` package.
+- **The Python runtime needs no declaration:** a skill has one when it has a `python/` folder.
 - **`runtimes.native.status`** is what the native CLI reads (`native/crates/knaif-core/src/skills.rs`);
   `knaif skills list` shows it as `native:<crate>`. Use a non-`supported` status while a native port
   is in progress so the binary doesn't claim a skill it can't execute.
@@ -399,7 +418,7 @@ The installers mirror this block — the Windows installer's winget ids, command
 
 `recommended_model` is the skill's preferred entry in [models.yaml](../models.yaml) at the repo root. The CLI and `create_agent()` use this resolution order at runtime:
 
-1. `--model-path PATH` (raw GGUF, no model_config)
+1. `--model PATH` naming a GGUF file (raw GGUF, no model_config)
 2. `--model NAME` (explicit lookup in `models.yaml`)
 3. The active skill's `recommended_model`
 4. `models.yaml`'s `default:`
@@ -420,6 +439,7 @@ my_tool:
   safety_category: safe
   readonly: true
   internal: false
+  effects: [fs.read]
   mock_args:
     input: "{sandbox}"
 ```
@@ -434,6 +454,7 @@ my_tool:
 | `safety_category` | no | `safe` or `destructive`; destructive tools require `dry_run=True` or `confirmed=True`. Defaults to `safe`. |
 | `readonly` | no | Marks side-effect-free tools for optimizer pruning. Defaults to `false`. |
 | `internal` | no | Hides workflow-only tools from the model prompt. Defaults to `false`. |
+| `effects` | **yes** (skill and toolkit tools) | What the tool may do: `fs.read`, `fs.write`, `net`, `exec:<program>`; `[]` for none (an Intent that only expands). A bundle with an undeclared tool does not load, in either runtime. See *Declared effects* below. |
 | `mock_args` | no | Template args used by `use_mock=True` inference. |
 
 System tools `clarify`, `reject`, `done`, and `wait_for_confirmation` are injected by core code when missing. Skills may declare `clarify`, `reject`, or `done` themselves when they want custom descriptions or mock args.
@@ -565,35 +586,34 @@ notice. Put the test where the varying information is.
 
 ## `handlers.py`
 
-`handlers.py` holds the tool classes and one `Skill` subclass. Tool behavior lives in
-the classes; pure helpers (recipe engines, coercions, profile loaders) stay as plain
-module-level functions. When the skill is a package (has an `__init__.py`), these
-helpers can move into sibling modules and be pulled in with relative imports
-(`from ._recipe import build`) instead of crowding a single file.
+Tool classes live in any `python/` module (`handlers.py`, `steps.py`, `intents.py`, …). Tool
+behavior lives in the classes; pure helpers (recipe engines, coercions, profile loaders) stay as
+plain module-level functions, in sibling modules pulled in with relative imports
+(`from ._recipe import build`).
 
 ```python
 from knaif.handler_api import HandlerContext
 from knaif.skill_base import Skill
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
 
-class MyToolStep(Step):
+class MyTool(Handler):
     name = "my_tool"                       # links to the tools.yaml entry
 
     def handle(self, args: dict, ctx: HandlerContext) -> dict:
         return {"status": "ok"}
 
 
-class MySkill(Skill):
-    tools = [MyToolStep]                    # every tool class the skill exposes
+class MySkill(Skill):                      # optional: hooks only
+    def format_results(self, results, *, dry_run): ...
 ```
 
-A class's `name` attribute is the only link to its `tools.yaml` metadata — keep them in
-sync. The core control tools (`clarify`, `reject`, `done`, `wait_for_confirmation`) are
-built-in `Step` classes merged into every skill automatically; do not redeclare them as
-classes.
+A class's `name` attribute is the only link to its `tools.yaml` metadata, and the loader checks
+it both ways. The core control tools (`clarify`, `reject`, `done`, `wait_for_confirmation`) are
+built-in `Handler` classes merged into every skill automatically. Do not redeclare them as
+classes; restating one in `tools.yaml` is allowed and needs no class.
 
-`HandlerContext` (passed to `Step.handle`) provides:
+`HandlerContext` (passed to `Handler.handle`) provides:
 
 - `root`
 - `sandbox`
@@ -602,10 +622,20 @@ classes.
 - `skill_dir`
 - `confirmer`
 - `confirm(prompt, preview=None)`
+- `work_dir`: this run's scratch folder (see *The run scratch* below)
+- `call_tool(name, args)`: run another tool of this skill (its own, a declared toolkit's, or
+  core) in the same run. This is how a handler reuses a toolkit tool.
+- `file_finished(file, failure=None)`: a step that works on many files says how each one ended,
+  done or failed with a one-line reason (no paths in it). Core prints a failure as it happens,
+  lets a failed command among done files continue the run instead of stopping it, and ends with
+  the batch summary (`3 done, 1 failed in 4.2s, 12.3 MB`). A step over one file is no batch:
+  its report is ignored and its error takes the usual path. ffmpeg's `inspect_media`,
+  `build_recipes` and `run_batch` report this way. When core itself runs a chain once per file,
+  it reports each file and only keeps the step's reason.
 
-Steps must honor `ctx.dry_run` for side-effecting work. Destructive public tools are
+Handlers must honor `ctx.dry_run` for side-effecting work. Destructive public tools are
 blocked by `CommandAgent.execute_plan()` unless `dry_run=True` or `confirmed=True`, but
-the Step still owns the final behavior.
+the Handler still owns the final behavior.
 
 ## Intents (Workflow Expanders)
 
@@ -628,7 +658,7 @@ class HighLevelToolIntent(Intent):
 ```
 
 `expand` is pure (no `ctx`): the whole plan is frozen before any step runs. Per-item
-runtime choices belong inside a Step's output (e.g. a `build_recipes` step), not in
+runtime choices belong inside a tool's output (e.g. a `build_recipes` step), not in
 branching inside `expand`.
 
 ## Plan Summarizers (Optional)
@@ -654,18 +684,16 @@ callers can test the pipeline without real files on disk. A non-empty return rai
 
 Two levels, with strict precedence:
 
-- **Per-tool**: override `preflight` on a `Step` or `Intent` for tool-specific checks.
+- **Per-tool**: override `preflight` on a `Handler` or `Intent` for tool-specific checks.
 - **Skill-level**: override `Skill.preflight(self, tool, args, **kw)` as the catch-all
   (the replacement for the old `"*"` wildcard).
 
 For each tool the core runs the tool's own `preflight` **only if the class overrides the
-default** (`type(tool).preflight is not Step.preflight`); otherwise it runs the
+default** (`type(tool).preflight is not Handler.preflight`); otherwise it runs the
 skill-level `preflight`. The two never both run.
 
 ```python
 class MySkill(Skill):
-    tools = [...]
-
     def preflight(self, tool: str, args: dict, *, root, sandbox=None, **kw) -> list[str]:
         return check_inputs_exist(args, root=root, sandbox=sandbox)  # [] means pass
 ```
@@ -680,7 +708,7 @@ class MySkill(Skill):
     def format_results(self, results: list[dict], *, dry_run: bool) -> list[dict]:
         """Return a list of {kind, message} items.
 
-        kind ∈ {"error", "command", "output", "info"}.
+        kind ∈ {"error", "command", "output", "text", "info"}.
         """
         return [{"kind": "output", "message": "ok"}]
 ```
@@ -692,6 +720,7 @@ The CLI renders each item uniformly:
 | `"error"` | red `✗ {message}` on stderr; sets the CLI exit code to 1 |
 | `"command"` | `$ {message}` with a bright-black `$` prefix |
 | `"output"` | green `✓ {message}` |
+| `"text"` | the message as is, every line indented, no colour: what a read found (extracted text, a page count, matches) |
 | `"info"` | yellow `{message}` |
 
 A skill that does not override `format_results` leaves it returning `None`, and the CLI
@@ -739,24 +768,202 @@ its own input truncates the source before ffmpeg reads it (`skills/ffmpeg/python
 a skill whose handlers write to a temporary file and move it has no such problem. Core supplies
 the extension point and keeps no naming logic of its own.
 
-## Shared Steps (`knaif.steps`)
+## Toolkits (shared tools)
 
-Steps reused across skills live in `knaif.steps` (the class) with metadata in
-`knaif/steps/steps.yaml`. A skill consumes one by adding the class to its `tools` list —
-no copy/paste, no skill-to-skill imports:
+Tools reused across skills live in a **toolkit**: `toolkits/<name>/` with the same layout as a
+skill, minus the parts the model sees.
 
-```python
-from knaif.steps import ResolveInputs
-
-class MySkill(Skill):
-    tools = [ResolveInputs, MyToolStep, HighLevelToolIntent]
+```text
+toolkits/fs/
+  tools.yaml        # the canonical contract for each tool
+  python/*.py       # the Handler/Intent classes, discovered 1:1 like a skill's
+  SPEC.md
 ```
 
-The loader merges `steps.yaml` metadata for any shared step in `tools`. Both `documents`
-and `ffmpeg` share `ResolveInputs` this way. Promote a private Step to shared by moving the
-class + its YAML block into `knaif.steps`; the `name` stays stable, so plans, prompts,
-and evals are unaffected. Discovery steps return `{count, files}`; consumers accept a
-bare list or that dict.
+A skill uses a toolkit by declaring it, with no copy of its YAML and no imports:
+
+```yaml
+# skills/my_skill/skill.yaml
+toolkits: [fs]
+```
+
+- **Every tool of a declared toolkit** joins the skill's registry and tool map.
+- **Toolkit tools are internal** (never shown to the model) unless the skill lists them under
+  `expose:`. Then they are part of the skill's vocabulary and need prompt examples and training
+  rows like any other public tool.
+- **A name must be unique** across the skill, its toolkits and core, and a collision is an error.
+  Names stay plain (`resolve_inputs`, not `fs.resolve_inputs`).
+- **Toolkits are found** in `$KNAIF_TOOLKITS_ROOT`, else in `toolkits/` beside `skills/`
+  (`Skill.load(..., toolkits_root=...)` overrides both).
+- **A toolkit has no `Skill` subclass,** because it has no hooks.
+- **Evidence:** a skill's acceptance evidence fingerprints its declared toolkits, so a toolkit
+  edit invalidates the records of every skill that uses it.
+
+`ffmpeg` and `documents` both take `resolve_inputs` from `toolkits/fs` this way. **Promote a
+private tool to a toolkit when a second skill needs it** (the rule of two): move its class and
+YAML block, keep the `name`, and declare the toolkit in both skills. Plans, prompts and evals are
+unaffected. Discovery tools return `{count, files}`; consumers accept a bare list or that dict.
+
+A handler reuses a toolkit tool through the context, never by importing it (toolkit modules load
+under private package names): `ctx.call_tool("commit_output", {"staged": s, "path": p})`. The
+call runs in the same run, with the same scratch and the same dry run.
+
+`toolkits/fs` provides:
+
+| Tool | Does |
+|---|---|
+| `resolve_inputs` | files, folders and globs inside the sandbox → `{count, files}` |
+| `stage_output` | a path in the run scratch with the final file's name → `{staged}` |
+| `commit_output` | checks a staged file (exists, not empty), then moves it to its final path → `{path, bytes}`. A failure removes the staged file and leaves the user's folder untouched. A final path inside the scratch is refused. |
+| `ensure_parent` | makes the (resolved) parent folder of a path inside the sandbox or scratch |
+| `plan_output_path` | the one free-name rule, suffix and numbering chosen by the caller (`_converted_2`, `-1`) |
+| `user_side_path` | a path, or where it would sit in the user's folder if it is in the run scratch; anchor a default output on it so nothing derived from a routed intermediate lands in the scratch |
+
+The native runtime has the same rules as plain functions in the `knaif-toolkit-fs` crate
+(`toolkits/fs/native/`), which skill crates call directly.
+
+## The run scratch
+
+Intermediate files belong to knaif, not to the user. Every run that executes gets a fresh
+`<OS temp>/knaif/run-<id>/`, handed to handlers as `ctx.work_dir` (`knaif.scratch`):
+
+- **Deleted when the run ends,** on success and on failure. There is no persistent cache.
+- **Kept under `KNAIF_DEBUG`.** `KNAIF_SCRATCH_ROOT` moves the root.
+- **A dry run writes nothing.** `work_dir` is still a path, so commands can name it, but the
+  folder is never created.
+- **Stale `run-*` folders** older than a day are swept when a run starts, since a run killed
+  hard cannot delete its own.
+- **Sandbox rule.** A path the model writes is checked against the sandbox only. A path core or a
+  step put into this run's scratch (a routed intermediate, a `$var` value) is also accepted. A
+  final output can never land in the scratch.
+- **Chain intermediates** go there when the skill opts in (`scratch_intermediates: true` in its
+  `skill.yaml`, read by both runtimes): a step's `output` that a later step reads moves into `work_dir` under the
+  same name, with every later reference. An output nothing reads is a deliverable, and a file
+  the user named in the request stays where the plan put it.
+- **The keep rule.** An intermediate the user *asked for* stays too, although they never named
+  the file. One rule, two deterministic signals, and core never names a tool:
+  - **Tool signal:** every later step reading it makes a **new thing** from it: a file of
+    another kind ("convert clip.mov to mp4, then extract its audio" leaves the mp4 and the mp3),
+    or a tool that declares `derives: true` because its output is a piece, a page range or a
+    join rather than the input improved ("compress report.pdf and extract pages 1-3" leaves the
+    compressed whole and the pages). **Not when every reader is a join** (`joins_inputs: true`):
+    pieces made for a join are on the way, so "compress all the PDFs here and merge them into
+    one" leaves only the merged file.
+  - **Request signal:** the user named its format as a bare word and no later reader writes that
+    format again: "convert clip.mov to mp4 and make a gif preview" leaves the mp4 and the gif,
+    while "convert to mp4 and make it smaller" leaves only the smaller mp4, because that is mp4
+    again. Extensions are ASCII in every language, so this needs no word lists; the extension of
+    the step's own input never counts ("cut the mp4 at 3 seconds and make a gif" names the
+    source).
+
+  Otherwise a later step refines it, so it moves: "convert to mp4, then speed it up" leaves only
+  the sped-up mp4. Kinds are the skill's `file_kinds`; what a reader writes is its tool's
+  `produces:` in `tools.yaml`, a kind or `{arg: <name>}` when the kind follows an argument naming
+  an extension, else its explicit `output`'s kind. The declaration wins over the extension the
+  model wrote: `extract_audio` writing `clip_audio.mp4` still writes audio, so a wrong extension
+  cannot delete a second result:
+
+  ```yaml
+  extract_audio:
+    produces: audio
+  convert_document:
+    produces: {arg: to_format}   # to_format: txt -> text, pdf -> document
+  trim_video:
+    derives: true                # a piece: its source stays
+  split_pdf:
+    derives: true                # a page range: its source stays
+  ```
+
+  A tool without `produces:` writes the same kind as its input. Core never names a tool: a new
+  skill gets the rule by declaring its kinds and what its tools write.
+- **A result saved per file in a batch.** A tool can declare `batch_output: <ext>` (documents
+  `extract_text: batch_output: txt`): when core repeats a step of it over many files, each
+  file's result is saved as `<name>.<ext>` next to that file, the name core gives each lifted
+  step's `output`, and the preview's "leaves" line counts the files. (extract_text saves one
+  file's text too, and declares `output` as an ordinary argument.)
+- **A text answer for a pipe.** A tool whose result is text can declare `stdout: <result field>`
+  (documents `extract_text: stdout: text`). `knaif run --stdout` (both CLIs) then prints that
+  field alone on stdout and saves nothing, the handler told by `ctx.to_stdout`; the run's own
+  lines go to stderr. A plan with any tool that declares none refuses the flag before anything
+  runs. Contracts `cli_flag_cases.json` (the flag) and `cli_output_cases.json` (what each CLI
+  prints).
+- **Keeping everything.** `--keep-intermediates` on `knaif run` (both CLIs) keeps every step's
+  output where the plan put it, and so do words in the request: "keep the intermediate files",
+  "keep everything", "behalte alles", "保留中间文件". The phrases are a keep verb next to a scope,
+  never `save` (which names outputs); a negated English request keeps the default. Python
+  `knaif.scratch.wants_everything_kept`, Rust `knaif_core::scratch::wants_everything_kept`,
+  contract `contracts/parity/keep_request_cases.json`.
+- **Scratch paths are never printed.** The one exception is a preview clip, which the user is
+  meant to watch. Evidence shows them as `<work>/…` (`evalsuite.redact`).
+
+## URL inputs
+
+A skill can take an http(s) URL wherever it takes an input file
+(`convert https://host/talk.mov to mp4`). It opts in in `skill.yaml`:
+
+```yaml
+toolkits: [fs, net]
+url_inputs:
+  accepted: [video/*, audio/*, application/octet-stream]   # content types; a trailing * is a prefix
+  max_mb: 2000
+```
+
+- **A URL is never a path.** Validation allows one only in an input arg (`inputs`, `input`,
+  `files`, `base`, `append`, or an arg with `path_role: input`). Only http and https are allowed,
+  and never a user name or password. The rules (`knaif.urls`) are pinned for both runtimes by
+  `contracts/parity/url_inputs_cases.json`.
+- **The fetch stage** runs after the clarify gates and before routing, collision naming,
+  expansion and preflight. It replaces every URL with a file at the top of the run scratch, so
+  no later stage sees a URL, and outputs derived from it are named in the user's folder
+  (`user_side_path`). The download itself never reaches the user's folder.
+- **Nothing is fetched without approval.** The CLI's `--allow download` (or `--yes`, which
+  allows everything) approves up front. Otherwise each URL asks `Download <url>? [y/N]` (Enter is
+  no), and with no terminal the run stops, naming the flag. In the library, set
+  `agent.allow_download` or `agent.download_confirmer(url, max_bytes)`.
+- **A dry run requests nothing.** It names the scratch path the download would take
+  (`agent.last_downloads`), so the rendered plan is complete. That file is not there yet, so a
+  handler's dry run must not open an input that does not exist (as with a chain intermediate):
+  a read returns an empty stub marked `"mode": "dry_run"`.
+- **The policy** (redirects, timeouts, size cap, content types, no cookies or credentials) lives in
+  the net toolkit's `download_file`; see `toolkits/net/SPEC.md`.
+- **A skill without `url_inputs:`** clarifies: it works on local files.
+- **Both runtimes.** Python: `CommandAgent._fetch_url_inputs`, `knaif-cli run --allow download`.
+  Native: `fetch_url_inputs` in `apps/cli` (`knaif run --allow download`), with the
+  `knaif_core::urls` rules and the `knaif-toolkit-net` crate (ureq).
+
+## Declared effects
+
+Every skill and toolkit tool declares in `tools.yaml` what it may do to the world:
+
+| Effect | Means |
+|---|---|
+| `fs.read` | reads files (a toolkit lookup that looks at the disk counts) |
+| `fs.write` | writes, moves or deletes files, through the fs toolkit |
+| `net` | reaches the network |
+| `exec:<program>` | runs an external program, e.g. `exec:ffmpeg`, `exec:soffice` (lowercase letters, digits, `_`, `-`) |
+
+`effects: []` declares a tool with none. A tool that declares nothing is refused when its bundle
+loads (Python `Skill.load`, native `knaif_core::load_skill_registry`); the core control tools are
+core's and exempt. The two runtimes agree through `contracts/parity/effects_cases.json`.
+
+**At run time (Python)** a step is held to its declaration:
+
+- `ctx.exec(program, argv, **kwargs)` is the one way a step runs a process (`subprocess.run`
+  underneath); it raises `EffectNotDeclared` unless the tool declares `exec:<program>`.
+  `argv[0]` may be the program's full path; `program` is the name the tool declares.
+- `ctx.call_tool(name, args)` raises `EffectNotDeclared` unless the calling tool declares every
+  effect of `name`, so a step without `fs.write` cannot write through the fs toolkit.
+- A context built outside the agent (a bare `HandlerContext`) is not restricted.
+
+**The lint** (`python/core/tests/test_tool_modules_io_lint.py`, in `just check`) bans direct
+I/O in tool modules (`skills/*/python/*.py`, `toolkits/*/python/*.py`): `subprocess`,
+`urllib`/`httpx`/`requests`/`socket`, shutil's copy/move/remove functions, pathlib and `os`
+writes and deletes, and `open` in a write mode. Every exception is listed with its reason (for
+example a library that writes the staged path `stage_output` handed out); an exception that no
+longer matches anything fails the lint.
+
+**Native** reads and validates the same declarations when a bundle loads; enforcing them at run
+time waits for a native step context (audit F11).
 
 ## Plan Envelope And Variables
 
@@ -799,6 +1006,28 @@ examples:
 ```
 
 `Skill.load()` renders examples into the prompt. Keep examples short, concrete, and limited to model-visible tools unless the skill intentionally teaches the model a multi-step public plan.
+
+Extra header lines that only some requests need go under `rules:`, so every other prompt stays
+byte for byte as it was. A rule joins the end of the header when one of its `tools` is in the
+prompt, or, with `when: many`, when the request asks for many files (a batch word, a plural file
+word or a glob, not counting a URL or a known folder named as a place:
+`nl_clarify_gate.asks_for_many_files`, pinned by `contracts/parity/many_files_cases.json`). An
+example marked `when: many` is likewise shown only to such a request.
+
+```yaml
+rules:
+  - tools: [split_video, extract_frames]
+    text: |
+      - ONE FILE INTO MANY: ...
+  - when: many
+    text: |
+      - MANY FILES, SEVERAL STEPS: write the steps as for ONE file ...
+
+examples:
+  - request: "Rotate every mkv in this folder 90 degrees and make them 1080p."
+    when: many
+    output: ...
+```
 
 ## Data Files
 
@@ -860,9 +1089,9 @@ skill must ship three data files:
 ## Forking Workflow
 
 1. Copy an existing skill, e.g. `skills/documents` for a multi-tool skill or `skills/ffmpeg` for an Intent-heavy workflow skill. (`skills/io` is `status: stale` and under rebuild — not a good fork template.)
-2. Update `skill.yaml` name, description, `skill_class:`, data references, and `arg_value_sets`.
+2. Update `skill.yaml` name, description, `toolkits:`, data references, and `arg_value_sets`.
 3. Replace public and internal tools in `tools.yaml`.
-4. Implement the `Step` / `Intent` classes and the `Skill` subclass in `python/handlers.py`; reuse `knaif.steps` where possible.
+4. Implement the `Handler` / `Intent` classes in `python/` (and a `Skill` subclass only if you need hooks); take shared tools from a toolkit rather than writing your own.
 5. Write `prompt.yaml` with model-visible rules and examples.
 6. Add JSONL data and tests.
 7. Verify with `CommandAgent.from_skill("skills/my_skill", sandbox="...")`.

@@ -380,3 +380,87 @@ def test_a_chain_halts_on_the_first_failure(fixtures: Path, tmp_path: Path) -> N
     )
     assert len(results) == 2, "the third command must not run"
     assert [r["returncode"] for r in results] == [0, 1]
+
+
+# -- 5. run scratch (<work>) paths ------------------------------------------------------------
+
+
+def test_a_scratch_path_is_re_rooted_into_the_row_scratch(tmp_path: Path, monkeypatch) -> None:
+    """A chain intermediate renders under `<work>` (the run scratch). The replay maps it into
+    a per-row scratch folder BESIDE the row folder: still gradeable, never in the user's view."""
+    root = tmp_path / "temp" / "knaif"
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", str(root))
+    row_dir = tmp_path / "row"
+    mid = root / "run-42-ab" / "clip_trimmed.mp4"
+    resolved, collapsed = resolve_command(_echo_command(str(mid), "final.mp4"), row_dir, [row_dir])
+    toks = resolved.split()
+    assert Path(toks[toks.index("-i") + 1]) == tmp_path / "row.work" / "clip_trimmed.mp4"
+    assert collapsed == []
+
+
+def test_a_chain_through_scratch_leaves_only_the_deliverable(
+    fixtures: Path, tmp_path: Path, monkeypatch
+) -> None:
+    root = tmp_path / "temp" / "knaif"
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", str(root))
+    mid = str(root / "run-42-ab" / "mid.mp4")
+
+    def _write_output(toks, *a, **k):
+        Path(toks[-1]).write_bytes(b"x")
+
+        class _R:
+            returncode, stderr = 0, ""
+
+        return _R()
+
+    row_dir = tmp_path / "row"
+    results = _chain(
+        [_echo_command("clip.mp4", mid), _echo_command(mid, "final.mp4")],
+        fixtures,
+        row_dir,
+        _write_output,
+    )
+    assert [r["output"] for r in results] == [
+        tmp_path / "row.work" / "mid.mp4",
+        row_dir / "final.mp4",
+    ]
+    produced = {p.name for p in row_dir.iterdir()} - {"clip.mp4", "other.mp4", "sub"}
+    assert produced == {"final.mp4"}
+
+
+def test_cleanup_removes_the_row_scratch_too(tmp_path: Path) -> None:
+    from knaif.evalsuite.provisioning import cleanup_row_dir
+
+    row_dir = tmp_path / "row"
+    for d in (row_dir, tmp_path / "row.work"):
+        d.mkdir()
+        (d / "f.mp4").write_bytes(b"x")
+    cleanup_row_dir(row_dir)
+    assert not row_dir.exists() and not (tmp_path / "row.work").exists()
+
+
+def test_regen_creates_the_folder_of_a_fixture_in_a_subfolder(tmp_path: Path, monkeypatch) -> None:
+    """A folder row's fixtures live in a subfolder (`batch/a.mov`): regen creates the folder
+    before the generator writes into it, or ffmpeg fails with "No such file or directory"."""
+    import argparse
+    import subprocess
+
+    from knaif.evalsuite import cli
+
+    fixture_dir = tmp_path / "fixtures"
+    monkeypatch.setattr(
+        cli, "_load_skill_fixtures", lambda skill: ({"batch/a.mov": "ffmpeg {output}"}, {})
+    )
+    monkeypatch.setattr(cli, "_default_fixture_dir", lambda sandbox, skill: fixture_dir)
+    seen: list[bool] = []
+
+    class _Ok:
+        returncode, stderr = 0, ""
+
+    def run(cmd, *a, **k):
+        seen.append((fixture_dir / "batch").is_dir())
+        return _Ok()
+
+    monkeypatch.setattr(subprocess, "run", run)
+    cli.cmd_fixtures_regen(argparse.Namespace(skill="ffmpeg", sandbox=None, force=False))
+    assert seen == [True]

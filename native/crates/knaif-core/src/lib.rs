@@ -5,27 +5,36 @@
 //! optimizer, and the shared step library. This Phase 4 skeleton implements only skill
 //! discovery/metadata (`skills` module); the rest is ported in Phase 6.
 
+pub mod alert;
+pub mod batch_chain;
 pub mod clarify_gate;
 pub mod deps;
+pub mod effects;
 pub mod extract;
+pub mod known_folders;
 pub mod nl_clarify_gate;
 pub mod planner;
 pub mod prompt;
 pub mod registry;
+pub mod result_set;
 pub mod retrieval;
 pub mod safety;
 pub mod sandbox;
+pub mod scratch;
 pub mod skills;
+pub mod urls;
 
 pub use clarify_gate::{
-    apply_clarify_gate, file_kinds_from_groups, hallucinated_filename, load_file_kinds,
-    output_capable_tools, required_args_clarify, unsupported_args_clarify, FileKinds,
+    apply_clarify_gate, file_kinds_from_groups, hallucinated_filename, load_batch_kinds,
+    load_file_kinds, output_capable_tools, required_args_clarify, unsupported_args_clarify,
+    FileKinds,
 };
 pub use deps::{
     detect_skill_deps, expand_dirs, load_external_tools, missing_required_message,
     parse_external_tools, resolve_declared_command, resolve_declared_tool, unmet_required,
     ExternalTool, InstallHints, MacosInstall, ToolStatus, WindowsInstall,
 };
+pub use effects::load_skill_registry;
 pub use extract::{extract_json, ExtractedJson};
 pub use nl_clarify_gate::nl_clarify_gate;
 pub use planner::{
@@ -33,8 +42,9 @@ pub use planner::{
     validate_plan, validate_step, StemOutcome,
 };
 pub use prompt::{
-    build_prompt, build_prompt_ordered, load_prompt_yaml, render_examples_block, select_examples,
-    validator_feedback_prompt, PromptExample, PromptOverrides, MAX_TOOL_EXAMPLES,
+    apply_prompt_rules, build_prompt, build_prompt_ordered, load_prompt_yaml,
+    render_examples_block, select_examples, triggered_tools, validator_feedback_prompt,
+    PromptExample, PromptOverrides, PromptRule, MAX_TOOL_EXAMPLES,
 };
 pub use registry::{load_registry, ArgSchema, Registry, ToolDef};
 pub use retrieval::{retrieve_tools, RetrievedTools, DEFAULT_TOP_K};

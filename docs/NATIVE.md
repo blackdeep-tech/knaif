@@ -78,9 +78,17 @@ request
 - `--dry-run` previews commands/output paths with no side effects (stubs missing
   inputs) — **every step of a chain, not just the first**. Since 1.3.0 execution **acts without
   asking**: `--confirm` opts into `Proceed? [Y/n]` (Enter approves; per step, so an N-step chain
-  asks N times); `--yes` is accepted and skips that question. **Replacing an existing file is the one
-  thing that always asks**, whatever `--yes` says: `Replace <file>? [y/N]` (Enter keeps the file),
-  and with no terminal the step stops naming `--overwrite`, the only way to approve it up front.
+  asks N times); `--yes` skips that question. **Replacing an existing file asks** `Replace <file>?
+  [y/N]` (Enter keeps the file), and with no terminal the step stops naming `--allow overwrite`,
+  which approves it up front, as `--yes` does. **The flags (both CLIs,
+  `contracts/parity/cli_flag_cases.json`):** `--allow download,overwrite,model` (a comma list or a
+  repeated flag; an unknown name is an error), `--yes`/`-y` = `--allow all`, every permission now
+  and every one a later release adds. The 1.3.0 flags `--overwrite` and `--allow-download` are
+  gone, and `--yes` no longer means only the model download. `--stdout` prints a step's text
+  answer alone on stdout (a tool that declares `stdout:` in tools.yaml, extract_text today), the
+  run's own lines go to stderr, and nothing is saved; a plan with any other tool refuses it.
+  **One display:** `knaif-cli run` (Python) prints the same plain lines and draws the same tree
+  as `knaif run`, pinned by `contracts/parity/cli_output_cases.json`.
   The gate runs before the command, because every rendered ffmpeg command still carries `-y`.
 - **Chains are mediated by files, not variables.** `skills/<name>/prompt.yaml` instructs the model
   to give an earlier step an explicit `output` filename and reuse that same name as the later
@@ -339,15 +347,25 @@ was going to work.
 `run` is usable without `--model`: when none is given, the manifest's `recommendations.cli`
 (else `default`) model is selected automatically. Precedence, in order:
 
-1. **`--model <name|path>`** — authoritative. Honored even in a build without the llama.cpp
-   backend, where it raises "rebuild with `--features llama`" rather than silently degrading.
-2. **`$KNAIF_LLM_BACKEND=mock`** — explicit opt-out; the mock wins over auto-select (offline/eval).
+1. **`$KNAIF_LLM_BACKEND=mock`** — explicit opt-out; the mock runs even when `--model` is given,
+   as in the Python CLI: a canned plan (`KNAIF_LLM_MOCK_RESPONSE`) is a test of everything after
+   planning, and must not be replaced by a real model's plan.
+2. **`--model <name|path>`** — otherwise authoritative. Honored even in a build without the
+   llama.cpp backend, where it raises "rebuild with `--features llama`" rather than silently
+   degrading.
 3. **Recommended model already installed** → used silently, no prompt.
 4. **Otherwise** → the download-consent flow below; declining falls back to the mock.
 
+Whichever manifest model is chosen, a one-line note follows when it was not trained for the
+prompt this knaif serves: its `trained_for` (manifest) against `generation` in
+`contracts/runtime/prompt_generation.yaml`, naming the model that was. An older model is noted
+only once the manifest has a model for this generation (until then it runs quietly); a model
+trained for a newer prompt is always noted. A GGUF path, or a missing file, prints nothing: the
+note never stops a run. The Python CLI prints the same line from `models.yaml`.
+
 **Consent / download.** `run` asks `Download recommended model <name> (~2.5 GB)? [y/N]` (size read
-from the manifest's `size_bytes`) and pulls it with a progress bar on `y`. `--yes` skips the
-question and downloads (the model download keeps its own `[y/N]` consent). When stdin is not a tty and `--yes` was not passed, the run falls back to
+from the manifest's `size_bytes`) and pulls it with a progress bar on `y`. `--allow model` (or
+`--yes`) skips the question and downloads. When stdin is not a tty and neither was passed, the run falls back to
 the mock with first-run guidance — a multi-GB download **never** happens without consent, so CI and
 piped runs never block. Prompts and the progress bar go to **stderr**; stdout stays clean.
 

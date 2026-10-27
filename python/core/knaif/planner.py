@@ -21,6 +21,40 @@ _STEM_STRUCTURE_RE = re.compile(r"[_\-]|\d")
 _GLOB_CHARS = frozenset("*?[")
 # Arg keys whose values are file paths (skills may use either singular or plural).
 _PATH_ARG_KEYS = frozenset({"inputs", "input", "files", "src", "dst", "path", "base", "append"})
+# Arg keys that name files a step reads: the only places a URL may stand (contracts/parity/
+# url_inputs_cases.json). An arg whose schema says `path_role: input` counts too.
+_URL_INPUT_KEYS = frozenset({"inputs", "input", "files", "base", "append"})
+_CONTROL_TOOLS = frozenset(
+    {"clarify", "reject", "done", "wait_for_confirmation", "alert_when_done"}
+)
+
+
+def is_glob_batch(value: Any) -> bool:
+    """Whether *value* is several globs given to a one-path ``input``: one batch, which the
+    per-file lift runs once per file (owner, 2026-10-21)."""
+    return (
+        isinstance(value, list)
+        and len(value) > 1
+        and all(isinstance(v, str) and any(c in v for c in _GLOB_CHARS) for v in value)
+    )
+
+
+def _validate_url_args(tool_name: str, tool_def: ToolDef, args: dict[str, Any]) -> None:
+    """A URL may only be an input file, and must be one knaif will download."""
+    from .urls import check_url, is_url
+
+    for arg_name, value in args.items():
+        for item in value if isinstance(value, list) else [value]:
+            if not is_url(item):
+                continue
+            schema = tool_def.arg_schemas.get(arg_name)
+            if arg_name not in _URL_INPUT_KEYS and getattr(schema, "path_role", None) != "input":
+                raise ValueError(
+                    f"Tool '{tool_name}': a URL can only be an input file, not '{arg_name}' "
+                    f"({item})"
+                )
+            if (error := check_url(item)) is not None:
+                raise ValueError(f"Tool '{tool_name}': {error}")
 
 
 class StemNotFoundError(ValueError):
@@ -110,12 +144,17 @@ _OUTPUT_RE = re.compile(r"^\$[a-zA-Z_][a-zA-Z0-9_]*$")
 _VAR_REF_RE = re.compile(r"^\$[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$")
 
 
-def _resolve_path(raw_path: str, root: Path, sandbox: Path | None) -> Path:
+def _resolve_path(
+    raw_path: str, root: Path, sandbox: Path | None, scratch: Path | None = None
+) -> Path:
     """Resolve *raw_path*, optionally enforcing a sandbox boundary.
 
     When *sandbox* is provided:
     - Relative paths are resolved against the sandbox root.
-    - Absolute paths must still fall inside the sandbox.
+    - Absolute paths must still fall inside the sandbox, or inside *scratch* (this run's
+      ``work_dir``) when given. Only trusted callers pass *scratch*: an expanded plan, or args
+      after ``$var`` resolution. A plan taken from the model is checked against the sandbox
+      alone, so the model can never name the scratch folder.
 
     When *sandbox* is ``None`` (open / CLI mode):
     - Relative paths are resolved against *root* (cwd).
@@ -127,6 +166,8 @@ def _resolve_path(raw_path: str, root: Path, sandbox: Path | None) -> Path:
             path = (sandbox / path).resolve()
         else:
             path = path.resolve()
+        if scratch is not None and path.is_relative_to(scratch.resolve()):
+            return path
         try:
             path.relative_to(sandbox.resolve())
         except ValueError as exc:
@@ -288,10 +329,10 @@ def normalize_plan(
         if wants_scalar and "inputs" in args and "input" not in args:
             raw = args["inputs"]
             if isinstance(raw, list):
-                if len(raw) == 1:
-                    args["input"] = raw[0]
+                if len(raw) == 1 or is_glob_batch(raw):
+                    args["input"] = raw[0] if len(raw) == 1 else raw
                     del args["inputs"]
-                # ≥2 elements: leave for validation to reject
+                # ≥2 files: leave for validation to reject
             elif isinstance(raw, str):
                 args["input"] = raw
                 del args["inputs"]
@@ -431,6 +472,7 @@ def validate_step(
     sandbox: Path | None = None,
     *,
     allow_internal: bool = False,
+    scratch: Path | None = None,
 ) -> None:
     """Raise ValueError if *step* is structurally invalid.
 
@@ -462,6 +504,8 @@ def validate_step(
             "it is only reachable through an intent's expansion."
         )
     allowed = set(tool_def.required_args) | set(tool_def.optional_args)
+    if tool_def.batch_output:
+        allowed.add("output")  # where a batch saves it; not listed in the prompt
 
     missing = [k for k in tool_def.required_args if k not in args]
     if missing:
@@ -478,11 +522,16 @@ def validate_step(
 
     for arg_name, value in args.items():
         schema = tool_def.arg_schemas.get(arg_name)
+        if arg_name == "input" and is_glob_batch(value):
+            continue  # a batch of globs: each lifted step gets one file
         if schema is not None:
             try:
                 validate_arg_by_schema(arg_name, value, schema)
             except ValueError as exc:
                 raise ValueError(f"Tool '{tool_name}' arg validation: {exc}") from exc
+
+    if tool_name not in _CONTROL_TOOLS:
+        _validate_url_args(tool_name, tool_def, args)
 
     output = step.get("output")
     if output is not None:
@@ -496,7 +545,7 @@ def validate_step(
         else:
             if not isinstance(val, str):
                 raise ValueError("'path' must be a string.")
-            _resolve_path(val, root, sandbox)
+            _resolve_path(val, root, sandbox, scratch)
 
     for path_key in ("src", "dst"):
         if path_key in args:
@@ -506,7 +555,7 @@ def validate_step(
             else:
                 if not isinstance(val, str):
                     raise ValueError(f"'{path_key}' must be a string.")
-                _resolve_path(val, root, sandbox)
+                _resolve_path(val, root, sandbox, scratch)
 
     if "pattern" in args:
         val = args["pattern"]
@@ -551,6 +600,55 @@ def apply_defaults(payload: dict[str, Any], registry: dict[str, Any]) -> None:
                 args[key] = value
 
 
+ALERT_TOOL = "alert_when_done"
+# Asked for with nothing to do ("beep"): the alert needs a task to finish.
+NO_WORK_TO_ALERT = (
+    "I can alert you when a task finishes, but there is no task in this request. "
+    "What should I do first?"
+)
+
+
+def _is_alert(step: Any) -> bool:
+    return isinstance(step, dict) and step.get("tool") == ALERT_TOOL
+
+
+def split_alert(payload: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Return *payload* without its ``alert_when_done`` steps, and whether the run alerts.
+
+    The alert is a run option, not a step (``contracts/parity/alert_cases.json``):
+    - it may stand anywhere in the plan, and any args the model gives it are ignored;
+    - two alerts are one;
+    - a plan that only clarifies or rejects gets no alert: nothing ran, and the user is reading
+      the answer already;
+    - an alert with no work beside it (only ``done``, or nothing) becomes a clarify.
+
+    *payload* itself is left unchanged.
+    """
+    plan = payload.get("plan")
+    if not isinstance(plan, list) or not any(_is_alert(s) for s in plan):
+        return payload, False
+    rest = [s for s in plan if not _is_alert(s)]
+    work = [s for s in rest if isinstance(s, dict) and s.get("tool") != "done"]
+    if not work:
+        clarify = {"tool": "clarify", "args": {"question": NO_WORK_TO_ALERT}}
+        return {**payload, "plan": [clarify]}, False
+    if all(s.get("tool") in ("clarify", "reject") for s in work):
+        return {**payload, "plan": rest}, False
+    return {**payload, "plan": rest}, True
+
+
+def alert_last(payload: dict[str, Any]) -> None:
+    """Move ``alert_when_done`` steps to the end of the plan, in place, keeping every other
+    step's order: chain linking joins a step's output to the next step's input."""
+    plan = payload.get("plan")
+    if not isinstance(plan, list):
+        return
+    alerts = [s for s in plan if _is_alert(s)]
+    if alerts:
+        plan[:] = [s for s in plan if not _is_alert(s)]
+        plan.extend(alerts)
+
+
 def classify_preflight_errors(errors: list[str]) -> str:
     """Return 'reject' for sandbox-escape errors, 'clarify' for all others."""
     if any("outside the sandbox" in e for e in errors):
@@ -565,11 +663,13 @@ def validate_plan(
     sandbox: Path | None = None,
     *,
     allow_internal: bool = False,
+    scratch: Path | None = None,
 ) -> None:
     """Validate every step in *payload['plan']*; raises ValueError on first failure.
 
     *allow_internal*: see ``validate_step`` — pass True only for an already-expanded
-    sub-plan, never for a plan taken directly from the model or an outside caller.
+    sub-plan, never for a plan taken directly from the model or an outside caller. The same
+    holds for *scratch* (see ``_resolve_path``).
     """
     plan = payload["plan"]
     multi_step = len(plan) > 1
@@ -577,7 +677,9 @@ def validate_plan(
 
     for i, step in enumerate(plan, start=1):
         try:
-            validate_step(step, registry, root, sandbox, allow_internal=allow_internal)
+            validate_step(
+                step, registry, root, sandbox, allow_internal=allow_internal, scratch=scratch
+            )
         except ValueError as exc:
             raise ValueError(f"Plan step {i} invalid: {exc}") from exc
 

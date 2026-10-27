@@ -9,6 +9,7 @@ description = "Native ffmpeg skill: workflow expansion + deterministic handlers 
 
 [dependencies]
 knaif-skill-api = { workspace = true }
+knaif-toolkit-fs = { workspace = true }
 glob = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }

@@ -73,12 +73,12 @@ def test_a_same_folder_pattern_never_names_the_input_itself(agent, output):
     """`*.mp4` for `clip.mp4` resolved to `clip.mp4`, which ffmpeg refuses ("Invalid argument").
 
     ffmpeg_229#4's batch had `.mp4` inputs among others; after the codec-extension repair those
-    still failed. A pattern that lands on its own input takes the derived name instead, which is
+    still failed. A pattern that lands on its own input takes the first free number instead, which is
     also what the plan-level collision handling gives a literal `clip.mp4 -> clip.mp4`.
     """
     argv = _argv(agent, {"inputs": ["clip.mp4"], "container": "mp4", "output": output})
     assert argv[argv.index("-i") + 1] != argv[-1]
-    assert Path(argv[-1]).name == "clip_converted.mp4"
+    assert Path(argv[-1]).name == "clip_1.mp4"
 
 
 @pytest.fixture(scope="module")
@@ -107,6 +107,8 @@ def _probe(name: str) -> dict:
 class _Ctx:
     sandbox = None
     dry_run = True
+    # The working folder, where a relative output the plan names is written: the inputs'.
+    root = Path("/sb")
 
 
 @pytest.mark.parametrize("names", [("clip.mp4", "clip.mov"), ("clip.mov", "clip.mp4")])

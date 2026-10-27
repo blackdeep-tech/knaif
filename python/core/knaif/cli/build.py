@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Annotated, Any, Union, get_args, get_origin, get_type_hints
 
 from knaif.cli.decorators import Arg, Opt
-from knaif.cli.function_step import FunctionStep
+from knaif.cli.function_handler import FunctionHandler
 from knaif.registry import ArgSchema, ToolDef
 
 # Python built-in type → ArgSchema.type string
@@ -99,7 +99,7 @@ def _extract_meta(annotation: Any) -> Arg | Opt | None:
 
 def build_registry(
     fns: list[Callable],
-) -> tuple[dict[str, ToolDef], dict[str, FunctionStep]]:
+) -> tuple[dict[str, ToolDef], dict[str, FunctionHandler]]:
     """Build a registry and tool_map from a list of @command-decorated functions.
 
     Each function must be decorated with ``@nk.command``. The function name
@@ -110,7 +110,7 @@ def build_registry(
     ``CommandAgent.from_registry(registry, tool_map)``.
     """
     registry: dict[str, ToolDef] = {}
-    tool_map: dict[str, FunctionStep] = {}
+    tool_map: dict[str, FunctionHandler] = {}
 
     for fn in fns:
         if not hasattr(fn, "_nk_command"):
@@ -176,6 +176,6 @@ def build_registry(
             arg_schemas=arg_schemas,
         )
         registry[tool_name] = td
-        tool_map[tool_name] = FunctionStep(tool_name, fn, td)
+        tool_map[tool_name] = FunctionHandler(tool_name, fn, td)
 
     return registry, tool_map

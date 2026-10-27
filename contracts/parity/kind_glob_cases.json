@@ -1,0 +1,1007 @@
+{
+  "_comment": "\"Every video\" is every video (owner, 2026-10-21). In a request that asks for many files (knaif.nl_clarify_gate.asks_for_many_files), an input glob `*.<ext>` (in a plain folder or here) whose extension the request does not name, of a kind the skill lists under `batch_kinds:`, also covers the other extensions of that kind found in its folder: `*.mp4` for \"make all videos here 720p\" becomes `[\"*.mp4\", \"*.mkv\", \"*.mov\"]`. Added extensions follow the glob they widen, in alphabetical order; one the request names (\"the mp4s\", \"mp4-Dateien\", \".mov files\") is never added. A format the request names only as what the step converts to (the value of the tool's `produces: {arg}` argument, mentioned once: \"to mp4\", \"в mp4\", \"转换为mp4\") is not a name of the files (owner, 2026-10-22: \"every video\" is every video, those already in the target format included); a later step's input that is an earlier step's output is a link and stays. The value of a one-path `input` becomes a list too, which the per-file lift runs once per file. Outputs, other glob shapes (`clip*.mp4`, `**/*.mp4`), file names and other kinds are never changed. `files` exist under the folder the plan runs in. Python `knaif.batch_chain.widen_kind_globs`, Rust `knaif_core::batch_chain::widen_kind_globs`. Exclusions (owner, 2026-10-23):\"except / excluding / other than / außer / excepto / sauf / освен / без / 除了\" followed within three words by an extension the skill knows excludes that extension: it is never added by the widening, and its glob is removed from every step; a step left with no input is dropped unless a later step reads what it writes (then the plan stays as written). \"без звук\" (without sound) names no extension and excludes nothing. The widening never adds an extension another step's glob already takes.",
+  "file_kinds": {
+    "mp4": "video",
+    "mov": "video",
+    "mkv": "video",
+    "webm": "video",
+    "gif": "video",
+    "mp3": "audio",
+    "wav": "audio",
+    "jpg": "image"
+  },
+  "batch_kinds": [
+    "video"
+  ],
+  "cases": [
+    {
+      "name": "a lone mp4 glob for every video covers every video here",
+      "utterance": "make all videos here 720p and strip their audio",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "garden.mkv",
+        "notes.txt",
+        "song.mp3",
+        "cover.jpg"
+      ],
+      "plan": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 720,
+            "output": "*.mp4"
+          }
+        },
+        {
+          "tool": "strip_audio",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "height": 720,
+            "output": "*.mp4"
+          }
+        },
+        {
+          "tool": "strip_audio",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a partial list is completed",
+      "utterance": "extract the audio from every video in this folder as mp3",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "audio_format": "mp3"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mov",
+              "*.mkv"
+            ],
+            "audio_format": "mp3"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a one-path input becomes a list",
+      "utterance": "make a thumbnail and a short gif of every video in this folder",
+      "files": [
+        "beach.mov",
+        "concert.mp4"
+      ],
+      "plan": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "*.mp4",
+            "output": "thumb_*.jpg"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "gif",
+            "output": "*.gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": [
+              "*.mp4",
+              "*.mov"
+            ],
+            "output": "thumb_*.jpg"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mov"
+            ],
+            "container": "gif",
+            "output": "*.gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an extension the request names stays alone",
+      "utterance": "convert all the .mov files here to mp4",
+      "files": [
+        "beach.mov",
+        "concert.mp4"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a plural type names it",
+      "utterance": "convert the mp4s in this folder to mov, then extract the audio from them as mp3",
+      "files": [
+        "a.mp4",
+        "b.mov",
+        "c.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mov",
+            "output": "*.mov"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mov",
+            "output": "*.mov"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a type in a compound word names it",
+      "utterance": "konvertiere alle .mov-Dateien hier in mp4 und mach sie kleiner",
+      "files": [
+        "a.mp4",
+        "b.mov",
+        "c.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a type in a compound word without a dot names it",
+      "utterance": "konvertiere alle mp4-Dateien in mov",
+      "files": [
+        "a.mp4",
+        "b.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mov"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mov"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a type the request names as the target is added too",
+      "utterance": "convert every video here to webm",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "old.webm"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "webm"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mov",
+              "*.webm"
+            ],
+            "container": "webm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "the target format does not stop the widening",
+      "utterance": "batch convert all videos in the current folder to mp4",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "the target format is added to another glob",
+      "utterance": "пакетно конвертирай всички видеа в mp4 с CRF 26",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "crf": 26
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov",
+              "*.mkv",
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "crf": 26
+          }
+        }
+      ]
+    },
+    {
+      "name": "a target written without spaces",
+      "utterance": "批量将所有视频转换为mp4",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a format named as the source and the target stays alone",
+      "utterance": "convert all the mp4 videos to mp4 with h264",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "video_codec": "h264"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4",
+            "video_codec": "h264"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an output's extension is not a target",
+      "utterance": "make all the mp4 videos 720p",
+      "files": [
+        "beach.mov",
+        "concert.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 720,
+            "output": "*.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "height": 720,
+            "output": "*.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a request about one file is left alone",
+      "utterance": "convert this video to webm",
+      "files": [
+        "beach.mov",
+        "concert.mp4"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "webm"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "webm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a kind the skill does not list stays",
+      "utterance": "normalize the volume of every song here",
+      "files": [
+        "a.mp3",
+        "b.wav"
+      ],
+      "plan": [
+        {
+          "tool": "normalize_audio",
+          "args": {
+            "inputs": [
+              "*.mp3"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "normalize_audio",
+          "args": {
+            "inputs": [
+              "*.mp3"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "nothing else of the kind here",
+      "utterance": "compress every video here",
+      "files": [
+        "concert.mp4",
+        "dog.mp4",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a glob in a folder widens in that folder",
+      "utterance": "compress every video in the raw folder",
+      "files": [
+        "raw/a.mp4",
+        "raw/b.mov",
+        "c.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "raw/*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "raw/*.mp4",
+              "raw/*.mov"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "other glob shapes stay",
+      "utterance": "compress every video here",
+      "files": [
+        "clip1.mp4",
+        "beach.mov"
+      ],
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip*.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "**/*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip*.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "**/*.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a named file beside the glob stays",
+      "utterance": "join intro.mp4 and all the clips here into one video",
+      "files": [
+        "intro.mp4",
+        "a.mp4",
+        "b.mov"
+      ],
+      "plan": [
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "intro.mp4",
+              "*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "intro.mp4",
+              "*.mp4",
+              "*.mov"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a glob the list already holds is not added twice",
+      "utterance": "trim every clip to its first 5 seconds",
+      "files": [
+        "a.mp4",
+        "b.mov",
+        "c.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": [
+              "*.mp4",
+              "*.mov"
+            ],
+            "end": "00:00:05"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "end": "00:00:05"
+          }
+        }
+      ]
+    },
+    {
+      "name": "except a type removes it from every step",
+      "utterance": "convert every video to mp4 except the mov files",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mov"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "except a type is never added by the widening",
+      "utterance": "convert every video to gif except the mkv files",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mov"
+            ],
+            "container": "gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bulgarian except names the type after it",
+      "utterance": "конвертирай всички видеа в mp4 без mov файловете",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bulgarian without sound excludes nothing",
+      "utterance": "конвертирай всички видеа в mp4 без звук",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chinese except",
+      "utterance": "把除了mov以外的所有视频转换为mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a kind another step takes is not widened into twice",
+      "utterance": "convert every video here to webm",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "webm"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "webm"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv"
+            ],
+            "container": "webm"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "webm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a dropped step another step reads keeps the plan as written",
+      "utterance": "convert every video except the mov files to mp4 into small/, then compress what is in small/",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv",
+        "notes.txt"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "small/*.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "small/*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "small/*.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "small/*.mp4"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "produces": {
+    "convert_video": {
+      "arg": "container"
+    }
+  }
+}

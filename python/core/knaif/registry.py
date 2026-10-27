@@ -10,6 +10,8 @@ from typing import Any
 
 import yaml
 
+from .effects import parse_effects
+
 # A tuple, not a set: these are appended to the retrieval result in this order, and a set's
 # iteration order depends on PYTHONHASHSEED — the same query returned a different tool order
 # in different processes. Harmless inside Python (the prompt listing skips control tools) but
@@ -23,6 +25,14 @@ _ALWAYS_INCLUDE = ("clarify", "reject", "done")
 # n-grams so keywords up to _CJK_MAX_NGRAM chars match by containment.
 _CJK_RUN = re.compile(r"[぀-ヿ㐀-䶿一-鿿가-힯]+")
 _CJK_MAX_NGRAM = 4
+# Leading and trailing non-word characters of a whitespace token.
+_EDGE_PUNCT = re.compile(r"^\W+|\W+$")
+# A request word matches a keyword it inflects: the keywords are mostly infinitives
+# ("comprimir", "komprimieren") and a command is an imperative ("comprime", "komprimiere").
+# Native: `keyword_matches` in knaif-core/retrieval.rs.
+_STEM_MIN = 6  # letters two words must share to be one stem
+_STEM_TAIL = 4  # letters the longer word may have after the shared stem
+_SUFFIX_MIN_KEYWORD = 5  # a keyword this long matches a word that only adds letters to it
 # A keyword may be shared by tools, but one claimed by more than this many is too
 # generic to discriminate and is rejected at load time as a curation mistake.
 _MAX_KEYWORD_TOOLS = 4
@@ -53,21 +63,81 @@ def _normalize(text: str) -> str:
     )
 
 
+def _words(norm: str) -> set[str]:
+    """The whitespace words of normalized text, each without edge punctuation."""
+    return {w for w in (_EDGE_PUNCT.sub("", w) for w in norm.replace("_", " ").split()) if w}
+
+
 def _query_tokens(text: str) -> set[str]:
     """Token set for keyword/description matching.
 
     Whitespace word tokens (ASCII + space-delimited scripts) **plus** character
     n-grams (length 1..``_CJK_MAX_NGRAM``) drawn from any CJK/kana/Hangul run, so a
-    CJK keyword matches by containment. For text with no CJK run this returns
-    exactly the old whitespace token set — pure-ASCII/Latin scoring is unchanged.
+    CJK keyword matches by containment.
     """
     norm = _normalize(text)
-    tokens = set(norm.replace("_", " ").split())
+    words = norm.replace("_", " ").split()
+    # Punctuation at a word's edge is not part of it: "1080p." and ".mkv" are "1080p" and
+    # "mkv". A dot inside a word stays, so "clip.mp4" is still one token.
+    tokens = _words(norm)
+    # A hyphenated word also counts as its parts: "compresse-le", "по-малки". The whole word
+    # stays, for keywords such as "re-encode".
+    tokens |= {
+        p for w in words if "-" in w for p in (_EDGE_PUNCT.sub("", x) for x in w.split("-")) if p
+    }
     for run in _CJK_RUN.findall(norm):
         for n in range(1, _CJK_MAX_NGRAM + 1):
             for i in range(len(run) - n + 1):
                 tokens.add(run[i : i + n])
     return tokens
+
+
+def _keyword_matches(word: str, keyword: str) -> bool:
+    """True when *word* (a normalized query token) is *keyword* or an inflection of it.
+
+    Exact always. Otherwise only for alphabetic words outside CJK (which match by n-gram):
+    - the word is the keyword plus up to `_STEM_TAIL` letters ("compresse" for "compress"),
+      the keyword at least `_SUFFIX_MIN_KEYWORD` letters ("poster" is not "post");
+    - or the two share a stem of at least `_STEM_MIN` letters and the longer one has at most
+      `_STEM_TAIL` letters after it ("comprime" and "comprimir"). "extra" is not "extract".
+    """
+    if word == keyword:
+        return True
+    if not (word.isalpha() and keyword.isalpha()) or _CJK.search(word) or _CJK.search(keyword):
+        return False
+    if len(keyword) >= _SUFFIX_MIN_KEYWORD and word.startswith(keyword):
+        return len(word) - len(keyword) <= _STEM_TAIL
+    shared = 0
+    for a, b in zip(word, keyword):  # noqa: B905 - a common prefix stops at the shorter one
+        if a != b:
+            break
+        shared += 1
+    return shared >= _STEM_MIN and max(len(word), len(keyword)) - shared <= _STEM_TAIL
+
+
+def triggered(text: str, triggers: tuple[str, ...]) -> bool:
+    """True when one of *triggers* is in *text* as a whole word or phrase, ignoring case and
+    accents: "beep" matches "Beep when done" and not "beeper.mp4". A typographic apostrophe
+    counts as a plain one, so "when it’s done" matches "when it's done"."""
+    norm = " ".join(_normalize(text).replace("’", "'").split())
+    for trigger in triggers:
+        phrase = " ".join(_normalize(trigger).replace("’", "'").split())
+        if not phrase:
+            continue
+        # A `#` stands for a number ("every # pages"). Chinese, Japanese and Korean write no
+        # spaces between words, so a boundary never falls inside a sentence: a trigger in that
+        # script matches anywhere (contracts/parity/trigger_cases.json).
+        body = re.escape(phrase).replace(r"\#", r"\d+")
+        if not _CJK.search(phrase):
+            body = rf"(?<!\w){body}(?!\w)"
+        if re.search(body, norm):
+            return True
+    return False
+
+
+#: Chinese, Japanese and Korean scripts (kana, CJK ideographs and their extension A,
+#: compatibility ideographs, Hangul syllables). Rust: `knaif_core::registry::is_cjk`.
+_CJK = re.compile("[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]")
 
 
 @dataclass
@@ -83,7 +153,35 @@ class ToolDef:
     grounded_args: tuple[str, ...] = field(default_factory=tuple)
     safety_category: str = "safe"
     keywords: tuple[str, ...] = field(default_factory=tuple)
+    # Whole words or phrases that bring this tool into a prompt. A tool with triggers is never
+    # ranked: it is retrieved only when one is in the request (`retrieve_tools`), so a request
+    # without one gets the same tools as if the tool did not exist (core's `alert_when_done`).
+    triggers: tuple[str, ...] = field(default_factory=tuple)
     readonly: bool = False
+    # Several inputs become ONE output (concat), not one output each (a batch). Read by chain
+    # routing: a joining producer's output is a single routable intermediate.
+    joins_inputs: bool = False
+    # The kind of file the tool writes when a step names no output (tools.yaml `produces:`): a
+    # kind from the skill's `file_kinds`, or {"arg": <name>} when the kind follows an argument
+    # that names an extension. None: the same kind as its input. Read by chain routing's keep
+    # rule (an intermediate every reader turns into another kind is a second result).
+    produces: str | dict[str, str] | None = None
+    # The tool's output is a NEW thing made from its input (a piece, a page range, a join), not
+    # the input improved (tools.yaml `derives: true`). Read by the keep rule: an intermediate
+    # every reader derives from stays, as a result the user asked for.
+    derives: bool = False
+    # The extension of the file the tool writes only when core repeats it over many files
+    # (tools.yaml `batch_output:`, e.g. extract_text's "txt"): a single-file step prints, a
+    # lifted one saves `<name>.<ext>` next to its file. Such a tool accepts `output`, which the
+    # prompt does not list (`batch_chain.lift_batch`).
+    batch_output: str | None = None
+    # The result field `run --stdout` prints instead of saving a file (tools.yaml `stdout:`, e.g.
+    # extract_text's "text"; owner, 2026-10-23). A plan with any other tool refuses
+    # the flag.
+    stdout: str | None = None
+    # What the tool may do to the world (`knaif.effects`): None when tools.yaml declares nothing,
+    # which a skill or toolkit bundle refuses; () for a tool with no effects.
+    effects: tuple[str, ...] | None = None
     mock_args: dict[str, Any] = field(default_factory=dict)
     internal: bool = False
     defaults: dict[str, Any] = field(default_factory=dict)
@@ -91,6 +189,17 @@ class ToolDef:
     # Sibling-key aliases: model arg key → this tool's canonical key
     # (e.g. split_pdf {pages: ranges}). Applied in normalize_plan before validation.
     arg_aliases: dict[str, str] = field(default_factory=dict)
+
+
+def _parse_produces(name: str, value: Any) -> str | dict[str, str] | None:
+    """A tool's `produces:`: a kind name, or `{arg: <name>}`; anything else is a load error."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, dict) and set(value) == {"arg"} and isinstance(value["arg"], str):
+        return {"arg": value["arg"]}
+    raise ValueError(f"tool {name!r}: produces must be a kind or {{arg: <name>}}, got {value!r}")
 
 
 def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
@@ -137,7 +246,14 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             grounded_args=tuple(cfg.get("grounded_args") or []),
             safety_category=cfg.get("safety_category", "safe"),
             keywords=tuple(cfg.get("keywords") or []),
+            triggers=tuple(cfg.get("triggers") or []),
             readonly=bool(cfg.get("readonly", False)),
+            joins_inputs=bool(cfg.get("joins_inputs", False)),
+            produces=_parse_produces(name, cfg.get("produces")),
+            derives=bool(cfg.get("derives", False)),
+            batch_output=str(cfg["batch_output"]).lstrip(".") if cfg.get("batch_output") else None,
+            stdout=str(cfg["stdout"]) if cfg.get("stdout") else None,
+            effects=parse_effects(name, cfg.get("effects")),
             mock_args=dict(cfg.get("mock_args") or {}),
             internal=bool(cfg.get("internal", False)),
             defaults=dict(cfg.get("defaults") or {}),
@@ -182,6 +298,8 @@ def retrieve_tools(
     Tools in _ALWAYS_INCLUDE are returned unconditionally.
     Internal tools are never surfaced to the model.
     Only tools with score >= min_score are included in the ranked selection.
+    A tool with ``triggers`` is not ranked: it follows the ranked tools when one of its triggers
+    is in *query*, and is absent otherwise.
     """
     tokens = _query_tokens(query)
 
@@ -198,9 +316,19 @@ def retrieve_tools(
 
     scores: list[tuple[float, str]] = []
     for name, tool in registry.items():
-        if name in _ALWAYS_INCLUDE or tool.internal:
+        if name in _ALWAYS_INCLUDE or tool.internal or tool.triggers:
             continue
-        matched = tokens & {_normalize(kw) for kw in tool.keywords}
+        # Each word counts once per tool: its own keyword when it is one, else the inflected
+        # keyword that weighs most (fewest tools claim it), ties on the keyword.
+        tool_kw = {_normalize(kw) for kw in tool.keywords}
+        matched: set[str] = set()
+        for t in tokens:
+            if t in tool_kw:
+                matched.add(t)
+                continue
+            stems = [k for k in tool_kw if _keyword_matches(t, k)]
+            if stems:
+                matched.add(min(stems, key=lambda k: (df[k], k)))
         kw_score = 3.0 * sum(1.0 / df[k] for k in matched)
         text = (
             f"{name.replace('_', ' ')} {tool.description} "
@@ -213,6 +341,9 @@ def retrieve_tools(
     selected: dict[str, ToolDef] = {
         name: registry[name] for score, name in scores[:top_k] if score >= min_score
     }
+    for name, tool in registry.items():
+        if tool.triggers and not tool.internal and triggered(query, tool.triggers):
+            selected[name] = tool
     for name in _ALWAYS_INCLUDE:
         if name in registry:
             selected[name] = registry[name]

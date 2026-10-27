@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
 from knaif.handler_api import HandlerContext
-from knaif.planner import _resolve_path
-from knaif.tool import Step
+from knaif.tool import Handler
 
 from . import _deps
 from ._deps import (
@@ -23,14 +21,16 @@ from ._engine import (
     OFFICE_SUFFIXES,
     PDF_SUFFIX,
     TEXT_SUFFIXES,
+    _document_text,
     _extract_office_text,
     _extract_text_records,
     _format_for,
+    _free_name,
     _ghostscript_compress,
     _input_path,
     _input_paths,
     _lossless_compress,
-    _next_free,
+    _open_pdf,
     _output_dir,
     _output_path,
     _parse_page_range_specs,
@@ -38,15 +38,29 @@ from ._engine import (
     _pdf_page_count,
     _profile,
     _rasterize_compress,
+    _read_pdf,
+    _resolve,
     _snippet,
     _write_image_overlay_pdf,
     _write_ocr_image_pdf,
     _write_ocr_pdf,
+    _write_text,
     _write_text_overlay_pdf,
+    _writing,
 )
 
 
-class InspectDocumentStep(Step):
+def _needs_password(path: Path) -> bool:
+    """Whether the PDF at *path* opens only with a password."""
+    pikepdf = _require_pikepdf()
+    try:
+        with pikepdf.open(path):
+            return False
+    except pikepdf.PasswordError:
+        return True
+
+
+class InspectDocumentStep(Handler):
     name = "inspect_document"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -71,13 +85,7 @@ class InspectDocumentStep(Step):
             "pages": 1,
         }
         if suffix == PDF_SUFFIX:
-            try:
-                from pypdf import PdfReader
-            except ImportError as exc:  # pragma: no cover - covered when extra absent
-                raise DocumentsDependencyError(
-                    "Install the documents dep group (uv pip install --group documents) to inspect PDFs."
-                ) from exc
-            reader = PdfReader(str(path))
+            reader = _read_pdf(path)
             result["encrypted"] = bool(reader.is_encrypted)
             result["pages"] = len(reader.pages) if not reader.is_encrypted else 0
             result["has_text_layer"] = (
@@ -98,20 +106,41 @@ class InspectDocumentStep(Step):
         return result
 
 
-class ExtractTextStep(Step):
+class ExtractTextStep(Handler):
     name = "extract_text"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         path = _input_path(args, ctx)
+        # `output` comes from core when it repeats this step over many files (tools.yaml
+        # `batch_output: txt`). One file's text is saved too, as <name>.txt beside it under the
+        # free-name rule (owner, 2026-10-23: printing it saved nothing); its result
+        # still carries the pages and the text, which the eval grades and the display previews.
+        single = not args.get("output")
+        output = _output_path(path, args, ctx, ".txt") if single else _resolve(args["output"], ctx)
+        if ctx.dry_run and not path.exists():
+            return {"mode": "dry_run", "pages": [], "text": "", "output": str(output)}
         records = _extract_text_records(path, args)
-        return {"pages": records, "text": "\n".join(record["text"] for record in records)}
+        text = _document_text(records)
+        # The text comes back whoever named the file (the GPU re-check: a name from the plan
+        # took the batch shape and the grade's text check found nothing).
+        result = {"output": str(output), "pages": records if single else len(records), "text": text}
+        if ctx.to_stdout and not ctx.dry_run:
+            # `run --stdout`: the text goes to the pipe, nothing is saved.
+            return {"pages": records, "text": text}
+        if ctx.dry_run:
+            return {"mode": "dry_run", **result}
+        with _writing(output, ctx) as target:
+            _write_text(target, text)
+        return result
 
 
-class FindInDocumentStep(Step):
+class FindInDocumentStep(Handler):
     name = "find_in_document"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         path = _input_path(args, ctx)
+        if ctx.dry_run and not path.exists():
+            return {"mode": "dry_run", "matches": [], "count": 0}
         records = _extract_text_records(path, args)
         query = args["query"]
         flags = re.IGNORECASE if args.get("ignore_case", True) else 0
@@ -134,14 +163,47 @@ class FindInDocumentStep(Step):
         return {"matches": matches, "count": len(matches)}
 
 
-class MergePdfsStep(Step):
+def _merge_inputs(args: dict[str, Any], output: Path, ctx: HandlerContext) -> list[Path]:
+    """The PDFs a merge reads, in order: a named file as given, a glob or a folder expanded by
+    the fs toolkit's `resolve_inputs` (natural order, PDFs only), like `concat_video`. A pattern
+    never matches the output itself: "merge all the PDFs here" run twice would read its own
+    earlier result."""
+    inputs: list[Path] = []
+    for raw, path in zip(args["inputs"], _input_paths(args, ctx), strict=True):
+        if path.is_dir() or any(c in raw for c in "*?["):
+            found = ctx.call_tool(
+                "resolve_inputs",
+                {"paths": [str(path)], "extensions": ["pdf"], "exclude": [str(output)]},
+            )
+            inputs += [Path(f) for f in found["files"]]
+        else:
+            inputs.append(path)
+    return inputs
+
+
+class MergePdfsStep(Handler):
     name = "merge_pdfs"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         pikepdf = _require_pikepdf()
-        inputs = _input_paths(args, ctx)
-        output = _resolve_path(args["output"], ctx.root, ctx.sandbox)
-        pages = sum(_pdf_page_count(path) for path in inputs)
+        output = _resolve(args["output"], ctx)
+        inputs = _merge_inputs(args, output, ctx)
+        # A locked PDF has no pages to give ("merge all the PDFs here" over a folder holding
+        # one): the run says so before writing anything, in native's words; a dry run previews
+        # without opening it, as native's does.
+        locked = [path for path in inputs if path.exists() and _needs_password(path)]
+        if locked and not ctx.dry_run:
+            raise ValueError(
+                f"{locked[0].name} is password-protected. "
+                "Unlock it first (with the password), then try again."
+            )
+        # A dry run counts only the inputs already there: a URL input is downloaded, and a
+        # chain intermediate made, only in a real run.
+        pages = sum(
+            _pdf_page_count(path)
+            for path in inputs
+            if (not ctx.dry_run or path.exists()) and path not in locked
+        )
 
         if ctx.dry_run:
             return {
@@ -151,62 +213,107 @@ class MergePdfsStep(Step):
                 "inputs": [str(path) for path in inputs],
             }
 
-        output.parent.mkdir(parents=True, exist_ok=True)
         merged = pikepdf.Pdf.new()
         for path in inputs:
-            with pikepdf.Pdf.open(path) as source:
+            with _open_pdf(path) as source:
                 merged.pages.extend(source.pages)
-        merged.save(output)
+        with _writing(output, ctx) as target:
+            merged.save(target)
         merged.close()
         return {"output": str(output), "pages": pages}
 
 
-class SplitPdfStep(Step):
+def _piece_label(label: str) -> str:
+    """A page range as it appears in a piece's name: `1-10` -> `1_10`."""
+    return label.replace("-", "_")
+
+
+def split_specs(args: dict[str, Any], total_pages: int) -> list[tuple[str, list[int]]]:
+    """The page ranges a split writes: `ranges` as given, or one every `every` pages."""
+    every = args.get("every")
+    if every:
+        n = int(every)
+        if n < 1:
+            raise ValueError("`every` must be at least 1 page.")
+        raw = ",".join(
+            f"{a}-{min(a + n - 1, total_pages)}" if min(a + n - 1, total_pages) > a else f"{a}"
+            for a in range(1, total_pages + 1, n)
+        )
+        return _parse_page_range_specs(raw, total_pages)
+    return _parse_page_range_specs(args["ranges"], total_pages)
+
+
+class SplitPdfStep(Handler):
     name = "split_pdf"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
-        pikepdf = _require_pikepdf()
-        input_path = _input_path(args, ctx)
-        total_pages = _pdf_page_count(input_path)
-        specs = _parse_page_range_specs(args["ranges"], total_pages)
-
-        # `output` names a single destination file; only meaningful when the
-        # split produces exactly one file. For multi-range splits it cannot
-        # apply, so fall back to the directory-per-file behaviour.
-        if args.get("output") and len(specs) == 1:
-            outputs = [_resolve_path(args["output"], ctx.root, ctx.sandbox)]
-        else:
-            out_dir = _output_dir(args, ctx, input_path.parent)
-            outputs = [
-                _next_free(out_dir / f"{input_path.stem}-pages-{label.replace('-', '_')}.pdf")
-                for label, _pages in specs
-            ]
-        if ctx.dry_run:
-            return {
-                "mode": "dry_run",
-                "outputs": [str(path) for path in outputs],
-                "count": len(outputs),
-            }
-
-        for path in outputs:
-            path.parent.mkdir(parents=True, exist_ok=True)
-        with pikepdf.Pdf.open(input_path) as source:
-            for output, (_label, pages) in zip(outputs, specs, strict=True):
-                split = pikepdf.Pdf.new()
-                for page_number in pages:
-                    split.pages.append(source.pages[page_number - 1])
-                split.save(output)
-                split.close()
-        return {"outputs": [str(path) for path in outputs], "count": len(outputs)}
+        return _split(args, ctx)
 
 
-class RotatePagesStep(Step):
+class SplitPdfEveryStep(Handler):
+    """A new file every N pages: `split_pdf` with ranges made from `every`."""
+
+    name = "split_pdf_every"
+
+    def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
+        return _split(args, ctx)
+
+
+def _pending(input_path: Path, ctx: HandlerContext) -> bool:
+    """A dry run's input that an earlier step of the chain has yet to write: its pages are
+    counted when the step runs, as native's preview does (documents_hard2_001, 2026-10-22)."""
+    return ctx.dry_run and not input_path.exists()
+
+
+def _split(args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
+    pikepdf = _require_pikepdf()
+    input_path = _input_path(args, ctx)
+    if _pending(input_path, ctx):
+        return {"mode": "dry_run", "outputs": [], "count": 0}
+    total_pages = _pdf_page_count(input_path)
+    specs = split_specs(args, total_pages)
+
+    # `output` names a single destination file; only meaningful when the
+    # split produces exactly one file. For multi-range splits it cannot
+    # apply, so fall back to the directory-per-file behaviour. An output with `%s` names
+    # every piece (the set name core gives a split read by a later step).
+    output = args.get("output")
+    if isinstance(output, str) and "%s" in output:
+        outputs = [_resolve(output % _piece_label(label), ctx) for label, _pages in specs]
+    elif output and len(specs) == 1:
+        outputs = [_resolve(output, ctx)]
+    else:
+        out_dir = _output_dir(args, ctx, input_path.parent)
+        outputs = [
+            _free_name(out_dir / f"{input_path.stem}-pages-{_piece_label(label)}.pdf", ctx)
+            for label, _pages in specs
+        ]
+    if ctx.dry_run:
+        return {
+            "mode": "dry_run",
+            "outputs": [str(path) for path in outputs],
+            "count": len(outputs),
+        }
+
+    with _open_pdf(input_path) as source:
+        for output, (_label, pages) in zip(outputs, specs, strict=True):
+            split = pikepdf.Pdf.new()
+            for page_number in pages:
+                split.pages.append(source.pages[page_number - 1])
+            with _writing(output, ctx) as target:
+                split.save(target)
+            split.close()
+    return {"outputs": [str(path) for path in outputs], "count": len(outputs)}
+
+
+class RotatePagesStep(Handler):
     name = "rotate_pages"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
-        pikepdf = _require_pikepdf()
         input_path = _input_path(args, ctx)
         output = _output_path(input_path, args, ctx, "-rotated.pdf")
+        if _pending(input_path, ctx):
+            return {"mode": "dry_run", "output": str(output), "rotated_pages": []}
         total_pages = _pdf_page_count(input_path)
         selected = _parse_pages(args.get("pages"), total_pages)
         degrees = int(args["degrees"])
@@ -214,21 +321,22 @@ class RotatePagesStep(Step):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output), "rotated_pages": selected}
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with pikepdf.Pdf.open(input_path) as pdf:
+        with _open_pdf(input_path) as pdf, _writing(output, ctx) as target:
             for page_number in selected:
                 pdf.pages[page_number - 1].rotate(degrees, relative=True)
-            pdf.save(output)
+            pdf.save(target)
         return {"output": str(output), "rotated_pages": selected}
 
 
-class RemovePagesStep(Step):
+class RemovePagesStep(Handler):
     name = "remove_pages"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         pikepdf = _require_pikepdf()
         input_path = _input_path(args, ctx)
         output = _output_path(input_path, args, ctx, "-removed.pdf")
+        if _pending(input_path, ctx):
+            return {"mode": "dry_run", "output": str(output)}
         total_pages = _pdf_page_count(input_path)
         remove = set(_parse_pages(args["pages"], total_pages))
         keep = [page for page in range(1, total_pages + 1) if page not in remove]
@@ -239,23 +347,24 @@ class RemovePagesStep(Step):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output), "pages": len(keep)}
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with pikepdf.Pdf.open(input_path) as source:
+        with _open_pdf(input_path) as source, _writing(output, ctx) as target:
             result = pikepdf.Pdf.new()
             for page_number in keep:
                 result.pages.append(source.pages[page_number - 1])
-            result.save(output)
+            result.save(target)
             result.close()
         return {"output": str(output), "pages": len(keep)}
 
 
-class ReorderPagesStep(Step):
+class ReorderPagesStep(Handler):
     name = "reorder_pages"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         pikepdf = _require_pikepdf()
         input_path = _input_path(args, ctx)
         output = _output_path(input_path, args, ctx, "-reordered.pdf")
+        if _pending(input_path, ctx):
+            return {"mode": "dry_run", "output": str(output)}
         total_pages = _pdf_page_count(input_path)
         raw_order = str(args["order"]).strip().lower()
         if raw_order in ("reverse", "reversed"):
@@ -275,17 +384,16 @@ class ReorderPagesStep(Step):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output), "pages": len(order)}
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with pikepdf.Pdf.open(input_path) as source:
+        with _open_pdf(input_path) as source, _writing(output, ctx) as target:
             result = pikepdf.Pdf.new()
             for page_number in order:
                 result.pages.append(source.pages[page_number - 1])
-            result.save(output)
+            result.save(target)
             result.close()
         return {"output": str(output), "pages": len(order)}
 
 
-class WatermarkStep(Step):
+class WatermarkStep(Handler):
     name = "watermark"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -298,29 +406,31 @@ class WatermarkStep(Step):
             return {"mode": "dry_run", "output": str(output)}
 
         if text:
-            _write_text_overlay_pdf(
-                input_path=input_path,
-                output=output,
-                text_for_page=lambda _index: str(text),
-                position=args.get("position", "center"),
-                opacity=float(args.get("opacity", 0.35)),
-                font_size=42,
-            )
+            with _writing(output, ctx) as target:
+                _write_text_overlay_pdf(
+                    input_path=input_path,
+                    output=target,
+                    text_for_page=lambda _index: str(text),
+                    position=args.get("position", "center"),
+                    opacity=float(args.get("opacity", 0.35)),
+                    font_size=42,
+                )
         elif image:
-            image_path = _resolve_path(image, ctx.root, ctx.sandbox)
-            _write_image_overlay_pdf(
-                input_path=input_path,
-                output=output,
-                image_path=image_path,
-                position=args.get("position", "center"),
-                opacity=float(args.get("opacity", 0.35)),
-            )
+            image_path = _resolve(image, ctx)
+            with _writing(output, ctx) as target:
+                _write_image_overlay_pdf(
+                    input_path=input_path,
+                    output=target,
+                    image_path=image_path,
+                    position=args.get("position", "center"),
+                    opacity=float(args.get("opacity", 0.35)),
+                )
         else:
             raise ValueError("watermark requires text or image")
         return {"output": str(output)}
 
 
-class AddPageNumbersStep(Step):
+class AddPageNumbersStep(Handler):
     name = "add_page_numbers"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -331,18 +441,19 @@ class AddPageNumbersStep(Step):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output)}
 
-        _write_text_overlay_pdf(
-            input_path=input_path,
-            output=output,
-            text_for_page=lambda index: str(start_at + index - 1),
-            position=args.get("position", "bottom-center"),
-            opacity=1.0,
-            font_size=12,
-        )
+        with _writing(output, ctx) as target:
+            _write_text_overlay_pdf(
+                input_path=input_path,
+                output=target,
+                text_for_page=lambda index: str(start_at + index - 1),
+                position=args.get("position", "bottom-center"),
+                opacity=1.0,
+                font_size=12,
+            )
         return {"output": str(output)}
 
 
-class ProtectPdfStep(Step):
+class ProtectPdfStep(Handler):
     name = "protect_pdf"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -353,15 +464,14 @@ class ProtectPdfStep(Step):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output)}
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with pikepdf.Pdf.open(input_path) as pdf:
+        with _open_pdf(input_path) as pdf, _writing(output, ctx) as target:
             pdf.save(
-                output, encryption=pikepdf.Encryption(user=args["password"], owner=args["password"])
+                target, encryption=pikepdf.Encryption(user=args["password"], owner=args["password"])
             )
         return {"output": str(output)}
 
 
-class UnlockPdfStep(Step):
+class UnlockPdfStep(Handler):
     name = "unlock_pdf"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -372,13 +482,15 @@ class UnlockPdfStep(Step):
         if ctx.dry_run:
             return {"mode": "dry_run", "output": str(output)}
 
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with pikepdf.Pdf.open(input_path, password=args["password"]) as pdf:
-            pdf.save(output)
+        with (
+            pikepdf.Pdf.open(input_path, password=args["password"]) as pdf,
+            _writing(output, ctx) as target,
+        ):
+            pdf.save(target)
         return {"output": str(output)}
 
 
-class ConvertDocumentStep(Step):
+class ConvertDocumentStep(Handler):
     name = "convert_document"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -395,29 +507,29 @@ class ConvertDocumentStep(Step):
             }
 
         if to_format in {"txt", "md"}:
-            text = "\n".join(record["text"] for record in _extract_text_records(input_path))
-            output_path.write_text(text, encoding="utf-8")
+            text = _document_text(_extract_text_records(input_path))
+            with _writing(output_path, ctx) as target:
+                _write_text(target, text)
             return {"output": str(output_path)}
 
         if input_path.suffix.lower() in IMAGE_SUFFIXES and to_format == "pdf":
             Image = _require_pillow_image()
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            with Image.open(input_path) as image:
-                image.convert("RGB").save(output_path, "PDF", resolution=100.0)
+            with Image.open(input_path) as image, _writing(output_path, ctx) as target:
+                image.convert("RGB").save(target, "PDF", resolution=100.0)
             return {"output": str(output_path)}
 
         if input_path.suffix.lower() in OFFICE_SUFFIXES and to_format == "pdf":
             soffice = _deps.detect_external_tools()["soffice"]
             if not soffice:
                 raise DocumentsDependencyError("Install LibreOffice for Office-to-PDF conversion.")
-            output_path.parent.mkdir(parents=True, exist_ok=True)
             # Into a private directory, never the output's folder: soffice names its result
             # `<stem>.pdf` and writes it over any file of that name, so `sample.docx -> conv.pdf`
             # silently destroyed the user's own `sample.pdf` (found 2026-09-26).
             import tempfile
 
             with tempfile.TemporaryDirectory(prefix="knaif-soffice-") as private:
-                subprocess.run(
+                ctx.exec(
+                    "soffice",
                     [
                         soffice,
                         "--headless",
@@ -432,7 +544,8 @@ class ConvertDocumentStep(Step):
                     text=True,
                 )
                 produced = Path(private) / f"{input_path.stem}.pdf"
-                shutil.move(str(produced), str(output_path))
+                with _writing(output_path, ctx) as target:
+                    shutil.move(str(produced), str(target))
             return {"output": str(output_path)}
 
         raise NotImplementedError(
@@ -440,7 +553,7 @@ class ConvertDocumentStep(Step):
         )
 
 
-class RunCompressStep(Step):
+class RunCompressStep(Handler):
     name = "run_compress"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -470,33 +583,43 @@ class RunCompressStep(Step):
                 result["warning"] = "Raster compression removes selectable text and vector content."
             return result
 
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        if use_gs:
-            _ghostscript_compress(
-                input_path,
-                output_path,
-                tools["gs"],
-                profile.get("ghostscript_pdfsettings", "/ebook"),
+        # Ghostscript cannot read a file that needs a password and writes a blank page instead,
+        # exit 0; pikepdf and pypdf refuse such a file themselves (run-order A/B, 2026-10-20).
+        if use_gs and _needs_password(input_path):
+            raise ValueError(
+                f"{input_path.name} is password-protected. "
+                "Unlock it first (with the password), then try again."
             )
-        elif use_raster:
-            raster_profile = profile.get("rasterize_fallback") or {}
-            _rasterize_compress(
-                input_path,
-                output_path,
-                dpi=int(raster_profile.get("dpi", 120)),
-                jpeg_quality=int(raster_profile.get("jpeg_quality", 60)),
-            )
-        else:
-            _lossless_compress(input_path, output_path)
-        new_size = output_path.stat().st_size
-        kept_original = bool(original_size) and new_size >= original_size
-        if kept_original:
-            # Not smaller is not a compression: every method grew the fixtures (Ghostscript's
-            # overhead on a small text PDF, 2227 -> 3952 bytes). Keep the input's own bytes, which
-            # also keeps its text where the raster method would have flattened it. `method` still
-            # names the backend that ran; `kept_original` says its result was not used.
-            shutil.copyfile(input_path, output_path)
-            new_size = original_size
+
+        with _writing(output_path, ctx) as target:
+            if use_gs:
+                _ghostscript_compress(
+                    input_path,
+                    target,
+                    tools["gs"],
+                    profile.get("ghostscript_pdfsettings", "/ebook"),
+                    ctx,
+                )
+            elif use_raster:
+                raster_profile = profile.get("rasterize_fallback") or {}
+                _rasterize_compress(
+                    input_path,
+                    target,
+                    dpi=int(raster_profile.get("dpi", 120)),
+                    jpeg_quality=int(raster_profile.get("jpeg_quality", 60)),
+                )
+            else:
+                _lossless_compress(input_path, target)
+            new_size = target.stat().st_size if target.exists() else 0
+            kept_original = bool(original_size) and new_size >= original_size
+            if kept_original:
+                # Not smaller is not a compression: every method grew the fixtures
+                # (Ghostscript's overhead on a small text PDF, 2227 -> 3952 bytes). Keep the
+                # input's own bytes, which also keeps its text where the raster method would
+                # have flattened it. `method` still names the backend that ran;
+                # `kept_original` says its result was not used.
+                shutil.copyfile(input_path, target)
+                new_size = original_size
             text_preserved, use_raster = True, False
         percent = ((original_size - new_size) / original_size * 100) if original_size else 0.0
         result = {
@@ -513,7 +636,7 @@ class RunCompressStep(Step):
         return result
 
 
-class RunOcrStep(Step):
+class RunOcrStep(Handler):
     name = "run_ocr"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -536,19 +659,19 @@ class RunOcrStep(Step):
         if ctx.dry_run:
             return {"mode": "dry_run", **result}
 
-        if suffix == PDF_SUFFIX and skipped:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(input_path, output_path)
-        elif suffix == PDF_SUFFIX:
-            result["pages"] = _write_ocr_pdf(input_path, output_path, language)
-        elif suffix in IMAGE_SUFFIXES:
-            result["pages"] = _write_ocr_image_pdf(input_path, output_path, language)
-        else:
+        if suffix not in (PDF_SUFFIX, *IMAGE_SUFFIXES):
             raise ValueError(f"OCR supports PDF and image inputs, not {suffix or input_path.name}.")
+        with _writing(output_path, ctx) as target:
+            if suffix == PDF_SUFFIX and skipped:
+                shutil.copyfile(input_path, target)
+            elif suffix == PDF_SUFFIX:
+                result["pages"] = _write_ocr_pdf(input_path, target, language)
+            else:
+                result["pages"] = _write_ocr_image_pdf(input_path, target, language)
         return result
 
 
-class VerifyOutputStep(Step):
+class VerifyOutputStep(Handler):
     name = "verify_output"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:

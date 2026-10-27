@@ -192,20 +192,28 @@ struct RunArgs {
     /// Restrict input/output paths to this directory (open/CLI mode when omitted).
     #[arg(long)]
     sandbox: Option<PathBuf>,
-    /// Download the recommended model without prompting when none is given or installed.
-    /// Steps already run without asking (see `--confirm`), so this no longer changes them; it is
-    /// kept so existing scripts and `--yes` habits keep working. It never approves replacing a
-    /// file: that is `--overwrite`.
-    #[arg(long)]
+    /// Allow everything a run could ask about, now and in later releases: `--allow all`.
+    #[arg(short = 'y', long)]
     yes: bool,
+    /// Approve up front what a run would otherwise ask about, as a comma list or a repeated
+    /// flag: `download` (fetch a URL input), `overwrite` (replace an existing file), `model`
+    /// (download the recommended model), `all`. Without it each one asks (Enter is no), and
+    /// without a terminal the run stops, naming the permission.
+    #[arg(long, value_name = "WHAT", value_delimiter = ',', value_parser = permission)]
+    allow: Vec<String>,
     /// Ask `Proceed? [Y/n]` before each step instead of acting straight away (Enter approves).
-    /// Without a terminal there is nobody to ask, so combine it with `--yes` or leave it off.
+    /// `--yes` skips it. Without a terminal there is nobody to ask, so leave it off.
     #[arg(long)]
     confirm: bool,
-    /// Replace a file that already exists. Without it, a step whose output exists asks
-    /// `Replace <file>? [y/N]` (Enter keeps the file), and without a terminal it stops.
+    /// Print the result's text alone on stdout, for a pipe, and save nothing; everything else goes
+    /// to stderr. For a step whose answer is text (extract_text); any other refuses it.
     #[arg(long)]
-    overwrite: bool,
+    stdout: bool,
+    /// Keep every step's output in your folder. Otherwise a file one step makes only for the next
+    /// goes to a temporary folder. Words in the request ("keep the intermediate files") do the
+    /// same.
+    #[arg(long)]
+    keep_intermediates: bool,
     /// Model for real inference: an installed/manifest NAME (e.g. `knaif-qwen3-4b-v2`) or a GGUF file
     /// PATH. Needs a build with `--features llama`. Without it, the recommended model is
     /// auto-selected — installed ones silently, a missing one after a download prompt — falling
@@ -257,6 +265,7 @@ fn hold_app_mutex() {
 #[cfg(not(windows))]
 fn hold_app_mutex() {}
 
+mod batch;
 mod daemon;
 mod ui;
 
@@ -304,6 +313,7 @@ fn main() -> anyhow::Result<()> {
     };
     let verbose = matches!(&cli.command, Command::Run(a) if a.verbose);
     ui::init(verbose);
+    let mut text_guard: Option<ui::StdoutToStderr> = None;
     let result = match cli.command {
         Command::Skills { action } => match action {
             SkillsAction::List { include_stale } => cmd_skills_list(include_stale),
@@ -318,10 +328,25 @@ fn main() -> anyhow::Result<()> {
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => {
             let dry_run = args.dry_run;
-            finish_run(cmd_run(args), dry_run)
+            // `--stdout`: every line of the run, its closing ones included, goes to stderr until
+            // `main` returns; the result's text goes to the real stdout.
+            if args.stdout {
+                text_guard = ui::StdoutToStderr::begin();
+            }
+            let result = cmd_run(args).map_err(without_working_folder);
+            run_facts::alert_at_end(&result);
+            let finished = finish_run(result, dry_run);
+            // A batch with a failed file ends with its summary on stderr, then exits 1.
+            if finished.is_ok() && run_facts::batch_failed() {
+                end_view(Ok(()))?;
+                std::process::exit(1);
+            }
+            finished
         }
     };
-    end_view(result)
+    let ended = end_view(result);
+    drop(text_guard);
+    ended
 }
 
 /// End every command in the terminal view with one empty line, so the shell prompt does not sit
@@ -341,9 +366,105 @@ fn end_view(result: anyhow::Result<()>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// What a `run` did, for the completion alert (`knaif_core::alert`): whether the plan asked for
+/// one, whether work started (a step ran, or a file was downloaded) and whether a confirmation
+/// was declined. Recorded in both views; read once, in `main`, after the run has ended.
+mod run_facts {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+    use std::time::Instant;
+
+    static WORK_STARTED: AtomicBool = AtomicBool::new(false);
+    static DECLINED: AtomicBool = AtomicBool::new(false);
+    /// A file of a batch failed: the run exits 1 after its summary (as Python's CLI does).
+    static BATCH_FAILED: AtomicBool = AtomicBool::new(false);
+    /// The request and when its run started, once the plan asked for an alert (never in a dry run).
+    static ALERT: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+
+    pub fn ask_for_alert(request: &str) {
+        *ALERT.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some((request.to_string(), Instant::now()));
+    }
+
+    pub fn work_started() {
+        WORK_STARTED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn declined() {
+        DECLINED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn batch_file_failed() {
+        BATCH_FAILED.store(true, Ordering::SeqCst);
+    }
+
+    pub fn batch_failed() -> bool {
+        BATCH_FAILED.load(Ordering::SeqCst)
+    }
+
+    /// Fire the alert the plan asked for, once the run has ended: on success, on failure and when
+    /// a confirmation was declined mid-run; never when nothing ran. It never fails the run and
+    /// never writes to stdout.
+    pub fn alert_at_end(result: &anyhow::Result<()>) {
+        let Some((request, started)) = ALERT.lock().unwrap_or_else(|e| e.into_inner()).take()
+        else {
+            return;
+        };
+        let Some(outcome) = knaif_core::alert::run_outcome(
+            result.is_err(),
+            DECLINED.load(Ordering::SeqCst),
+            WORK_STARTED.load(Ordering::SeqCst),
+        ) else {
+            return;
+        };
+        let reason = result.as_ref().err().map(|e| {
+            let text = e.root_cause().to_string();
+            let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            text.chars().take(80).collect::<String>()
+        });
+        let alert = knaif_core::alert::alert_for(
+            outcome,
+            Some(&request),
+            started.elapsed().as_secs_f64(),
+            reason.as_deref(),
+        );
+        knaif_core::alert::fire(&alert);
+    }
+}
+
 /// Close a `run` in the terminal view: the last line of the tree, with the total time (prompt
 /// waits excluded). The plain view returns the result untouched, so a pipe sees exactly what
 /// 1.2.0 printed, including anyhow's `Error:` report on stderr.
+/// `e` with the working folder left out of every message in its chain: a path inside it
+/// reads relative, so an error never names the user's folders. Python `app.run_cmd`, through
+/// `agent._without_folder`.
+fn without_working_folder(e: anyhow::Error) -> anyhow::Error {
+    let Ok(base) = std::env::current_dir() else {
+        return e;
+    };
+    let chain: Vec<String> = e
+        .chain()
+        .map(|c| batch::without_folders(&c.to_string(), &base, None))
+        .collect();
+    let mut out = anyhow::anyhow!(chain.last().cloned().unwrap_or_default());
+    for message in chain.iter().rev().skip(1) {
+        out = out.context(message.clone());
+    }
+    out
+}
+
+/// A batch's counts, time and the size of what the run left. The plain view prints them on
+/// stderr (stdout stays the result); the terminal view puts the failed count and the size on its
+/// closing line instead, and a dry run there says nothing more (owner, 2026-10-25).
+fn batch_summary(report: &batch::Report, work: Option<&Path>, dry_run: bool) {
+    let written = ui::written_paths();
+    if ui::view().is_none() {
+        eprintln!("{}", report.summary(&written, work));
+    } else if !dry_run {
+        ui::set_close_extra(report.close_extra(&written, work));
+    }
+}
+
 fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
     let Some(style) = ui::view() else {
         return result;
@@ -358,7 +479,7 @@ fn finish_run(result: anyhow::Result<()>, dry_run: bool) -> anyhow::Result<()> {
                 let summary = if dry_run {
                     "dry run, nothing executed".to_string()
                 } else {
-                    ui::files_written(ui::written())
+                    format!("{}{}", ui::files_written(ui::written()), ui::close_extra())
                 };
                 let last = match ui::declined() {
                     Some((step, steps)) => {
@@ -1161,7 +1282,8 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
 
     // Only now that the request has survived every cheap rejection may we resolve (and possibly
     // download) a model — see `select_model`.
-    let model = select_model(args.model.as_deref(), args.yes, DownloadPolicy::Prompt)?;
+    let allow = allowed(&args.allow, args.yes);
+    let model = select_model(args.model.as_deref(), allow.model, DownloadPolicy::Prompt)?;
     if args.daemon {
         match model.as_deref() {
             Some(m) => ensure_daemon(&daemon::state_dir(), m, daemon::DEFAULT_IDLE_MINUTES)?,
@@ -1265,12 +1387,107 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         println!("{}", ui::render_planning(style, load, infer));
     }
     let payload = built?;
+    // The alert is a run option: it leaves the plan here, before any later stage sees it, and
+    // fires in `main` once the run has ended (Python `_execute_plan` / `execute_plan`).
+    let (payload, alert) = knaif_core::alert::split_alert(&payload);
+    if alert && !args.dry_run {
+        run_facts::ask_for_alert(&request);
+    }
 
     let mut steps = payload
         .get("plan")
         .and_then(serde_json::Value::as_array)
         .cloned()
         .unwrap_or_default();
+    // "save it in Downloads": an output that names a known folder goes into the user's real
+    // folder, resolved here and never by the model; a folder of that name next to the input
+    // makes it a question instead, and `--sandbox` refuses one outside it (knaif_core::
+    // known_folders). Before the downloads, as Python rewrites right after validation.
+    {
+        use knaif_core::known_folders::{process_env, rewrite_outputs, Rewrite};
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        match rewrite_outputs(&steps, &registry, &base, sandbox, &process_env()) {
+            Rewrite::Plan(rewritten) => steps = rewritten,
+            Rewrite::Ask(question) => {
+                steps = vec![serde_json::json!({"tool": "clarify", "args": {"question": question}})]
+            }
+            Rewrite::Refused(reason) => anyhow::bail!(reason),
+        }
+    }
+    // This run's scratch folder (knaif_core::scratch). The path is fixed now so the plan can name
+    // it; the folder is created only when execution starts, never in a dry run, and removed when
+    // `scratch` drops at the end of this function, on success and on failure.
+    let mut scratch = knaif_core::scratch::RunScratch::new(args.dry_run);
+    // URL inputs: downloaded into the scratch (a dry run only names the path), so no later stage
+    // sees a URL. Before routing and naming, as Python's fetch stage.
+    let mut downloads: Vec<String> = Vec::new();
+    if !fetch_url_inputs(&mut steps, &bundle, &mut scratch, &args, &mut downloads)? {
+        return Ok(());
+    }
+    // A chain over many files ("convert all the .mov files to mp4 and make them smaller") runs
+    // once per file (`batch`). Before routing, so the keep rule sees each file's
+    // chain as an ordinary one-file chain; the lifted plan is validated again, since every name
+    // the lift made must pass the same sandbox checks as the model's own.
+    let mut lifted = {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        let kinds =
+            knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
+        let lift = batch::lift(&steps, &registry, &base, &kinds);
+        if let Some(lift) = &lift {
+            let mut full = registry;
+            if let Some(core) = resolve_repo_file("contracts/runtime/core_tools.yaml") {
+                full.extend(knaif_core::load_registry(&core)?);
+            }
+            knaif_core::validate_plan(
+                &serde_json::json!({"plan": lift.plan}),
+                &full,
+                &base,
+                sandbox,
+            )?;
+            steps = lift.plan.clone();
+        }
+        lift
+    };
+    // One file into many (split_video, extract_frames, split_pdf_every, …): the skill says which
+    // files a step will write before anything runs, and the steps reading them are pointed at
+    // that set, so routing can move it and the lift below runs them once per file.
+    let ffmpeg_data = if args.skill == "ffmpeg" {
+        Some(knaif_skill_ffmpeg::FfmpegData::load(&bundle)?)
+    } else {
+        None
+    };
+    let plan_one =
+        |tool: &str, step_args: &serde_json::Map<String, serde_json::Value>| match &ffmpeg_data {
+            Some(data) => knaif_skill_ffmpeg::run::planned_set(tool, step_args, data, sandbox),
+            None => Ok(knaif_skill_documents::run::planned_set(
+                tool, step_args, &base, sandbox,
+            )),
+        };
+    let mut sets = std::collections::BTreeMap::new();
+    if lifted.is_none() {
+        sets = batch::planned_sets(&steps, &plan_one)?;
+        if !sets.is_empty() {
+            steps = knaif_core::batch_chain::link_set_readers(&steps, &sets);
+        }
+    }
+    // Chain intermediates go to the scratch, so only the outputs the user asked for reach their
+    // folder. Before the naming repairs below, as Python routes before its collision hook: the
+    // repairs must not see a chain's final name on its own intermediate. Skipped when the user
+    // asked to keep every step's output (`--keep-intermediates`, or words in the request).
+    let keep_all = args.keep_intermediates || knaif_core::scratch::wants_everything_kept(&request);
+    if !keep_all && knaif_core::scratch::load_scratch_intermediates(&bundle.join("skill.yaml"))? {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        steps = knaif_core::scratch::route_intermediates_to_scratch(
+            &steps,
+            scratch.path(),
+            Some(&normalize_path_separators(&request)),
+            &base,
+            &knaif_core::scratch::joining_tools(&registry),
+            &knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?,
+            &knaif_core::scratch::produced_kinds(&registry),
+            &knaif_core::scratch::deriving_tools(&registry),
+        );
+    }
     // Two plan-level naming repairs, in one pass and in this order: a name the filesystem would
     // reject is not a path at all, so it is rewritten before anything resolves one, and only then
     // is an output that would truncate its own input moved aside. Every later step referencing a
@@ -1295,6 +1512,40 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
             ));
         }
     }
+    // Routing and the naming repairs rewrite args, never the number of steps; should one ever
+    // change it, a failed file stops the run as before.
+    if lifted
+        .as_ref()
+        .is_some_and(|l| l.file_of.len() != steps.len())
+    {
+        lifted = None;
+    }
+    // The sets' files as they will be written now (routing may have put them in the scratch),
+    // then the readers run once per file.
+    let mut set_files = std::collections::BTreeMap::new();
+    if !sets.is_empty() {
+        let now = batch::planned_sets(&steps, &plan_one)?;
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        let (plan, lift, files) = batch::lift_sets(&steps, &now, &registry, scratch.path());
+        steps = plan;
+        set_files = files;
+        lifted = lift;
+    }
+    // `--stdout` prints a text answer: a step with none (a video, a PDF) refuses it up front.
+    if args.stdout {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        for step in steps.iter().filter(|s| !is_control_step(s)) {
+            let tool = step
+                .get("tool")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?");
+            if registry.get(tool).and_then(|t| t.stdout.as_ref()).is_none() {
+                anyhow::bail!(
+                    "--stdout prints a text answer, and {tool} has none: run it without --stdout."
+                );
+            }
+        }
+    }
     let total = match decide_steps(&steps) {
         StepDecision::Empty => {
             if model.is_none() {
@@ -1314,22 +1565,270 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         StepDecision::Run { total } => total,
     };
 
+    if lifted.is_some() && plan_dump_enabled() {
+        eprintln!(
+            "{RUN_PLAN_DUMP_MARKER}{}",
+            serde_json::json!({ "plan": steps })
+        );
+    }
+    // What the plan will leave (`knaif_core::result_set`): every preview ends with it, and a
+    // batch shows its first file's steps, then the same for the rest.
+    let kinds =
+        knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
+    let leaves = {
+        let registry = knaif_core::load_skill_registry(&bundle)?;
+        batch::leaves(&steps, &registry, &base, scratch.path(), &kinds, &set_files)
+    };
+    let (preview_steps, notes) = batch::preview(&steps, lifted.as_ref(), &leaves);
     if let Some(style) = ui::view() {
         // A control step ends the plan by itself, so there is no plan to summarize.
         if !steps.iter().any(is_control_step) {
-            println!("{}", ui::render_plan(&style, &plan_rows(&steps)));
+            let shown: Vec<serde_json::Value> = preview_steps
+                .iter()
+                .map(|s| display_value(&mark_downloads(s, &downloads), Some(scratch.path())))
+                .collect();
+            println!(
+                "{}",
+                ui::render_plan(&style, &plan_rows(&shown, &base, &kinds), &notes)
+            );
         }
     }
+    // Every step is checked before any runs (owner, 2026-10-24): a file of a batch that would
+    // fail is out before the others run, a plan that would fail runs nothing. Before any question.
+    let mut prefailed = std::collections::BTreeMap::new();
+    if !args.dry_run {
+        let rehearsal = StepContext {
+            skill: &args.skill,
+            bundle: &bundle,
+            base: &base,
+            sandbox,
+            dry_run: true,
+            yes: true,
+            overwrite: allow.overwrite,
+            stdout: false,
+            work_dir: Some(scratch.path()),
+        };
+        match &lifted {
+            None => rehearse_steps(&steps, total, &rehearsal)?,
+            Some(lift) => {
+                let work = scratch.path().to_path_buf();
+                prefailed = batch::rehearse(
+                    &steps,
+                    lift,
+                    total,
+                    |text| batch::without_folders(text, &base, Some(&work)),
+                    |step| rehearse_step(step, &rehearsal),
+                )?;
+            }
+        }
+    }
+    let mut yes = !allow.asks_proceed(args.confirm);
+    // A batch is approved once, before any of it runs: its steps then go on without asking
+    // (Python asks on the batch preview's last line).
+    if lifted.is_some() && !yes && !args.dry_run {
+        if !confirm_action(false, &notes, "batch")? {
+            print_declined();
+            run_facts::declined();
+            return Ok(());
+        }
+        yes = true;
+    }
+    scratch.enter()?;
     let ctx = StepContext {
         skill: &args.skill,
         bundle: &bundle,
         base: &base,
         sandbox,
         dry_run: args.dry_run,
-        yes: approves_without_asking(args.yes, args.confirm),
-        overwrite: args.overwrite,
+        yes,
+        overwrite: allow.overwrite,
+        stdout: args.stdout,
+        work_dir: Some(scratch.path()),
     };
-    execute_plan(&steps, total, &ctx)
+    let Some(lift) = &lifted else {
+        let result = execute_plan(&steps, total, &ctx);
+        // A step over many files with no chain ends the run with its summary too.
+        if let Some(report) = batch::take_tally_report() {
+            batch_summary(&report, Some(scratch.path()), args.dry_run);
+            if report.failed() > 0 {
+                run_facts::batch_file_failed();
+            }
+        }
+        return result;
+    };
+    let work = scratch.path().to_path_buf();
+    let report = batch::execute(
+        &steps,
+        lift,
+        total,
+        prefailed,
+        |text| batch::without_folders(text, &base, Some(&work)),
+        |line| eprintln!("{line}"),
+        |step| run_step(step, &ctx),
+    )?;
+    batch_summary(&report, Some(&work), args.dry_run);
+    if report.failed() > 0 {
+        run_facts::batch_file_failed();
+    }
+    Ok(())
+}
+
+/// URL inputs (port of Python `CommandAgent._fetch_url_inputs`): replace every http(s) URL input
+/// with a file at the top of the run scratch, so outputs derived from it are named in the user's
+/// folder (`user_side_path`). Each URL is approved once: `--allow-download`, else a `[y/N]`
+/// question at a terminal; with neither, or for a skill without `url_inputs:`, the plan becomes a
+/// clarify that says why. A dry run requests nothing. Returns `false` when the user declined.
+fn fetch_url_inputs(
+    steps: &mut Vec<serde_json::Value>,
+    bundle: &Path,
+    scratch: &mut knaif_core::scratch::RunScratch,
+    args: &RunArgs,
+    downloads: &mut Vec<String>,
+) -> anyhow::Result<bool> {
+    use knaif_core::urls::{is_url, CONTROL_TOOLS, URL_INPUT_KEYS};
+    use serde_json::Value;
+
+    let registry = knaif_core::load_skill_registry(bundle)?;
+    let mut urls: Vec<String> = vec![];
+    for step in steps.iter() {
+        let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
+        if CONTROL_TOOLS.contains(&tool) {
+            continue;
+        }
+        let schemas = registry.get(tool).map(|t| &t.arg_schemas);
+        let Some(args_obj) = step.get("args").and_then(Value::as_object) else {
+            continue;
+        };
+        for (key, value) in args_obj {
+            let input_role = schemas
+                .and_then(|s| s.get(key))
+                .and_then(|s| s.path_role.as_deref())
+                == Some("input");
+            if !URL_INPUT_KEYS.contains(&key.as_str()) && !input_role {
+                continue;
+            }
+            let items: Vec<&Value> = match value {
+                Value::Array(a) => a.iter().collect(),
+                other => vec![other],
+            };
+            for item in items.into_iter().filter_map(Value::as_str) {
+                if is_url(item) && !urls.iter().any(|u| u == item) {
+                    urls.push(item.to_string());
+                }
+            }
+        }
+    }
+    if urls.is_empty() {
+        return Ok(true);
+    }
+    let clarify = |q: String| vec![serde_json::json!({"tool": "clarify", "args": {"question": q}})];
+    let Some(url_inputs) = knaif_core::urls::load_url_inputs(&bundle.join("skill.yaml"))? else {
+        *steps = clarify(format!(
+            "This skill works on local files and cannot download {}. Download it first, then \
+             name the file.",
+            urls[0]
+        ));
+        return Ok(true);
+    };
+    let cap = url_inputs.max_bytes;
+    let mut local: Vec<(String, String)> = vec![];
+    if args.dry_run {
+        let mut taken: Vec<String> = vec![];
+        for url in &urls {
+            let mut path = knaif_toolkit_net::planned_path(url, scratch.path());
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let (stem, ext) = match name.split_once('.') {
+                Some((s, e)) => (s.to_string(), format!(".{e}")),
+                None => (name.clone(), String::new()),
+            };
+            let mut n = 0;
+            while taken.contains(&path.file_name().unwrap().to_string_lossy().to_lowercase()) {
+                n += 1;
+                path = scratch.path().join(format!("{stem}-{n}{ext}"));
+            }
+            taken.push(path.file_name().unwrap().to_string_lossy().to_lowercase());
+            note(&format!(
+                "would download {url} → {}",
+                downloaded_name(&path)
+            ));
+            local.push((url.clone(), path.to_string_lossy().into_owned()));
+        }
+    } else {
+        for url in &urls {
+            if allowed(&args.allow, args.yes).download {
+                continue;
+            }
+            let question = format!("Download {url} (up to {} MB)?", cap / 1_000_000);
+            match ask_yes_no_default(&question, false)? {
+                Some(true) => {}
+                Some(false) => {
+                    print_declined();
+                    return Ok(false);
+                }
+                None => {
+                    *steps = clarify(format!(
+                        "Downloading {url} needs your approval: run this in a terminal to be \
+                         asked, or re-run with --allow download."
+                    ));
+                    return Ok(true);
+                }
+            }
+        }
+        scratch.enter()?;
+        let policy = knaif_toolkit_net::Policy::new(url_inputs.accepted.clone(), cap);
+        for url in &urls {
+            let got = knaif_toolkit_net::download_file(url, scratch.path(), &policy)
+                .map_err(|e| anyhow::anyhow!(e))?;
+            // A downloaded file is work done, which a later failure's alert reports on.
+            run_facts::work_started();
+            note(&format!(
+                "downloaded {url} ({} bytes) → {}",
+                got.bytes,
+                downloaded_name(&got.path)
+            ));
+            local.push((url.clone(), got.path.to_string_lossy().into_owned()));
+        }
+    }
+    downloads.extend(local.iter().map(|(_, path)| path.clone()));
+    let swap = |v: &Value| -> Value {
+        match v {
+            Value::String(s) => local
+                .iter()
+                .find(|(u, _)| u == s)
+                .map_or_else(|| v.clone(), |(_, p)| Value::String(p.clone())),
+            Value::Array(a) => Value::Array(
+                a.iter()
+                    .map(|x| match x {
+                        Value::String(s) => local
+                            .iter()
+                            .find(|(u, _)| u == s)
+                            .map_or_else(|| x.clone(), |(_, p)| Value::String(p.clone())),
+                        other => other.clone(),
+                    })
+                    .collect(),
+            ),
+            other => other.clone(),
+        }
+    };
+    for step in steps.iter_mut() {
+        let tool = step
+            .get("tool")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if CONTROL_TOOLS.contains(&tool.as_str()) {
+            continue;
+        }
+        if let Some(obj) = step.get_mut("args").and_then(Value::as_object_mut) {
+            for v in obj.values_mut() {
+                *v = swap(v);
+            }
+        }
+    }
+    Ok(true)
 }
 
 /// A line the run wants the user to see that is not an outcome: in the terminal view it sits in
@@ -1380,26 +1879,50 @@ fn is_control_step(step: &serde_json::Value) -> bool {
 }
 
 /// What a step works on, for the plan summary: `clip.mp4 → out.mp4`, from whichever of the
-/// common input/output args the step carries.
-fn step_detail(args: &serde_json::Map<String, serde_json::Value>) -> String {
-    fn first(v: &serde_json::Value) -> Option<String> {
+/// common input/output args the step carries. A glob or folder among the inputs is shown as the
+/// files it finds in `base` (of the skill's `kinds`, as the batch lists them), so the line never
+/// names a pattern that matched nothing; when none finds a file, the plan's own
+/// words stay and the run says so.
+fn step_detail(
+    args: &serde_json::Map<String, serde_json::Value>,
+    base: &std::path::Path,
+    kinds: &knaif_core::clarify_gate::FileKinds,
+) -> String {
+    fn names(v: &serde_json::Value) -> Vec<String> {
         match v {
-            serde_json::Value::String(s) => Some(s.clone()),
-            serde_json::Value::Array(items) => {
-                let names: Vec<String> = items.iter().filter_map(first).collect();
-                match names.len() {
-                    0 => None,
-                    1 => names.into_iter().next(),
-                    n => Some(format!("{} (+{} more)", names[0], n - 1)),
-                }
-            }
-            _ => None,
+            serde_json::Value::String(s) => vec![s.clone()],
+            serde_json::Value::Array(items) => items.iter().flat_map(names).collect(),
+            _ => vec![],
+        }
+    }
+    fn shown(names: Vec<String>) -> Option<String> {
+        match names.len() {
+            0 => None,
+            1 => names.into_iter().next(),
+            n => Some(format!("{} (+{} more)", names[0], n - 1)),
         }
     }
     let input = ["inputs", "input", "files", "pdf", "paths"]
         .iter()
-        .find_map(|k| args.get(*k).and_then(first));
-    let output = args.get("output").and_then(first);
+        .find_map(|k| args.get(*k).map(names).filter(|n| !n.is_empty()))
+        .and_then(|written| {
+            let expanded = knaif_core::batch_chain::expand_inputs(&written, base, kinds);
+            let mut found: Vec<String> = Vec::new();
+            for name in &written {
+                for file in expanded
+                    .get(name)
+                    .cloned()
+                    .unwrap_or_else(|| vec![name.clone()])
+                {
+                    let file = file.strip_prefix("./").map(str::to_string).unwrap_or(file);
+                    if !found.contains(&file) {
+                        found.push(file);
+                    }
+                }
+            }
+            shown(if found.is_empty() { written } else { found })
+        });
+    let output = args.get("output").map(names).and_then(shown);
     match (input, output) {
         (Some(i), Some(o)) => format!("{i} → {o}"),
         (Some(i), None) => i,
@@ -1408,7 +1931,11 @@ fn step_detail(args: &serde_json::Map<String, serde_json::Value>) -> String {
     }
 }
 
-fn plan_rows(steps: &[serde_json::Value]) -> Vec<ui::PlanRow> {
+fn plan_rows(
+    steps: &[serde_json::Value],
+    base: &std::path::Path,
+    kinds: &knaif_core::clarify_gate::FileKinds,
+) -> Vec<ui::PlanRow> {
     steps
         .iter()
         .map(|step| {
@@ -1423,7 +1950,7 @@ fn plan_rows(steps: &[serde_json::Value]) -> Vec<ui::PlanRow> {
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("?")
                     .to_string(),
-                detail: step_detail(args),
+                detail: step_detail(args, base, kinds),
             }
         })
         .collect()
@@ -1472,6 +1999,88 @@ fn chain_failure_context(idx: usize, total: usize) -> String {
     format!("step {ordinal} of {total} failed; {completed}, and {skipped}")
 }
 
+/// Which step the rehearsal stopped at; nothing had run (owner, 2026-10-24). Python
+/// `knaif.agent.rehearsal_failure_context`.
+fn rehearsal_failure_context(idx: usize, total: usize) -> String {
+    format!("step {} of {total} would fail, so nothing ran", idx + 1)
+}
+
+/// When every file of a batch fails the rehearsal. Python `EVERY_FILE_WOULD_FAIL`.
+const EVERY_FILE_WOULD_FAIL: &str = "every file would fail, so nothing ran";
+
+/// Rehearse a plan without a batch before it really runs (owner, 2026-10-24): every step
+/// is built as a dry run builds it, printing nothing, and the first that fails stops the run
+/// before anything ran. One step is not rehearsed: nothing can run before it fails. Python
+/// `CommandAgent._rehearse`.
+fn rehearse_steps(
+    steps: &[serde_json::Value],
+    total: usize,
+    ctx: &StepContext,
+) -> anyhow::Result<()> {
+    if steps.iter().filter(|s| !is_control_step(s)).count() < 2 {
+        return Ok(());
+    }
+    for (idx, step) in steps.iter().enumerate() {
+        match rehearse_step(step, ctx) {
+            Err(e) => return Err(e.context(rehearsal_failure_context(idx, total))),
+            Ok(StepOutcome::ShortCircuit) => break,
+            Ok(_) => {}
+        }
+    }
+    Ok(())
+}
+
+/// One step as the rehearsal sees it: its commands (ffmpeg) or its preview (documents), built
+/// as a dry run builds them, nothing printed. A control step ends the plan, as it does running.
+fn rehearse_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepOutcome> {
+    if is_control_step(step) {
+        return Ok(StepOutcome::ShortCircuit);
+    }
+    let tool = step
+        .get("tool")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let empty = serde_json::Map::new();
+    let args = step
+        .get("args")
+        .and_then(serde_json::Value::as_object)
+        .unwrap_or(&empty);
+    match ctx.skill {
+        "ffmpeg" => {
+            let data = knaif_skill_ffmpeg::FfmpegData::load(ctx.bundle)?;
+            let home = ctx.sandbox.unwrap_or(Path::new(""));
+            let scratch = ctx
+                .work_dir
+                .map(|work_dir| knaif_skill_ffmpeg::run::ScratchCtx { work_dir, home });
+            match knaif_skill_ffmpeg::run::expand_in(
+                tool,
+                args,
+                &data,
+                ctx.sandbox,
+                knaif_skill_ffmpeg::run::ProbeMode::DryRun,
+                scratch.as_ref(),
+            )? {
+                knaif_skill_ffmpeg::run::Expansion::Commands(_) => Ok(StepOutcome::Continue),
+                knaif_skill_ffmpeg::run::Expansion::Clarify(_) => Ok(StepOutcome::ShortCircuit),
+            }
+        }
+        "documents" => {
+            use knaif_skill_documents::run::{is_supported, preview_in, read_input_absent};
+            if !is_supported(tool) {
+                anyhow::bail!(not_implemented_message(&format!(
+                    "the documents tool {tool:?} is not built into the native runtime yet"
+                )));
+            }
+            let absent = read_input_absent(tool, args, ctx.base, ctx.sandbox, ctx.work_dir)?;
+            if absent.is_none() {
+                preview_in(tool, args, ctx.base, ctx.sandbox, ctx.bundle, ctx.work_dir)?;
+            }
+            Ok(StepOutcome::Continue)
+        }
+        _ => unreachable!("skill guarded above"),
+    }
+}
+
 fn execute_plan(
     steps: &[serde_json::Value],
     total: usize,
@@ -1488,39 +2097,54 @@ fn execute_steps(
     mut run: impl FnMut(&serde_json::Value) -> anyhow::Result<StepOutcome>,
 ) -> anyhow::Result<()> {
     for (idx, step) in steps.iter().enumerate() {
-        let ordinal = idx + 1;
-        // Announce the position only for a real chain: a one-step plan reads better without a
-        // "step 1 of 1" preamble, and every existing single-step test asserts that output.
-        match ui::view() {
-            Some(style) if !is_control_step(step) => {
-                let tool = step
-                    .get("tool")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("?");
-                println!("{}", ui::render_step_head(&style, ordinal, total, tool));
-            }
-            Some(_) => {}
-            None if total > 1 => println!("step {ordinal} of {total}:"),
-            None => {}
+        announce_step(step, idx + 1, total);
+        let outcome = run(step);
+        // A step that ran, or failed while running, is work the alert reports on; a control
+        // step or a declined confirmation is not (Python `CommandAgent._work_started`).
+        if !is_control_step(step) && !matches!(outcome, Ok(StepOutcome::Declined)) {
+            run_facts::work_started();
         }
-        match run(step).with_context(|| chain_failure_context(idx, total))? {
+        match outcome.with_context(|| chain_failure_context(idx, total))? {
             StepOutcome::Continue => {}
             StepOutcome::ShortCircuit => return Ok(()),
             StepOutcome::Declined => {
-                match ui::view() {
-                    // The closing line says where the run stopped, which covers the steps after.
-                    Some(_) => ui::mark_declined(ordinal, total),
-                    None => {
-                        if let Some(text) = declined_note(idx, total) {
-                            println!("{text}");
-                        }
-                    }
-                }
+                declined_step(idx, total);
                 return Ok(());
             }
         }
     }
     Ok(())
+}
+
+/// Announce a step's position. Only for a real chain: a one-step plan reads better without a
+/// "step 1 of 1" preamble, and every existing single-step test asserts that output.
+fn announce_step(step: &serde_json::Value, ordinal: usize, total: usize) {
+    match ui::view() {
+        Some(style) if !is_control_step(step) => {
+            let tool = step
+                .get("tool")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("?");
+            println!("{}", ui::render_step_head(&style, ordinal, total, tool));
+        }
+        Some(_) => {}
+        None if total > 1 => println!("step {ordinal} of {total}:"),
+        None => {}
+    }
+}
+
+/// A declined step ends the run: recorded for the alert, and said where it stopped.
+fn declined_step(idx: usize, total: usize) {
+    run_facts::declined();
+    match ui::view() {
+        // The closing line says where the run stopped, which covers the steps after.
+        Some(_) => ui::mark_declined(idx + 1, total),
+        None => {
+            if let Some(text) = declined_note(idx, total) {
+                println!("{text}");
+            }
+        }
+    }
 }
 
 /// What a declined step means for the rest of a chain. `None` for the last (or only) step: there
@@ -1549,6 +2173,11 @@ struct StepContext<'a> {
     yes: bool,
     /// `--overwrite`: replacing an existing file needs no question.
     overwrite: bool,
+    /// `--stdout`: a text answer goes to the real stdout, and nothing is saved.
+    stdout: bool,
+    /// This run's scratch folder (`knaif_core::scratch`): routed intermediates, preview clips and
+    /// outputs awaiting verification. A name only, in a dry run.
+    work_dir: Option<&'a Path>,
 }
 
 /// What one step means for the steps after it.
@@ -1617,15 +2246,7 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
     }
 
     match ctx.skill {
-        "ffmpeg" => run_ffmpeg_step(
-            ctx.bundle,
-            tool,
-            step_args,
-            ctx.sandbox,
-            ctx.dry_run,
-            ctx.yes,
-            ctx.overwrite,
-        ),
+        "ffmpeg" => run_ffmpeg_step(ctx, tool, step_args),
         "documents" => run_documents_step(
             ctx.bundle,
             tool,
@@ -1635,6 +2256,8 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
             ctx.dry_run,
             ctx.yes,
             ctx.overwrite,
+            ctx.stdout,
+            ctx.work_dir,
         ),
         _ => unreachable!("skill guarded above"),
     }
@@ -1646,21 +2269,36 @@ fn run_step(step: &serde_json::Value, ctx: &StepContext) -> anyhow::Result<StepO
 /// does: Python's executor stops at the first clarify leaf. Native used to print the question
 /// and run on, so a later step acted on a file this one never produced (R5c L3, `ffmpeg_136`).
 fn run_ffmpeg_step(
-    bundle: &Path,
+    ctx: &StepContext,
     tool: &str,
     step_args: &serde_json::Map<String, serde_json::Value>,
-    sandbox: Option<&Path>,
-    dry_run: bool,
-    yes: bool,
-    overwrite: bool,
 ) -> anyhow::Result<StepOutcome> {
-    let data = knaif_skill_ffmpeg::FfmpegData::load(bundle)?;
+    let (sandbox, dry_run, yes, overwrite) = (ctx.sandbox, ctx.dry_run, ctx.yes, ctx.overwrite);
+    let data = knaif_skill_ffmpeg::FfmpegData::load(ctx.bundle)?;
+    // The folder the user sees, for an output named after a routed intermediate. Open mode keeps
+    // paths relative to cwd (an empty home), as every other relative output already is.
+    let home = sandbox.unwrap_or(Path::new(""));
+    let scratch = ctx
+        .work_dir
+        .map(|work_dir| knaif_skill_ffmpeg::run::ScratchCtx { work_dir, home });
     // Dry-run stubs missing files; execution real-probes every input (missing/unprobeable → error).
-    let expansion = if dry_run {
-        knaif_skill_ffmpeg::run::expand_dry_run(tool, step_args, &data, sandbox)?
+    let mode = if dry_run {
+        knaif_skill_ffmpeg::run::ProbeMode::DryRun
     } else {
-        knaif_skill_ffmpeg::run::expand_execute(tool, step_args, &data, sandbox)?
+        knaif_skill_ffmpeg::run::ProbeMode::Execute
     };
+    let expansion = knaif_skill_ffmpeg::run::expand_in(
+        tool,
+        step_args,
+        &data,
+        sandbox,
+        mode,
+        scratch.as_ref(),
+    )?;
+    // What the expansion skipped and says once (files already in that format).
+    for line in knaif_skill_ffmpeg::run::take_notes() {
+        note(&line);
+    }
     let commands = match expansion {
         knaif_skill_ffmpeg::run::Expansion::Commands(cmds) => cmds,
         knaif_skill_ffmpeg::run::Expansion::Clarify(q) => {
@@ -1682,12 +2320,17 @@ fn run_ffmpeg_step(
         }
     }
 
+    // What a person reads: the run scratch shows as `<work>/…`. Its real path names the temp
+    // folder (and so the user), and nothing in it outlives the run. `KNAIF_DUMP_PLAN` above keeps
+    // the real argv for machines.
+    let show = |cmd: &[String]| shell_join(&display_argv(cmd, ctx.work_dir));
+
     // Dry-run: print the copy-pasteable command line(s) and stop — no side effects.
     if dry_run {
         for cmd in &commands {
             match ui::view() {
-                Some(style) => println!("{}", ui::render_command(&style, &shell_join(cmd))),
-                None => println!("{}", shell_join(cmd)),
+                Some(style) => println!("{}", ui::render_command(&style, &show(cmd))),
+                None => println!("{}", show(cmd)),
             }
         }
         return Ok(StepOutcome::Continue);
@@ -1695,38 +2338,41 @@ fn run_ffmpeg_step(
 
     // Execution: every ffmpeg intent is `safety_category: destructive`, so it needs explicit
     // consent (the native equivalent of `ctx.confirmed`). `--yes`, an interactive yes, or nothing.
-    let previews: Vec<String> = commands.iter().map(|c| shell_join(c)).collect();
+    let previews: Vec<String> = commands.iter().map(|c| show(c)).collect();
     // Python asks before reversing and says why; native used to list the command and nothing else.
     // Said only when a person is about to answer: `--yes` has already decided.
-    // Terminal view: the commands are the step's content, shown before the question. (The plain
-    // view lists them inside the confirmation and again as `running:` lines, as it always has.)
-    if let Some(style) = ui::view() {
-        for p in &previews {
-            println!("{}", ui::render_command(&style, p));
-        }
-        // Say it in the tree too, before the question below asks.
-        for cmd in &commands {
-            if let Some(out) = cmd.last().filter(|o| std::path::Path::new(o).exists()) {
-                println!(
-                    "{}",
-                    ui::render_detail(
-                        &style,
-                        &style.paint(ui::Tone::Warn, &format!("⚠ {out} already exists"))
-                    )
-                );
-            }
-        }
-    }
     // Every command carries `-y` (the rendered command is part of the parity contract), so a
     // file that is already there would be replaced without a word: ask first, whatever `--yes`
     // says. The chain's own intermediate files are not "existing" until an earlier step wrote
-    // them, so only what is on disk now is asked about.
-    let outputs: Vec<String> = commands.iter().filter_map(|c| c.last().cloned()).collect();
-    if !overwrite_gate(
-        &existing_outputs(&outputs),
-        overwrite,
-        &mut ask_yes_no_default,
-    )? {
+    // them, so only what is on disk now is asked about. A routed intermediate is in the run
+    // scratch, never in the user's folder, so it is never asked about.
+    let outputs: Vec<String> = commands
+        .iter()
+        .filter_map(|c| c.last().cloned())
+        .filter(|o| !in_scratch(o, ctx.work_dir))
+        .collect();
+    let existing = existing_outputs(&outputs);
+    // Terminal view: before a question (a file to replace, `--confirm`) the step's commands are
+    // listed, with a warning for each file that is there, so the answer is given knowing them.
+    // Without one, each command is shown as it starts, its result under it, as the plain view
+    // orders them (owner, 2026-10-25). (The plain view lists them inside the confirmation and
+    // again as `running:` lines, as it always has.)
+    let listed = ui::view().is_some() && (!yes || (!overwrite && !existing.is_empty()));
+    if let (Some(style), true) = (ui::view(), listed) {
+        for p in &previews {
+            println!("{}", ui::render_command(&style, p));
+        }
+        for out in &existing {
+            println!(
+                "{}",
+                ui::render_detail(
+                    &style,
+                    &style.paint(ui::Tone::Warn, &format!("⚠ {out} already exists"))
+                )
+            );
+        }
+    }
+    if !overwrite_gate(&existing, overwrite, &mut ask_yes_no_default)? {
         print_declined();
         return Ok(StepOutcome::Declined);
     }
@@ -1735,45 +2381,105 @@ fn run_ffmpeg_step(
             note(&warning);
         }
     }
-    if !confirm_action(yes, &previews, "ffmpeg command")? {
-        print_declined();
-        return Ok(StepOutcome::Declined);
+    // A preview clip only when someone is asked (owner, 2026-10-10): render the first input's
+    // sample into the scratch, show its path (the one scratch path shown on purpose), and let the
+    // answer be the consent. Acting without asking renders nothing, as native always did.
+    let interactive = {
+        use std::io::IsTerminal;
+        std::io::stdin().is_terminal()
+    };
+    let previewed = match (yes, scratch.as_ref()) {
+        (false, Some(sc)) if interactive => {
+            match knaif_skill_ffmpeg::run::preview_command(
+                tool, step_args, &data, sandbox, mode, sc,
+            )? {
+                Some(clip) => Some(show_preview(&clip, commands.len())?),
+                None => None,
+            }
+        }
+        _ => None,
+    };
+    match previewed {
+        Some(true) => {}
+        Some(false) => {
+            print_declined();
+            return Ok(StepOutcome::Declined);
+        }
+        None => {
+            if !confirm_action(yes, &previews, "ffmpeg command")? {
+                print_declined();
+                return Ok(StepOutcome::Declined);
+            }
+        }
     }
 
+    // A step over many files reports each one (`batch::tally_record`): the files that failed
+    // before any command ran (unreadable, or silent for extract_audio), then each command's.
+    batch::tally_start_step();
+    for (file, why) in knaif_skill_ffmpeg::run::take_file_failures() {
+        batch::tally_record(&file, Some(&why), ctx.base, ctx.work_dir);
+    }
+    let input_of = |cmd: &[String]| {
+        cmd.windows(2)
+            .find(|w| w[0] == "-i")
+            .map(|w| PathBuf::from(&w[1]))
+            .unwrap_or_default()
+    };
     let mut failures = 0;
     for cmd in &commands {
         let output = cmd.last().cloned().unwrap_or_default();
-        // An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a parent
-        // that need not exist yet; ffmpeg does not create one and fails on open. The path is
-        // already sandbox-checked by the engine.
-        // Create the RESOLVED parent: the stored path keeps the spelling the plan supplied,
-        // so `../escaped/../sb/out.mp4` passes containment while creating its unnormalised
-        // parent walks through `../escaped` and creates it on POSIX.
-        if let Some(parent) = std::path::Path::new(&output).parent() {
-            if !parent.as_os_str().is_empty() {
-                let target = std::fs::canonicalize(parent)
-                    .unwrap_or_else(|_| knaif_skill_ffmpeg::engine::lexically_normalize(parent));
-                std::fs::create_dir_all(target).ok();
+        // Nothing reaches the user's folder until it is known to be good: the command writes to a
+        // staged path in the run scratch (same name, so ffmpeg still reads the format from the
+        // extension), is checked, and only then moved into place (`knaif-toolkit-fs`). A failure
+        // leaves the folder as it was. An output already in the scratch (a routed intermediate)
+        // is written directly. The rendered command keeps the final path: it is what the plan
+        // shows, the parity contract compares and the eval replays.
+        let (run_cmd, staged) = match ctx.work_dir {
+            Some(work) if !output.is_empty() && !in_scratch(&output, Some(work)) => {
+                let staged = knaif_toolkit_fs::stage_output(work, Path::new(&output))?;
+                let mut c = cmd.clone();
+                if let Some(last) = c.last_mut() {
+                    *last = staged.to_string_lossy().into_owned();
+                }
+                (c, Some(staged))
             }
-        }
-        if ui::view().is_none() {
-            eprintln!("running: {}", shell_join(cmd));
+            _ => {
+                // An `output` naming a destination directory (`videos_hevc/clip.mkv`) has a parent
+                // that need not exist yet, and ffmpeg does not create one. `ensure_parent` makes
+                // the RESOLVED parent: `../escaped/../sb/out.mp4` passes containment, but walking
+                // its spelling would create `../escaped` on POSIX.
+                if !output.is_empty() {
+                    knaif_toolkit_fs::ensure_parent(Path::new(&output), sandbox, ctx.work_dir)?;
+                }
+                (cmd.clone(), None)
+            }
+        };
+        let shown = display_path(&output, ctx.work_dir);
+        match ui::view() {
+            None => eprintln!("running: {}", show(cmd)),
+            Some(style) if !listed => println!("{}", ui::render_command(&style, &show(cmd))),
+            Some(_) => {}
         }
         let started = std::time::Instant::now();
         let result = match ui::view() {
-            Some(style) => run_ffmpeg_live(&style, cmd, started)?,
-            None => knaif_skill_ffmpeg::exec::run_ffmpeg(cmd)?,
+            Some(style) => run_ffmpeg_live(&style, &run_cmd, started)?,
+            None => knaif_skill_ffmpeg::exec::run_ffmpeg(&run_cmd)?,
         };
         if result.status.success() {
             // Exit 0 is not evidence of output: a trim past the end writes an empty container.
-            knaif_skill_ffmpeg::exec::require_streams(std::path::Path::new(&output))?;
+            let written = staged.clone().unwrap_or_else(|| PathBuf::from(&output));
+            knaif_skill_ffmpeg::exec::require_streams(&written)?;
+            if let (Some(staged), Some(work)) = (&staged, ctx.work_dir) {
+                knaif_toolkit_fs::commit_output(staged, Path::new(&output), sandbox, work)?;
+            }
             ui::note_written(1);
+            ui::note_written_paths(&[PathBuf::from(&output)]);
+            batch::tally_record(&input_of(cmd), None, ctx.base, ctx.work_dir);
             match ui::view() {
-                Some(style) => println!(
-                    "{}",
-                    ui::render_ok(&style, &output, Some(started.elapsed()))
-                ),
-                None => println!("✓ {output}"),
+                Some(style) => {
+                    println!("{}", ui::render_ok(&style, &shown, Some(started.elapsed())))
+                }
+                None => println!("✓ {shown}"),
             }
         } else if let Some(style) = ui::view() {
             failures += 1;
@@ -1787,7 +2493,9 @@ fn run_ffmpeg_step(
                         .map(|l| l.trim().to_string())
                 })
                 .unwrap_or_else(|| format!("ffmpeg exited {}", result.status));
-            println!("{}", ui::render_fail(&style, &output, Some(&cause)));
+            batch::note_failure_cause(&cause);
+            batch::tally_record(&input_of(cmd), Some(&cause), ctx.base, ctx.work_dir);
+            println!("{}", ui::render_fail(&style, &shown, Some(&cause)));
             if ui::verbose() {
                 println!(
                     "{}",
@@ -1811,19 +2519,130 @@ fn run_ffmpeg_step(
                 .join("\n");
             // The cause first, in a sentence: the tail alone can end on a generic "Conversion
             // failed!" with the line that explains it cut off above.
-            let cause = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code())
+            let reason = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code());
+            let why = reason.as_deref().unwrap_or_else(|| {
+                stderr
+                    .lines()
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .map_or("ffmpeg failed", str::trim)
+            });
+            batch::note_failure_cause(why);
+            batch::tally_record(&input_of(cmd), Some(why), ctx.base, ctx.work_dir);
+            let cause = reason
                 .map(|c| format!("\n  cause: {c}"))
                 .unwrap_or_default();
-            println!(
-                "✗ {output} (ffmpeg exited {}){cause}\n{tail}",
-                result.status
-            );
+            println!("✗ {shown} (ffmpeg exited {}){cause}\n{tail}", result.status);
         }
     }
-    if failures > 0 {
+    // A failed command among done files of a batch does not stop the run: the end summary counts
+    // it and the run exits 1 (Python's `_FileTally.partial`).
+    if failures > 0 && !batch::tally_partial() {
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
     Ok(StepOutcome::Continue)
+}
+
+/// Is `path` inside this run's scratch folder?
+fn in_scratch(path: &str, work_dir: Option<&Path>) -> bool {
+    knaif_toolkit_fs::within(Path::new(path), work_dir)
+}
+
+/// `path` as a person should read it: a scratch path becomes `<work>/…` (`/`-separated).
+fn display_path(path: &str, work_dir: Option<&Path>) -> String {
+    let Some(work) = work_dir.filter(|w| in_scratch(path, Some(w))) else {
+        return path.to_string();
+    };
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let real = knaif_core::sandbox::resolve_real(Path::new(path), &cwd);
+    let real_work = knaif_core::sandbox::resolve_real(work, &cwd);
+    match real.strip_prefix(&real_work) {
+        Ok(rel) => format!("<work>/{}", rel.to_string_lossy().replace('\\', "/")),
+        Err(_) => path.to_string(),
+    }
+}
+
+/// A downloaded file as a person should read it: its name and where it came from, never the
+/// run scratch it sits in (owner, 2026-10-23). Python `knaif.run_view.downloaded_name`.
+fn downloaded_name(path: &Path) -> String {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    format!("{name} (downloaded)")
+}
+
+/// A plan step (any JSON) with each downloaded file named by [`downloaded_name`].
+fn mark_downloads(value: &serde_json::Value, downloads: &[String]) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::String(s) if downloads.contains(s) => Value::String(downloaded_name(Path::new(s))),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| mark_downloads(v, downloads)).collect())
+        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), mark_downloads(v, downloads)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// A plan step (any JSON) with every scratch path shown as `<work>/…`, for printing.
+fn display_value(value: &serde_json::Value, work_dir: Option<&Path>) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::String(s) => Value::String(display_path(s, work_dir)),
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| display_value(v, work_dir)).collect())
+        }
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(k, v)| (k.clone(), display_value(v, work_dir)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// An argv with every scratch path shown as `<work>/…`, for printing.
+fn display_argv(argv: &[String], work_dir: Option<&Path>) -> Vec<String> {
+    argv.iter().map(|a| display_path(a, work_dir)).collect()
+}
+
+/// Render the preview clip, show where it is, and ask whether to apply the settings to all
+/// `inputs`. The clip is in the run scratch and goes with it when the run ends, whatever the
+/// answer. Port of the Python preview block (`render_preview_command` → `run_preview` →
+/// `verify_preview` → `wait_for_confirmation`).
+fn show_preview(clip: &[String], inputs: usize) -> anyhow::Result<bool> {
+    let out = PathBuf::from(clip.last().cloned().unwrap_or_default());
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let result = knaif_skill_ffmpeg::exec::run_ffmpeg(clip)?;
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        let cause = knaif_skill_ffmpeg::exec::failure_reason(&stderr, result.status.code())
+            .unwrap_or_else(|| format!("ffmpeg exited {}", result.status));
+        anyhow::bail!("the preview clip could not be made: {cause}");
+    }
+    knaif_skill_ffmpeg::exec::require_streams(&out)?;
+    // The one scratch path shown on purpose: the user is meant to open this file.
+    let question = format!("Apply these settings to all {inputs} input(s)?");
+    match ui::view() {
+        Some(style) => {
+            println!(
+                "{}",
+                ui::render_detail(&style, &format!("Preview: {}", out.display()))
+            );
+            Ok(ask_yes_no_default(&format!(" │   {question}"), true)?.unwrap_or(false))
+        }
+        None => {
+            eprintln!("Preview: {}", out.display());
+            Ok(ask_yes_no_default(&question, true)?.unwrap_or(false))
+        }
+    }
 }
 
 /// The caution shown before a step's confirmation, for the tools whose cost is not obvious from
@@ -1850,8 +2669,18 @@ fn run_documents_step(
     dry_run: bool,
     yes: bool,
     overwrite: bool,
+    stdout: bool,
+    work_dir: Option<&Path>,
 ) -> anyhow::Result<StepOutcome> {
-    use knaif_skill_documents::run::{commit, is_supported, preview, Preview, ReadResult};
+    use knaif_skill_documents::run::{
+        commit_in, is_supported, preview_in, read_input_absent, Preview, ReadResult,
+    };
+
+    // A routed intermediate's real path names the temp folder (and so the user): `<work>/…`.
+    let shown = |path: &Path| match display_path(&path.to_string_lossy(), work_dir) {
+        d if d.starts_with("<work>/") => d,
+        _ => ui::display_rel(path, base),
+    };
 
     if !is_supported(tool) {
         // The `not_implemented:` prefix, not a bare error: this is a capability the native
@@ -1865,7 +2694,29 @@ fn run_documents_step(
         )));
     }
 
-    match preview(tool, step_args, base, sandbox, bundle)? {
+    if dry_run {
+        if let Some(input) = read_input_absent(tool, step_args, base, sandbox, work_dir)? {
+            println!("would read {}", shown(&input));
+            return Ok(StepOutcome::Continue);
+        }
+    }
+    // `--stdout`: `cmd_run` let only tools that declare `stdout:` through, and
+    // extract_text is the one: its text goes to the real stdout, and nothing is saved. Python's
+    // `ExtractTextStep` under `ctx.to_stdout`.
+    if stdout && !dry_run && tool == "extract_text" {
+        let input = knaif_skill_documents::run::input_path_in(step_args, base, sandbox, work_dir)?;
+        let records = knaif_skill_documents::text::extract_text_with(
+            &input,
+            step_args.get("pages").and_then(serde_json::Value::as_str),
+            step_args
+                .get("ocr")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+        )?;
+        ui::write_text(&knaif_skill_documents::text::document_text(&records))?;
+        return Ok(StepOutcome::Continue);
+    }
+    match preview_in(tool, step_args, base, sandbox, bundle, work_dir)? {
         Preview::Read(result) => {
             // Stderr, beside the plan dump, so stdout stays the human answer.
             if let Some(line) = result_dump(plan_dump_enabled(), tool, &read_result_json(&result)) {
@@ -1909,10 +2760,7 @@ fn run_documents_step(
                 let verb = if dry_run { "would " } else { "" };
                 println!("{}", ui::render_detail(&style, &format!("{verb}{summary}")));
                 for o in &outputs {
-                    println!(
-                        "{}",
-                        ui::render_detail(&style, &format!("→ {}", ui::display_rel(o, base)))
-                    );
+                    println!("{}", ui::render_detail(&style, &format!("→ {}", shown(o))));
                     if o.exists() {
                         println!(
                             "{}",
@@ -1928,7 +2776,7 @@ fn run_documents_step(
                 if ui::view().is_none() {
                     println!("would {summary} →");
                     for o in &outputs {
-                        println!("  {}", o.display());
+                        println!("  {}", shown(o));
                     }
                 }
                 return Ok(StepOutcome::Continue);
@@ -1938,28 +2786,48 @@ fn run_documents_step(
                 println!("{summary}");
             }
             let previews: Vec<String> = outputs.iter().map(|p| p.display().to_string()).collect();
+            // A routed intermediate is in the scratch: it never replaces a file of the user's.
+            let finals: Vec<String> = previews
+                .iter()
+                .filter(|o| !in_scratch(o, work_dir))
+                .cloned()
+                .collect();
             if !overwrite_gate(
-                &existing_outputs(&previews),
+                &existing_outputs(&finals),
                 overwrite,
                 &mut ask_yes_no_default,
             )? {
                 print_declined();
                 return Ok(StepOutcome::Declined);
             }
-            if !confirm_action(yes, &previews, "output file")? {
+            // Named as the user would write them: an absolute path named their home.
+            let asked: Vec<String> = outputs.iter().map(|o| shown(o)).collect();
+            if !confirm_action(yes, &asked, "output file")? {
                 print_declined();
                 return Ok(StepOutcome::Declined);
             }
             let started = std::time::Instant::now();
-            let written = commit(tool, step_args, base, sandbox, bundle)?;
+            let written = commit_in(tool, step_args, base, sandbox, bundle, work_dir)?;
             ui::note_written(written.len());
+            ui::note_written_paths(&written);
             for w in &written {
                 match ui::view() {
                     Some(style) => println!(
                         "{}",
-                        ui::render_ok(&style, &ui::display_rel(w, base), Some(started.elapsed()))
+                        ui::render_ok(&style, &shown(w), Some(started.elapsed()))
                     ),
-                    None => println!("✓ wrote {}", w.display()),
+                    None => println!("✓ wrote {}", shown(w)),
+                }
+                // The saved text's preview, never the whole text; the same lines
+                // as Python (`text_preview`, contracts/parity/text_preview_cases.json).
+                if tool == "extract_text" {
+                    let saved = std::fs::read_to_string(w).unwrap_or_default();
+                    for line in knaif_skill_documents::text::text_preview(&saved) {
+                        match ui::view() {
+                            Some(style) => println!("{}", ui::render_detail(&style, &line)),
+                            None => println!("{line}"),
+                        }
+                    }
                 }
             }
             Ok(StepOutcome::Continue)
@@ -2084,10 +2952,54 @@ fn answer_from_input(bytes_read: usize, line: &str, default_yes: bool) -> bool {
     bytes_read > 0 && answer_from_line(line, default_yes)
 }
 
-/// Whether a step may run without the `Proceed?` question: the default, unless `--confirm` asked
-/// for it. `--yes` always skips it, so `--confirm --yes` is `--yes`.
-fn approves_without_asking(yes: bool, confirm: bool) -> bool {
-    yes || !confirm
+/// What a run may do without asking (owner, 2026-10-23): `--allow download,overwrite,
+/// model`, a comma list or a repeated flag; `all`, or `--yes`, is every permission, now and later.
+/// `contracts/parity/cli_flag_cases.json`, Python `knaif.app.allowed`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Allow {
+    /// Fetch an http(s) URL input.
+    download: bool,
+    /// Replace a file that already exists.
+    overwrite: bool,
+    /// Download the recommended model.
+    model: bool,
+    /// Everything (`all`, `--yes`), including what a later release adds: also skips `Proceed?`.
+    all: bool,
+}
+
+impl Allow {
+    /// Whether each step asks `Proceed? [Y/n]`: only under `--confirm`, and never when everything
+    /// is allowed (`--confirm --yes` is `--yes`).
+    fn asks_proceed(self, confirm: bool) -> bool {
+        confirm && !self.all
+    }
+}
+
+/// The names `--allow` takes, in the order its error lists them.
+const PERMISSIONS: [&str; 4] = ["download", "overwrite", "model", "all"];
+
+/// The permissions `--allow` (already checked by [`permission`]) and `--yes` give.
+fn allowed(names: &[String], yes: bool) -> Allow {
+    let all = yes || names.iter().any(|n| n == "all");
+    let has = |name: &str| all || names.iter().any(|n| n == name);
+    Allow {
+        download: has("download"),
+        overwrite: has("overwrite"),
+        model: has("model"),
+        all,
+    }
+}
+
+/// One `--allow` name, checked as clap reads it: trimmed, without case.
+fn permission(name: &str) -> Result<String, String> {
+    let name = name.trim().to_lowercase();
+    if PERMISSIONS.contains(&name.as_str()) {
+        Ok(name)
+    } else {
+        Err(format!(
+            "unknown permission '{name}': use download, overwrite, model or all"
+        ))
+    }
 }
 
 /// The files an output path names that already exist on disk. A plain path names itself. An
@@ -2170,7 +3082,7 @@ fn overwrite_gate(
             Some(true) => {}
             Some(false) => return Ok(false),
             None => anyhow::bail!(
-                "{path} already exists. Re-run with --overwrite to replace it, or name a different output."
+                "{path} already exists. Re-run with --allow overwrite to replace it, or name a different output."
             ),
         }
     }
@@ -2286,6 +3198,8 @@ struct PlanSession {
     output_capable: std::collections::HashSet<String>,
     /// The skill's `file_kinds:` — chain threading never crosses kinds.
     file_kinds: knaif_core::FileKinds,
+    /// The skill's `batch_kinds:` — a batch glob of these kinds covers the whole kind.
+    batch_kinds: Vec<String>,
     backend: Box<dyn knaif_llm::LlmBackend>,
     /// Repair only for a real model — the mock repeats its canned response, so a retry is pointless.
     repair: bool,
@@ -2294,7 +3208,8 @@ struct PlanSession {
 impl PlanSession {
     fn new(root: &Path, skill: &str, model: Option<&Path>, verbose: bool) -> anyhow::Result<Self> {
         let bundle = root.join(skill);
-        let mut registry = knaif_core::load_registry(&bundle.join("tools.yaml"))?;
+        // The skill's own tools, each with its declared effects (refused otherwise).
+        let mut registry = knaif_core::load_skill_registry(&bundle)?;
         // The control tools (`clarify`/`reject`/`done`) are how the model says "no" or "which
         // file?". Without them every such answer fails as `Unknown tool`, so a missing file is a
         // broken install, not something to plan around.
@@ -2310,6 +3225,8 @@ impl PlanSession {
         let output_capable = knaif_core::output_capable_tools(&registry);
         let file_kinds =
             knaif_core::load_file_kinds(&bundle.join("skill.yaml")).map_err(anyhow::Error::msg)?;
+        let batch_kinds = knaif_core::load_batch_kinds(&bundle.join("skill.yaml"), &file_kinds)
+            .map_err(anyhow::Error::msg)?;
         let loading = std::time::Instant::now();
         // A running daemon that holds this very model stands in for the load; anything else
         // (none running, another model or build, a generation setting overridden here) loads the
@@ -2326,6 +3243,7 @@ impl PlanSession {
             overrides,
             output_capable,
             file_kinds,
+            batch_kinds,
             backend,
             // Replay serves a recorded repair reply as it was served live (the result store).
             repair: model.is_some() || knaif_llm::replay_selected(),
@@ -2353,14 +3271,22 @@ impl PlanSession {
             &names,
             utterance,
             knaif_core::MAX_TOOL_EXAMPLES,
+            &knaif_core::triggered_tools(&self.registry),
         );
         let block = (!selected.is_empty())
             .then(|| knaif_core::render_examples_block(&selected))
             .or_else(|| self.overrides.examples_block.clone());
+        // A rule about tools joins the header only when one of them is in this prompt; a
+        // `when: many` rule only when the request asks for many files.
+        let header =
+            self.overrides.system_header.as_deref().map(|h| {
+                knaif_core::apply_prompt_rules(h, &self.overrides.rules, &names, utterance)
+            });
         knaif_core::PromptOverrides {
-            system_header: self.overrides.system_header.clone(),
+            system_header: header,
             examples_block: block,
             examples: Vec::new(),
+            rules: Vec::new(),
         }
     }
 
@@ -2408,6 +3334,10 @@ impl PlanSession {
         // same directory stem resolution uses two lines down — `sandbox` when configured, else
         // the cwd — so the guard cannot admit a name the resolver would then refuse.
         let known_files = listed_filenames(sandbox.unwrap_or(base));
+        // The alert goes last, keeping every other step's order, so chain linking never sees it
+        // between two steps (Python `alert_last`, at the same point of `infer`).
+        let mut payload = payload;
+        knaif_core::alert::alert_last(&mut payload);
         let gated = knaif_core::apply_clarify_gate(
             payload,
             &utterance,
@@ -2432,6 +3362,31 @@ impl PlanSession {
         Ok(gated)
     }
 
+    /// The model's plan with its batch globs repaired: an invented folder for "here" reads as
+    /// here (`drop_invented_folders`), and a glob for "every video" covers the whole kind
+    /// (`widen_kind_globs`, the skill's `batch_kinds:`). Python runs both in `execute_plan`.
+    fn repair_batch_globs(
+        &self,
+        mut payload: serde_json::Value,
+        utterance: &str,
+        here: &Path,
+    ) -> serde_json::Value {
+        let utterance = normalize_path_separators(utterance);
+        if let Some(steps) = payload.get("plan").and_then(serde_json::Value::as_array) {
+            let steps = knaif_core::batch_chain::drop_invented_folders(steps, &utterance, here);
+            let steps = knaif_core::batch_chain::widen_kind_globs(
+                &steps,
+                &utterance,
+                here,
+                &self.file_kinds,
+                &self.batch_kinds,
+                &knaif_core::scratch::produced_kinds(&self.registry),
+            );
+            payload["plan"] = serde_json::Value::Array(steps);
+        }
+        payload
+    }
+
     /// [`Self::plan`], then the NL clarify gate: the plan `run` executes. Python runs that gate
     /// in `execute_plan` right after `resolve_stems`, so it asks when the user never named an
     /// input the plan uses ("reverse the mov file" -> inputs ["mov"]) or when a grounded arg such
@@ -2450,12 +3405,48 @@ impl PlanSession {
         sandbox: Option<&Path>,
     ) -> anyhow::Result<serde_json::Value> {
         let planned = self.plan(utterance, base, sandbox)?;
+        // A glob in a folder the model made up for "here" reads as here, then "every video"
+        // written as `*.mp4` covers the other videos beside it too. Before the
+        // gate, as Python runs them first in `execute_plan`; the `plan` command, like Python's,
+        // keeps the model's plan.
+        let planned = self.repair_batch_globs(planned, utterance, sandbox.unwrap_or(base));
         // The text the model was shown, as in Python (`agent.py` normalizes before the gate). A
         // grounded value the model copied from it (`a/b`) is only found in that spelling: against
         // the raw request a password written `a\b` was always "invented" and asked for again.
         let shown = normalize_path_separators(utterance);
-        let gated = knaif_core::nl_clarify_gate(planned, &shown, &self.registry);
+        // The listing the guard used, read again: a plain word ("beach") names a file that is
+        // there in this gate too.
+        let known_files = listed_filenames(sandbox.unwrap_or(base));
+        let gated = knaif_core::nl_clarify_gate(planned, &shown, &self.registry, &known_files);
+        let gated = self.ask_for_count(gated, &shown, sandbox.unwrap_or(base));
         Ok(restore_grounded_args(gated, utterance, &self.registry))
+    }
+
+    /// A count of files ("2 of the videos") must match what the plan touches,
+    /// checked when the gate let the plan through, as Python's `execute_plan` does.
+    fn ask_for_count(
+        &self,
+        mut payload: serde_json::Value,
+        utterance: &str,
+        here: &Path,
+    ) -> serde_json::Value {
+        let Some(steps) = payload.get("plan").and_then(serde_json::Value::as_array) else {
+            return payload;
+        };
+        let first = steps
+            .first()
+            .and_then(|s| s.get("tool"))
+            .and_then(|t| t.as_str());
+        if first == Some("clarify") {
+            return payload;
+        }
+        if let Some(question) =
+            knaif_core::nl_clarify_gate::count_question(utterance, steps, here, &self.file_kinds)
+        {
+            payload["plan"] =
+                serde_json::json!([{ "tool": "clarify", "args": { "question": question } }]);
+        }
+        payload
     }
 }
 
@@ -2576,6 +3567,11 @@ fn debug_dump(enabled: bool, raw: &str, extracted: &str) -> Option<String> {
 /// catastrophe. An env gate on the shared `PlanSession::plan` costs nothing when unset and covers
 /// `run`, `plan` and `plan --batch` alike — same reasoning as [`PROMPT_DUMP_MARKER`].
 const PLAN_DUMP_MARKER: &str = "===KNAIF-PLAN===";
+
+/// Marker for the plan a run executes when a batch was lifted: one step per file,
+/// which the `step N of M:` headers count. Gated with the plan dump; the eval's native replay
+/// reads it to attribute each file a step wrote (`exact_files.RUN_PLAN_DUMP_MARKER`).
+const RUN_PLAN_DUMP_MARKER: &str = "===KNAIF-RUN-PLAN===";
 
 fn plan_dump_enabled() -> bool {
     std::env::var("KNAIF_DUMP_PLAN")
@@ -2830,10 +3826,13 @@ fn try_build_payload(
     let mut payload = knaif_core::parse_plan(&extracted.json)?;
     knaif_core::normalize_plan(&mut payload, Some(registry));
     knaif_core::apply_defaults(&mut payload, registry);
-    if let Some(clarify) = knaif_core::required_args_clarify(&payload, registry) {
+    // The plan the pipeline will run: the alert is a run option and not checked as a step, so an
+    // arg the model gives it never sends the model back (Python `_try_build_payload`).
+    let (probe, _) = knaif_core::alert::split_alert(&payload);
+    if let Some(clarify) = knaif_core::required_args_clarify(&probe, registry) {
         return Ok(clarify);
     }
-    knaif_core::validate_plan(&payload, registry, base, sandbox)?;
+    knaif_core::validate_plan(&probe, registry, base, sandbox)?;
     Ok(payload)
 }
 
@@ -2899,8 +3898,8 @@ fn mock_forced() -> bool {
 /// Pick the model backing this invocation. `None` means "run the offline mock".
 ///
 /// Precedence (NATIVE.md §5.6):
-/// 1. an explicit `--model` name/path always wins;
-/// 2. `$KNAIF_LLM_BACKEND=mock` opts out of auto-select (offline/eval runs);
+/// 1. `$KNAIF_LLM_BACKEND=mock` runs the mock, even with `--model` (a canned run);
+/// 2. otherwise an explicit `--model` name/path wins, and `=replay` opts out of auto-select;
 /// 3. the manifest's recommended model, when already installed, is used silently;
 /// 4. otherwise `policy` decides whether to offer the download — a declined or impossible
 ///    download falls back to the mock, so a multi-GB pull never happens without consent.
@@ -2923,10 +3922,16 @@ fn select_model_with(
     policy: DownloadPolicy,
     llama_available: bool,
 ) -> anyhow::Result<Option<PathBuf>> {
+    if std::env::var("KNAIF_LLM_BACKEND").ok().as_deref() == Some("mock") {
+        // A canned run asked for by name beats `--model`, as in Python (owner, 2026-10-25).
+        return Ok(None);
+    }
     if let Some(name) = explicit {
         // Authoritative even in a mock-only build, where it earns a "rebuild with --features
         // llama" error — an explicit request must never be silently downgraded to the mock.
-        return Ok(Some(resolve_model_path(name)?));
+        let path = resolve_model_path(name)?;
+        note_trained_for(name);
+        return Ok(Some(path));
     }
     if !llama_available {
         // No llama.cpp backend compiled in: the mock is the only thing that can run, so
@@ -2941,14 +3946,47 @@ fn select_model_with(
         return Ok(None); // no manifest recommendation → generic first-run guidance
     };
     if installed {
-        return Ok(Some(resolve_model_path(&name)?));
+        let path = resolve_model_path(&name)?;
+        note_trained_for(&name);
+        return Ok(Some(path));
     }
     match policy {
         DownloadPolicy::Never => return Ok(None),
         DownloadPolicy::YesOnly if !yes => return Ok(None),
         _ => {}
     }
-    offer_recommended_download(&name, yes)
+    let chosen = offer_recommended_download(&name, yes)?;
+    if chosen.is_some() {
+        note_trained_for(&name);
+    }
+    Ok(chosen)
+}
+
+/// Say when the model about to run was not trained for the prompt this knaif serves (owner,
+/// 2026-10-26): the manifest's `trained_for` against `contracts/runtime/prompt_generation.yaml`.
+/// Silent for a model the manifest does not know (a GGUF path), and when either file is missing
+/// or unreadable: a note must never stop a run.
+fn note_trained_for(model: &str) {
+    let Some(note) = trained_for_note_for(model) else {
+        return;
+    };
+    eprintln!("{note}");
+}
+
+fn trained_for_note_for(model: &str) -> Option<String> {
+    let manifest = knaif_models::Manifest::load(&resolve_manifest_path().ok()?).ok()?;
+    let spec = manifest.get(model)?;
+    let text = std::fs::read_to_string(resolve_repo_file(
+        "contracts/runtime/prompt_generation.yaml",
+    )?)
+    .ok()?;
+    let generation = knaif_models::prompt_generation_from_yaml(&text).ok()?;
+    knaif_models::trained_for_note(
+        spec.trained_for,
+        generation,
+        model,
+        manifest.model_trained_for(generation),
+    )
 }
 
 /// Offer to download the recommended model, then pull it with a progress bar. `Ok(None)` when the
@@ -3282,6 +4320,88 @@ mod tests {
     use std::cell::RefCell;
     use std::collections::VecDeque;
 
+    /// One set of flags for both CLIs (`contracts/parity/cli_flag_cases.json`).
+    #[test]
+    fn cli_flag_cases() {
+        use clap::Parser;
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/parity/cli_flag_cases.json");
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        for case in doc["cases"].as_array().unwrap() {
+            let name = case["name"].as_str().unwrap();
+            let mut argv = vec!["knaif".to_string(), "run".to_string()];
+            argv.extend(
+                case["argv"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|a| a.as_str().unwrap().to_string()),
+            );
+            let parsed = Cli::try_parse_from(&argv);
+            if let Some(error) = case["error"].as_str() {
+                let err = parsed.err().unwrap_or_else(|| panic!("{name}: parsed"));
+                assert!(err.to_string().contains(error), "{name}: {err}");
+                continue;
+            }
+            let Command::Run(a) = parsed.unwrap_or_else(|e| panic!("{name}: {e}")).command else {
+                panic!("{name}: expected run");
+            };
+            let allow = allowed(&a.allow, a.yes);
+            let got = serde_json::json!({
+                "download": allow.download,
+                "overwrite": allow.overwrite,
+                "model": allow.model,
+            });
+            assert_eq!(got, case["allow"], "{name}");
+            assert_eq!(
+                allow.asks_proceed(a.confirm),
+                case["asks_proceed"].as_bool().unwrap(),
+                "{name}"
+            );
+            if let Some(stdout) = case["stdout"].as_bool() {
+                assert_eq!(a.stdout, stdout, "{name}");
+            }
+        }
+    }
+
+    /// The plan line names the files found, not a glob that matched nothing
+    /// (`*.mp4 (+2 more)` in a folder with no mp4 left).
+    #[test]
+    fn the_plan_line_names_the_files_found() {
+        let dir = std::env::temp_dir().join(format!("knaif_planline_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["city.mov", "beach.mov", "dog.webm", "notes.txt"] {
+            std::fs::write(dir.join(name), b"x").unwrap();
+        }
+        let kinds: knaif_core::clarify_gate::FileKinds = ["mov", "mp4", "webm"]
+            .iter()
+            .map(|e| (e.to_string(), "video".to_string()))
+            .collect();
+        let detail = |args: serde_json::Value| step_detail(args.as_object().unwrap(), &dir, &kinds);
+        let globs = serde_json::json!({"inputs": ["*.mp4", "*.mov", "*.webm"], "format": "mp4"});
+        assert_eq!(detail(globs), "beach.mov (+2 more)");
+        // A folder lists its files of a declared kind (notes.txt is not one).
+        assert_eq!(
+            detail(serde_json::json!({"input": "."})),
+            "beach.mov (+2 more)"
+        );
+        // One file found: its name alone.
+        assert_eq!(
+            detail(serde_json::json!({"input": "*.webm", "output": "dog.mp4"})),
+            "dog.webm → dog.mp4"
+        );
+        // Nothing found: the plan's own words stay (the run then says no files match).
+        assert_eq!(detail(serde_json::json!({"input": "*.avi"})), "*.avi");
+        // A literal name is shown as written, found or not.
+        assert_eq!(
+            detail(serde_json::json!({"inputs": ["a.mp4", "b.mp4"]})),
+            "a.mp4 (+1 more)"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn tool_status(satisfied: bool, blocks: bool) -> knaif_core::ToolStatus {
         knaif_core::ToolStatus {
             name: "ffmpeg".into(),
@@ -3440,20 +4560,6 @@ mod tests {
     // --- 1.3.0: Yes by default, and an existing file always asks ---------------------------
 
     #[test]
-    fn a_step_asks_only_when_confirm_is_opted_into() {
-        assert!(approves_without_asking(false, false), "the default acts");
-        assert!(
-            !approves_without_asking(false, true),
-            "--confirm asks first"
-        );
-        assert!(
-            approves_without_asking(true, true),
-            "--yes still skips the question"
-        );
-        assert!(approves_without_asking(true, false));
-    }
-
-    #[test]
     fn enter_follows_the_default_and_anything_else_is_no() {
         assert!(answer_from_line("", true));
         assert!(answer_from_line("  \n", true));
@@ -3523,7 +4629,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            err.contains("out.mp4") && err.contains("--overwrite"),
+            err.contains("out.mp4") && err.contains("--allow overwrite"),
             "{err}"
         );
     }
@@ -3565,20 +4671,12 @@ mod tests {
     }
 
     #[test]
-    fn run_accepts_confirm_and_overwrite_and_keeps_yes() {
+    fn run_accepts_keep_intermediates() {
         use clap::Parser;
-        let cli = Cli::try_parse_from([
-            "knaif",
-            "run",
-            "ffmpeg",
-            "--confirm",
-            "--overwrite",
-            "--yes",
-            "x",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["knaif", "run", "ffmpeg", "--keep-intermediates", "x"]).unwrap();
         match cli.command {
-            Command::Run(a) => assert!(a.confirm && a.overwrite && a.yes),
+            Command::Run(a) => assert!(a.keep_intermediates),
             _ => panic!("expected run"),
         }
     }
@@ -3595,11 +4693,11 @@ mod tests {
     // exactly the non-interactive case, and it keeps every test off the network.
 
     #[test]
-    fn explicit_model_path_wins_over_everything() {
+    fn explicit_model_path_wins_over_auto_select() {
         let env = ModelEnv::new("explicit", "TODO");
         env.install();
-        // Even with the mock forced and a recommended model installed, `--model` is authoritative.
-        std::env::set_var("KNAIF_LLM_BACKEND", "mock");
+        // With a recommended model installed, `--model` is authoritative.
+        std::env::remove_var("KNAIF_LLM_BACKEND");
         let gguf = env.root.join("explicit.gguf");
         std::fs::write(&gguf, b"gguf").unwrap();
 
@@ -3612,6 +4710,27 @@ mod tests {
         .unwrap()
         .expect("explicit --model must be honored");
         assert_eq!(chosen, gguf);
+    }
+
+    #[test]
+    fn the_mock_env_wins_over_an_explicit_model() {
+        // `KNAIF_LLM_BACKEND=mock` is the deliberate signal of a canned run, so it beats
+        // `--model`, as in Python (owner, 2026-10-25). A `kmock … knaif run --model …` used to
+        // run the real model instead.
+        let env = ModelEnv::new("mockexplicit", "TODO");
+        env.install();
+        std::env::set_var("KNAIF_LLM_BACKEND", "mock");
+        let gguf = env.root.join("explicit.gguf");
+        std::fs::write(&gguf, b"gguf").unwrap();
+        let chosen = select_model_with(
+            Some(gguf.to_str().unwrap()),
+            false,
+            DownloadPolicy::Prompt,
+            true,
+        )
+        .unwrap();
+        std::env::remove_var("KNAIF_LLM_BACKEND");
+        assert_eq!(chosen, None);
     }
 
     #[test]
@@ -4180,6 +5299,7 @@ mod tests {
                 // L1a pins the *rendering* of a given block; the per-utterance selection that
                 // chooses which examples go into it is L1e's contract.
                 examples: Vec::new(),
+                rules: Vec::new(),
             };
 
             let utterance = normalize_path_separators(case["utterance"].as_str().unwrap());

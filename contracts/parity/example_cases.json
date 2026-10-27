@@ -283,7 +283,200 @@
         }
       }
     ],
-    "empty": []
+    "empty": [],
+    "urls": [
+      {
+        "request": "convert a.mov to mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "a.mov"
+                ],
+                "container": "mp4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "convert b.mov to mkv",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "b.mov"
+                ],
+                "container": "mkv"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "convert f.avi to webm",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "f.avi"
+                ],
+                "container": "webm"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "trim c.mp4 to 5 seconds",
+        "output": {
+          "plan": [
+            {
+              "tool": "trim_video",
+              "args": {
+                "input": "c.mp4",
+                "duration": "5"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "convert https://example.com/d.mov to mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "https://example.com/d.mov"
+                ],
+                "container": "mp4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "make e.mp4 better",
+        "output": {
+          "plan": [
+            {
+              "tool": "clarify",
+              "args": {
+                "question": "Better how?"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "nuke it",
+        "output": {
+          "plan": [
+            {
+              "tool": "reject",
+              "args": {
+                "reason": "Out of scope."
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "batch": [
+      {
+        "request": "convert a.mov to mp4",
+        "output": {
+          "plan": [
+            {
+              "tool": "convert_video",
+              "args": {
+                "inputs": [
+                  "a.mov"
+                ],
+                "container": "mp4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "rotate b.mp4 90 degrees",
+        "output": {
+          "plan": [
+            {
+              "tool": "rotate_video",
+              "args": {
+                "inputs": [
+                  "b.mp4"
+                ],
+                "angle": 90
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "Rotate every mkv in this folder 90 degrees and make them 1080p.",
+        "when": "many",
+        "output": {
+          "plan": [
+            {
+              "tool": "rotate_video",
+              "args": {
+                "inputs": [
+                  "*.mkv"
+                ],
+                "angle": 90,
+                "output": "rotated.mkv"
+              }
+            },
+            {
+              "tool": "resize_video",
+              "args": {
+                "inputs": [
+                  "rotated.mkv"
+                ],
+                "height": 1080
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "make e.mp4 better",
+        "output": {
+          "plan": [
+            {
+              "tool": "clarify",
+              "args": {
+                "question": "Better how?"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "request": "nuke it",
+        "output": {
+          "plan": [
+            {
+              "tool": "reject",
+              "args": {
+                "reason": "Deleting files is outside this skill's safety policy."
+              }
+            }
+          ]
+        }
+      }
+    ]
   },
   "cases": [
     {
@@ -502,6 +695,178 @@
       "query": "compress it",
       "expected_requests": [],
       "expected_block": null
+    },
+    {
+      "name": "a_url_example_is_never_shown_to_a_request_without_a_url",
+      "why": "An example whose request carries an http(s) URL is shown only to a request that carries one. Without the rule, 'convert https://example.com/d.mov to mp4' ties 'convert a.mov to mp4' on (tool, words) and takes the third slot from 'convert b.mov to mkv', so adding a URL example would change the prompt of plain convert requests that have nothing to do with URLs.",
+      "example_set": "urls",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "trim_video"
+      ],
+      "query": "convert x.mov to mp4",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "convert b.mov to mkv",
+        "convert f.avi to webm",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"convert b.mov to mkv\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"b.mov\"], \"container\": \"mkv\"}}]}\n\n  request: \"convert f.avi to webm\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"f.avi\"], \"container\": \"webm\"}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_request_with_a_url_ranks_the_url_example_first",
+      "why": "For a request that carries a URL, a URL example outranks one that does not at the same tool overlap, whatever the shared words: the score is (tool overlap, both carry a URL, shared words). Without it, the URL example ties at zero shared words and corpus order leaves it out behind 'convert a.mov' and 'convert f.avi'.",
+      "example_set": "urls",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "trim_video"
+      ],
+      "query": "change https://h.test/y.webm into an mkv",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "convert b.mov to mkv",
+        "convert https://example.com/d.mov to mp4",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"convert b.mov to mkv\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"b.mov\"], \"container\": \"mkv\"}}]}\n\n  request: \"convert https://example.com/d.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"https://example.com/d.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_url_is_recognised_whatever_its_case",
+      "why": "'HTTPS://' is the same URL class as 'https://': both runtimes compare case-insensitively, so an upper-case URL in a request still gets the URL example.",
+      "example_set": "urls",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "trim_video"
+      ],
+      "query": "change HTTPS://H.TEST/Y.WEBM into an mkv",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "convert b.mov to mkv",
+        "convert https://example.com/d.mov to mp4",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"convert b.mov to mkv\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"b.mov\"], \"container\": \"mkv\"}}]}\n\n  request: \"convert https://example.com/d.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"https://example.com/d.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Out of scope.\"}}]}\n"
+    },
+    {
+      "name": "a_batch_example_is_never_shown_to_a_one_file_request",
+      "why": "An example marked `when: many` (the per-file batch examples, owner 2026-10-20) is shown only to a request that asks for many files, so adding it changes no single-file prompt: here it would otherwise take the third domain slot on tool overlap.",
+      "example_set": "batch",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "resize_video",
+        "rotate_video"
+      ],
+      "query": "rotate clip.mp4 90 degrees",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "rotate b.mp4 90 degrees",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"rotate b.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"b.mp4\"], \"angle\": 90}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting files is outside this skill's safety policy.\"}}]}\n"
+    },
+    {
+      "name": "a_batch_word_lets_the_batch_example_in",
+      "why": "'every', 'all', 'each', 'folder', 'here'-style batch words: the same test the clarify gate uses for a glob.",
+      "example_set": "batch",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "resize_video",
+        "rotate_video"
+      ],
+      "query": "rotate all the videos in this folder by 90 degrees",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "rotate b.mp4 90 degrees",
+        "Rotate every mkv in this folder 90 degrees and make them 1080p.",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"rotate b.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"b.mp4\"], \"angle\": 90}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting files is outside this skill's safety policy.\"}}]}\n"
+    },
+    {
+      "name": "a_glob_in_the_request_lets_the_batch_example_in",
+      "why": "A glob written in the request asks for many files too.",
+      "example_set": "batch",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "resize_video",
+        "rotate_video"
+      ],
+      "query": "rotate *.mkv by 90 degrees",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "rotate b.mp4 90 degrees",
+        "Rotate every mkv in this folder 90 degrees and make them 1080p.",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"rotate b.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"b.mp4\"], \"angle\": 90}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting files is outside this skill's safety policy.\"}}]}\n"
+    },
+    {
+      "name": "a_plural_file_word_lets_the_batch_example_in",
+      "why": "'the videos' asks for many files without a batch word (the clarify gate's plural file words).",
+      "example_set": "batch",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "resize_video",
+        "rotate_video"
+      ],
+      "query": "rotate the videos 90 degrees",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "rotate b.mp4 90 degrees",
+        "Rotate every mkv in this folder 90 degrees and make them 1080p.",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"rotate b.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"b.mp4\"], \"angle\": 90}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting files is outside this skill's safety policy.\"}}]}\n"
+    },
+    {
+      "name": "a_chinese_batch_word_lets_the_batch_example_in",
+      "why": "所有 is a batch word in the corpora's languages (matched as a substring, as the gate does).",
+      "example_set": "batch",
+      "retrieved": [
+        "clarify",
+        "convert_video",
+        "done",
+        "reject",
+        "resize_video",
+        "rotate_video"
+      ],
+      "query": "把所有视频旋转90度",
+      "expected_requests": [
+        "convert a.mov to mp4",
+        "rotate b.mp4 90 degrees",
+        "Rotate every mkv in this folder 90 degrees and make them 1080p.",
+        "make e.mp4 better",
+        "nuke it"
+      ],
+      "expected_block": "Examples:\n  request: \"convert a.mov to mp4\"\n  output:  {\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"a.mov\"], \"container\": \"mp4\"}}]}\n\n  request: \"rotate b.mp4 90 degrees\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"b.mp4\"], \"angle\": 90}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"make e.mp4 better\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Better how?\"}}]}\n\n  request: \"nuke it\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting files is outside this skill's safety policy.\"}}]}\n"
     }
   ],
   "shipped": [
@@ -518,7 +883,7 @@
         "strip_audio",
         "trim_video"
       ],
-      "corpus_size": 28,
+      "corpus_size": 36,
       "expected_requests": [
         "Compress interview.mp4 for email under 20 MB.",
         "Make clip.mp4 better.",
@@ -541,7 +906,7 @@
         "reverse_video",
         "strip_audio"
       ],
-      "corpus_size": 28,
+      "corpus_size": 36,
       "expected_requests": [
         "Extract the audio from clip.mp4 as MP3.",
         "Extract the audio from clip.mp4 to audio.mp3.",
@@ -564,30 +929,30 @@
         "reverse_video",
         "rotate_video"
       ],
-      "corpus_size": 28,
+      "corpus_size": 36,
       "expected_requests": [
         "Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.",
         "Extract the audio from clip.mp4 as MP3.",
-        "Extract the audio from clip.mp4 to audio.mp3.",
         "Make clip.mp4 better.",
+        "Rotate every mkv in this folder 90 degrees and make them 1080p.",
         "Nuke my videos folder."
       ],
-      "expected_block": "Examples:\n  request: \"Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.\"\n  output:  {\"plan\": [{\"tool\": \"prepare_for_platform\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"platform\": \"whatsapp\", \"quality\": \"visually_good\", \"preview\": true}}]}\n\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Extract the audio from clip.mp4 to audio.mp3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\", \"output\": \"audio.mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+      "expected_block": "Examples:\n  request: \"Make clip1.mp4 and clip2.mp4 suitable for WhatsApp, keep them looking good, and show me a preview before converting everything.\"\n  output:  {\"plan\": [{\"tool\": \"prepare_for_platform\", \"args\": {\"inputs\": [\"clip1.mp4\", \"clip2.mp4\"], \"platform\": \"whatsapp\", \"quality\": \"visually_good\", \"preview\": true}}]}\n\n  request: \"Extract the audio from clip.mp4 as MP3.\"\n  output:  {\"plan\": [{\"tool\": \"extract_audio\", \"args\": {\"inputs\": [\"clip.mp4\"], \"audio_format\": \"mp3\"}}]}\n\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Rotate every mkv in this folder 90 degrees and make them 1080p.\"\n  output:  {\"plan\": [{\"tool\": \"rotate_video\", \"args\": {\"inputs\": [\"*.mkv\"], \"angle\": 90, \"output\": \"rotated.mkv\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"rotated.mkv\"], \"height\": 1080}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
     },
     {
       "skill": "documents",
       "utterance": "make report.pdf smaller",
       "retrieved": [
         "clarify",
+        "compress_pdf",
         "done",
         "ocr_document",
         "reject",
-        "rotate_pages",
         "split_pdf",
         "unlock_pdf",
         "watermark"
       ],
-      "corpus_size": 5,
+      "corpus_size": 12,
       "expected_requests": [
         "inspect report.pdf",
         "make report.pdf smaller",
@@ -609,7 +974,7 @@
         "unlock_pdf",
         "watermark"
       ],
-      "corpus_size": 5,
+      "corpus_size": 12,
       "expected_requests": [
         "inspect report.pdf",
         "find alpha in notes.txt",
@@ -617,6 +982,99 @@
         "do something with a file"
       ],
       "expected_block": "Examples:\n  request: \"inspect report.pdf\"\n  output:  {\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"report.pdf\"}}]}\n\n  request: \"find alpha in notes.txt\"\n  output:  {\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"notes.txt\", \"query\": \"alpha\"}}]}\n\n  request: \"make report.pdf smaller\"\n  output:  {\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"report.pdf\", \"compress_quality\": \"balanced\"}}]}\n\n  request: \"do something with a file\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file, and what would you like done with it?\"}}]}\n"
+    },
+    {
+      "skill": "ffmpeg",
+      "utterance": "convert clip.mp4 to webm, save it to Downloads and beep when done",
+      "retrieved": [
+        "alert_when_done",
+        "clarify",
+        "concat_video",
+        "convert_video",
+        "done",
+        "reject",
+        "resize_video",
+        "reverse_video",
+        "trim_video"
+      ],
+      "corpus_size": 36,
+      "expected_requests": [
+        "Make clip.mp4 better.",
+        "Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.",
+        "Trim clip.mp4 to 5 seconds, then resize to 720p.",
+        "Resize interview.mp4 to 720p and save it in my Videos folder.",
+        "Nuke my videos folder."
+      ],
+      "expected_block": "Examples:\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"test1.mov\", \"start\": \"00:00:02\", \"end\": \"00:00:04\", \"output\": \"test1_trimmed.mov\"}}, {\"tool\": \"concat_video\", \"args\": {\"base\": \"test2.mov\", \"append\": [\"test1_trimmed.mov\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"combined.mp4\"], \"container\": \"mp4\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Resize interview.mp4 to 720p and save it in my Videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"height\": 720, \"output\": \"Videos/interview_720p.mp4\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+    },
+    {
+      "skill": "ffmpeg",
+      "utterance": "convert clip.mov to mp4 and save it in Downloads",
+      "retrieved": [
+        "clarify",
+        "concat_video",
+        "convert_video",
+        "done",
+        "reject",
+        "resize_video",
+        "reverse_video",
+        "trim_video"
+      ],
+      "corpus_size": 36,
+      "expected_requests": [
+        "Make clip.mp4 better.",
+        "Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.",
+        "Trim clip.mp4 to 5 seconds, then resize to 720p.",
+        "Resize interview.mp4 to 720p and save it in my Videos folder.",
+        "Nuke my videos folder."
+      ],
+      "expected_block": "Examples:\n  request: \"Make clip.mp4 better.\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should be improved: file size, quality, resolution, audio, or compatibility with a specific platform?\"}}]}\n\n  request: \"Cut seconds 2 to 4 from test1.mov and append that clip to the end of test2.mov, then convert to mp4.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"test1.mov\", \"start\": \"00:00:02\", \"end\": \"00:00:04\", \"output\": \"test1_trimmed.mov\"}}, {\"tool\": \"concat_video\", \"args\": {\"base\": \"test2.mov\", \"append\": [\"test1_trimmed.mov\"], \"output\": \"combined.mp4\"}}, {\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"combined.mp4\"], \"container\": \"mp4\"}}]}\n\n  request: \"Trim clip.mp4 to 5 seconds, then resize to 720p.\"\n  output:  {\"plan\": [{\"tool\": \"trim_video\", \"args\": {\"input\": \"clip.mp4\", \"start\": \"00:00:00\", \"end\": \"00:00:05\", \"output\": \"clip_trimmed.mp4\"}}, {\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"clip_trimmed.mp4\"], \"height\": 720}}]}\n\n  request: \"Resize interview.mp4 to 720p and save it in my Videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"resize_video\", \"args\": {\"inputs\": [\"interview.mp4\"], \"height\": 720, \"output\": \"Videos/interview_720p.mp4\"}}]}\n\n  request: \"Nuke my videos folder.\"\n  output:  {\"plan\": [{\"tool\": \"reject\", \"args\": {\"reason\": \"Deleting or wiping files is outside this skill's safety policy.\"}}]}\n"
+    },
+    {
+      "skill": "documents",
+      "utterance": "extract the text from sample.pdf and notify me when it's done",
+      "retrieved": [
+        "alert_when_done",
+        "clarify",
+        "done",
+        "extract_text",
+        "reject",
+        "remove_pages",
+        "split_pdf",
+        "unlock_pdf",
+        "watermark"
+      ],
+      "corpus_size": 12,
+      "expected_requests": [
+        "inspect report.pdf",
+        "find alpha in notes.txt",
+        "pull the words out of invoice.pdf, ping me when it's ready",
+        "do something with a file"
+      ],
+      "expected_block": "Examples:\n  request: \"inspect report.pdf\"\n  output:  {\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"report.pdf\"}}]}\n\n  request: \"find alpha in notes.txt\"\n  output:  {\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"notes.txt\", \"query\": \"alpha\"}}]}\n\n  request: \"pull the words out of invoice.pdf, ping me when it's ready\"\n  output:  {\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"invoice.pdf\"}}, {\"tool\": \"alert_when_done\", \"args\": {}}]}\n\n  request: \"do something with a file\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file, and what would you like done with it?\"}}]}\n"
+    },
+    {
+      "skill": "documents",
+      "utterance": "merge sample.pdf and sample-scanned.pdf into Downloads and let me know when it's done",
+      "retrieved": [
+        "alert_when_done",
+        "clarify",
+        "done",
+        "extract_text",
+        "merge_pdfs",
+        "reject",
+        "remove_pages",
+        "split_pdf",
+        "unlock_pdf"
+      ],
+      "corpus_size": 12,
+      "expected_requests": [
+        "pull the words out of invoice.pdf, ping me when it's ready",
+        "rotate report.pdf 90 degrees and save it to my Desktop",
+        "number the pages of report.pdf, save it in my Documents folder and let me know when it's done",
+        "do something with a file"
+      ],
+      "expected_block": "Examples:\n  request: \"pull the words out of invoice.pdf, ping me when it's ready\"\n  output:  {\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"invoice.pdf\"}}, {\"tool\": \"alert_when_done\", \"args\": {}}]}\n\n  request: \"rotate report.pdf 90 degrees and save it to my Desktop\"\n  output:  {\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"report.pdf\", \"degrees\": 90, \"output\": \"Desktop/report.pdf\"}}]}\n\n  request: \"number the pages of report.pdf, save it in my Documents folder and let me know when it's done\"\n  output:  {\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"report.pdf\", \"output\": \"Documents/report.pdf\"}}, {\"tool\": \"alert_when_done\", \"args\": {}}]}\n\n  request: \"do something with a file\"\n  output:  {\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which file, and what would you like done with it?\"}}]}\n"
     }
   ]
 }

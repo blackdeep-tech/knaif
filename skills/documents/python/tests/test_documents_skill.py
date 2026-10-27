@@ -13,7 +13,7 @@ from knaif import create_agent, list_skills
 from knaif.agent import CommandAgent
 from knaif.handler_api import HandlerContext
 from knaif.skill import Skill
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
 DOCUMENTS_SKILL_DIR = Path(__file__).parents[2]
 OPTIONAL_DOCUMENT_MODULES = (
@@ -91,14 +91,12 @@ def _documents_handlers_module():
     return sys.modules["_skill_oop_documents_handlers"]
 
 
-def _handler_context(root: Path) -> HandlerContext:
-    return HandlerContext(
-        root=root,
-        sandbox=root,
-        dry_run=False,
-        confirmed=True,
-        skill_dir=DOCUMENTS_SKILL_DIR,
-    )
+def _handler_context(
+    root: Path, *, dry_run: bool = False, confirmed: bool = True
+) -> HandlerContext:
+    """A step's context as the agent builds it: handlers reuse fs tools through `call_tool`."""
+    agent = CommandAgent.from_skill(DOCUMENTS_SKILL_DIR, sandbox=root, root=root)
+    return agent._handler_context(dry_run, confirmed, skip_execution=False, work_dir=None)
 
 
 def _page_has_image_soft_mask(page) -> bool:
@@ -157,7 +155,7 @@ def test_tool_map_uses_step_and_intent_classes():
     for name, tool in skill.tool_map.items():
         if name in {"compress_pdf", "ocr_document"}:
             continue
-        assert isinstance(tool, Step), name
+        assert isinstance(tool, Handler), name
 
 
 def test_documents_deps_are_a_repo_dependency_group():
@@ -913,13 +911,7 @@ def test_run_ocr_dry_run_reports_output(tmp_path: Path):
             "language": "eng",
             "output": str(output),
         },
-        HandlerContext(
-            root=tmp_path,
-            sandbox=tmp_path,
-            dry_run=True,
-            confirmed=False,
-            skill_dir=DOCUMENTS_SKILL_DIR,
-        ),
+        _handler_context(tmp_path, dry_run=True, confirmed=False),
     )
 
     assert result == {
@@ -1005,6 +997,49 @@ def test_format_results_surfaces_warning():
     assert {"kind": "info", "message": "Raster compression removes selectable text."} in formatted
 
 
+def test_format_results_prints_what_a_read_found():
+    """A read's answer is the point of running it: print it, in the native CLI's formats."""
+    skill = Skill.load(DOCUMENTS_SKILL_DIR)
+    inspection = {
+        "format": "pdf",
+        "size_bytes": 1234,
+        "encrypted": False,
+        "has_text_layer": True,
+        "pages": 3,
+    }
+    pages = [{"page": 1, "text": "Alpha\n"}, {"page": 2, "text": "Beta"}]
+    match = {"page": 2, "snippet": "Beta", "span": [0, 4]}
+
+    def fmt(tool: str, result: dict) -> list[dict]:
+        return skill.result_formatter([{"tool": tool, "result": result}], dry_run=False)
+
+    # Plain, then the terminal view's words (`detail`), as native prints each.
+    assert fmt("inspect_document", inspection) == [
+        {
+            "kind": "text",
+            "message": "pdf: 3 page(s), 1234 bytes, encrypted=false, text_layer=true",
+            "detail": ["PDF · 3 pages · 1.2 KB · has a text layer"],
+        }
+    ]
+    # The text is saved; the answer is the saved file and a preview of it, the
+    # write named in native's words.
+    assert fmt("extract_text", {"output": "a.txt", "pages": pages, "text": "Alpha\nBeta"}) == [
+        {"kind": "wrote", "message": "save the text", "outputs": ["a.txt"], "seconds": 0.0},
+        {"kind": "text", "message": "Alpha\nBeta"},
+    ]
+    assert fmt("find_in_document", {"matches": [match], "count": 1}) == [
+        {"kind": "text", "message": "p2 [0..4]: Beta", "detail": ["page 2: Beta"]}
+    ]
+    assert fmt("find_in_document", {"matches": [], "count": 0}) == [
+        {"kind": "text", "message": "No matches.", "detail": ["No matches."]}
+    ]
+    locked = fmt("inspect_document", {**inspection, "encrypted": True, "pages": 0})
+    assert "password-protected" in locked[0]["message"]
+    # A dry-run stub (the input is not there yet) has nothing to show.
+    stub = {"mode": "dry_run", "pages": [], "text": ""}
+    assert fmt("extract_text", stub) == [{"kind": "info", "message": "extract_text"}]
+
+
 def test_run_compress_uses_ghostscript_when_available(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
@@ -1025,7 +1060,9 @@ def test_run_compress_uses_ghostscript_when_available(
         "detect_external_tools",
         lambda: {"gs": "gs-test", "soffice": None, "tesseract": None},
     )
-    monkeypatch.setattr(handlers._engine.subprocess, "run", fake_run)
+    import subprocess  # ctx.exec runs programs through subprocess.run
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
 
     result = handlers.RunCompressStep().handle(
         {
@@ -1122,13 +1159,7 @@ def test_inspect_dry_run_tolerates_missing_chain_intermediate(tmp_path: Path):
     """In a dry-run chain preview an upstream output doesn't exist yet; inspect
     must return a stub rather than raising on the missing file."""
     handlers = _documents_handlers_module()
-    ctx = HandlerContext(
-        root=tmp_path,
-        sandbox=tmp_path,
-        dry_run=True,
-        confirmed=False,
-        skill_dir=DOCUMENTS_SKILL_DIR,
-    )
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
     result = handlers.InspectDocumentStep().handle({"input": "not-yet-made.pdf"}, ctx)
     assert result["mode"] == "dry_run"
     assert result["pages"] == 1
@@ -1138,18 +1169,54 @@ def test_run_compress_dry_run_tolerates_missing_chain_intermediate(tmp_path: Pat
     """run_compress reads the input size; under a dry-run chain the upstream
     output is absent, so it must not raise."""
     handlers = _documents_handlers_module()
-    ctx = HandlerContext(
-        root=tmp_path,
-        sandbox=tmp_path,
-        dry_run=True,
-        confirmed=False,
-        skill_dir=DOCUMENTS_SKILL_DIR,
-    )
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
     result = handlers.RunCompressStep().handle(
         {"input": "not-yet-made.pdf", "compress_quality": "small", "inspection": {"pages": 3}}, ctx
     )
     assert result["mode"] == "dry_run"
     assert result["original_size"] == 0
+
+
+def test_merge_dry_run_tolerates_an_input_not_there_yet(tmp_path: Path):
+    """A URL input is downloaded only in a real run, and a chain intermediate is made only
+    then: a dry-run merge must not open an input that is not there yet."""
+    handlers = _documents_handlers_module()
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
+    result = handlers.MergePdfsStep().handle(
+        {"inputs": ["not-yet-made.pdf", "also-missing.pdf"], "output": "merged.pdf"}, ctx
+    )
+    assert result["mode"] == "dry_run"
+    assert result["output"].endswith("merged.pdf")
+
+
+@pytest.mark.parametrize(
+    ("step", "args", "empty"),
+    [
+        # The dry run also names the file the text will be saved to.
+        (
+            "ExtractTextStep",
+            {"input": "not-yet-made.pdf"},
+            {"pages": [], "text": "", "output": "not-yet-made.txt"},
+        ),
+        (
+            "FindInDocumentStep",
+            {"input": "not-yet-made.pdf", "query": "Alpha"},
+            {"matches": [], "count": 0},
+        ),
+    ],
+)
+def test_read_dry_run_tolerates_an_input_not_there_yet(
+    tmp_path: Path, step: str, args: dict, empty: dict
+):
+    """Like inspect_document: a dry run of a read on an input not there yet returns an empty
+    stub instead of raising."""
+    handlers = _documents_handlers_module()
+    ctx = _handler_context(tmp_path, dry_run=True, confirmed=False)
+    result = getattr(handlers, step)().handle(args, ctx)
+    empty = dict(empty)
+    if "output" in empty:
+        assert Path(result.pop("output")).name == empty.pop("output")
+    assert result == {"mode": "dry_run", **empty}
 
 
 @pytest.mark.parametrize("filename", ["train.jsonl", "safety_test.jsonl"])

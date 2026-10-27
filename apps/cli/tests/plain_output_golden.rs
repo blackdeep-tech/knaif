@@ -50,15 +50,30 @@ fn a_dry_run_single_step_prints_only_the_command() {
 fn a_dry_run_chain_numbers_its_steps_and_prints_each_command() {
     let (stdout, stderr, ok) = run("ffmpeg", CHAIN, "strip audio from clip.mp4 and resize it");
     assert!(ok);
+    // `silent.mp4` is a chain intermediate the user never named, so it goes to the run scratch
+    // and is shown as `<work>/…`: the real path names the temp folder (and the user), and the file
+    // is gone when the run ends. The deliverable keeps its plain name.
     assert_eq!(
         stdout,
         "step 1 of 2:\n\
-         ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n\
+         ffmpeg -y -i clip.mp4 -an -c:v copy <work>/silent.mp4\n\
          step 2 of 2:\n\
-         ffmpeg -y -i silent.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium \
+         ffmpeg -y -i <work>/silent.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium \
          -pix_fmt yuv420p -c:a copy -movflags +faststart small.mp4\n"
     );
     assert_eq!(stderr, "");
+}
+
+#[test]
+fn a_dry_run_chain_whose_intermediate_the_user_named_keeps_it() {
+    let (stdout, _, ok) = run(
+        "ffmpeg",
+        CHAIN,
+        "strip audio from clip.mp4 into silent.mp4 and resize silent.mp4",
+    );
+    assert!(ok);
+    assert!(stdout.contains("-an -c:v copy silent.mp4\n"), "{stdout}");
+    assert!(!stdout.contains("<work>"), "{stdout}");
 }
 
 #[test]
@@ -197,8 +212,17 @@ fn the_terminal_view_draws_a_tree_with_the_command_and_a_total() {
     assert!(stdout.contains("Plan · 2 steps"), "{stdout}");
     assert!(stdout.contains("Step 1/2 · strip_audio"), "{stdout}");
     assert!(
-        stdout.contains("$ ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4"),
+        stdout.contains("$ ffmpeg -y -i clip.mp4 -an -c:v copy <work>/silent.mp4"),
         "{stdout}"
+    );
+    assert!(
+        stdout.contains("clip.mp4 → <work>/silent.mp4"),
+        "the plan rows show the scratch as <work> too:\n{stdout}"
+    );
+    // The real scratch path names the temp folder, and so the user: it is never printed.
+    assert!(
+        !stdout.contains("knaif\\run-") && !stdout.contains("knaif/run-"),
+        "a real scratch path leaked:\n{stdout}"
     );
     assert!(
         stdout.contains("└─ Done · dry run, nothing executed · total "),
@@ -253,4 +277,14 @@ fn view_plain_overrides_a_terminal_and_matches_a_pipe() {
         String::from_utf8_lossy(&out.stdout),
         "ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n"
     );
+}
+
+/// A document's output is named as the user would write it, relative to the working folder; its
+/// absolute path named the user's home in a pipe (owner, 2026-10-23).
+#[test]
+fn a_document_dry_run_names_its_output_relative() {
+    let plan = r#"{"plan": [{"tool": "protect_pdf", "args": {"input": "sample.pdf", "password": "a/b"}}]}"#;
+    let (stdout, stderr, ok) = run("documents", plan, r"protect sample.pdf with password a\b");
+    assert!(ok, "{stderr}");
+    assert_eq!(stdout, "would password-protect →\n  sample-protected.pdf\n");
 }

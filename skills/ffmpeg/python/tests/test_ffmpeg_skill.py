@@ -28,7 +28,7 @@ def stub_ffmpeg(monkeypatch):
     skill = Skill.load(FFMPEG_SKILL_DIR)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
 
-    def fake_probe(file_path: Path) -> dict[str, Any]:
+    def fake_probe(file_path: Path, *_: Any) -> dict[str, Any]:
         return {
             "streams": [
                 {"codec_type": "video", "codec_name": "hevc", "width": 3840, "height": 2160},
@@ -37,7 +37,7 @@ def stub_ffmpeg(monkeypatch):
             "format": {"format_name": "mov,mp4,m4a", "duration": "85.3", "size": "440401920"},
         }
 
-    def fake_ffmpeg(command: list[str]) -> dict[str, Any]:
+    def fake_ffmpeg(command: list[str], *_: Any) -> dict[str, Any]:
         return {"returncode": 0, "stdout": "", "stderr": ""}
 
     monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", fake_probe)
@@ -95,7 +95,7 @@ def test_rotate_90_emits_transpose(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -123,7 +123,7 @@ def test_rotate_180_emits_hflip_vflip(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}
             ],
@@ -150,7 +150,7 @@ def test_flip_horizontal_emits_hflip(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}
             ],
@@ -177,7 +177,7 @@ def test_rotate_no_angle_no_flip_raises(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}
             ],
@@ -202,7 +202,7 @@ def test_adjust_volume_level_emits_volume_filter(stub_ffmpeg, media_root, monkey
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -231,7 +231,7 @@ def test_adjust_volume_normalize_emits_loudnorm(stub_ffmpeg, media_root, monkeyp
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -642,7 +642,7 @@ def test_create_thumbnail_scale_4k_emits_vf_filter(stub_ffmpeg, media_root, monk
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}
             ],
@@ -675,7 +675,7 @@ def test_create_thumbnail_no_scale_omits_vf(stub_ffmpeg, media_root, monkeypatch
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}
             ],
@@ -781,7 +781,7 @@ def test_prepare_for_platform_dry_run_e2e(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "hevc", "width": 3840, "height": 2160},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -790,7 +790,9 @@ def test_prepare_for_platform_dry_run_e2e(stub_ffmpeg, media_root, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
 
     payload = {
@@ -838,7 +840,7 @@ def test_wait_for_confirmation_declined_breaks_execution(stub_ffmpeg, media_root
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080}
             ],
@@ -846,7 +848,9 @@ def test_wait_for_confirmation_declined_breaks_execution(stub_ffmpeg, media_root
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
 
     payload = {
@@ -876,7 +880,7 @@ def test_extract_audio_dry_run_e2e(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -885,7 +889,9 @@ def test_extract_audio_dry_run_e2e(stub_ffmpeg, media_root, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
 
     payload = {
@@ -910,7 +916,9 @@ def test_unknown_platform_degrades_to_clarify(stub_ffmpeg, media_root, monkeypat
     # clarify so the user can pick a supported platform.
     agent = CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox=media_root, root=media_root)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: {"streams": [], "format": {}})
+    monkeypatch.setattr(
+        handlers_mod._deps, "run_ffprobe", lambda f, *_: {"streams": [], "format": {}}
+    )
 
     payload = {
         "plan": [
@@ -935,7 +943,7 @@ def test_resize_video_emits_scale_filter(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -944,7 +952,9 @@ def test_resize_video_emits_scale_filter(stub_ffmpeg, media_root, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
 
     payload = {
@@ -978,7 +988,7 @@ def test_reverse_video_with_audio(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -987,7 +997,9 @@ def test_reverse_video_with_audio(stub_ffmpeg, media_root, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
 
     payload = {
@@ -1015,7 +1027,7 @@ def test_reverse_video_no_audio(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
             ],
@@ -1023,7 +1035,9 @@ def test_reverse_video_no_audio(stub_ffmpeg, media_root, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
 
     payload = {
@@ -1054,7 +1068,7 @@ def test_reverse_video_preserves_container(stub_ffmpeg, media_root, monkeypatch)
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1280, "height": 720}
             ],
@@ -1062,7 +1076,9 @@ def test_reverse_video_preserves_container(stub_ffmpeg, media_root, monkeypatch)
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
 
     payload = {
@@ -1405,7 +1421,7 @@ def _e2e_setup(stub_ffmpeg, media_root, monkeypatch):
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -1414,7 +1430,9 @@ def _e2e_setup(stub_ffmpeg, media_root, monkeypatch):
         },
     )
     monkeypatch.setattr(
-        handlers_mod._deps, "run_ffmpeg", lambda c: {"returncode": 0, "stdout": "", "stderr": ""}
+        handlers_mod._deps,
+        "run_ffmpeg",
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
     return agent
 
@@ -1812,7 +1830,7 @@ def test_convert_video_webm_aac_source_reencodes_audio(stub_ffmpeg, media_root, 
     """AAC source converted to webm must produce -c:a libopus, not -c:a copy."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _webm_probe("aac"))
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f, *_: _webm_probe("aac"))
 
     payload = {
         "plan": [
@@ -1838,7 +1856,7 @@ def test_convert_video_webm_opus_source_copies_audio(stub_ffmpeg, media_root, mo
     """Webm source already with opus audio must still use -c:a copy (no needless re-encode)."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _webm_probe("opus"))
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f, *_: _webm_probe("opus"))
 
     payload = {
         "plan": [
@@ -1894,7 +1912,7 @@ def test_convert_video_webm_h264_source_reencodes_video(stub_ffmpeg, media_root,
     """h264 → webm must re-encode: webm holds only vp8/vp9/av1, so `-c copy` cannot work."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _codec_probe("h264"))
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f, *_: _codec_probe("h264"))
 
     cmd = _render_convert(agent, media_root, "webm")
     assert "copy" not in cmd, f"stream-copy into webm cannot work; cmd={cmd}"
@@ -1906,7 +1924,9 @@ def test_convert_video_webm_vp9_source_still_remuxes(stub_ffmpeg, media_root, mo
     """A source already in a webm-compatible codec must still stream-copy — no needless re-encode."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _codec_probe("vp9", "opus"))
+    monkeypatch.setattr(
+        handlers_mod._deps, "run_ffprobe", lambda f, *_: _codec_probe("vp9", "opus")
+    )
 
     cmd = _render_convert(agent, media_root, "webm")
     assert "copy" in cmd, f"vp9 → webm is a valid remux and must stay one; cmd={cmd}"
@@ -1916,7 +1936,7 @@ def test_convert_video_mkv_h264_source_still_remuxes(stub_ffmpeg, media_root, mo
     """The guard must not over-correct: mkv accepts h264, so a container swap stays a remux."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _codec_probe("h264"))
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f, *_: _codec_probe("h264"))
 
     cmd = _render_convert(agent, media_root, "mkv")
     assert "copy" in cmd, f"h264 → mkv is a valid remux and must stay one; cmd={cmd}"
@@ -1926,7 +1946,7 @@ def test_convert_video_webm_no_audio_source_no_error(stub_ffmpeg, media_root, mo
     """Video-only input converted to webm must build a plan without error."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _webm_probe(None))
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f, *_: _webm_probe(None))
 
     payload = {
         "plan": [
@@ -1962,7 +1982,7 @@ def _convert_audio_cmd(stub_ffmpeg, media_root, monkeypatch, *, src_codec, conta
     """Render the batch command for converting an audio-only input to *container*."""
     agent = _e2e_setup(stub_ffmpeg, media_root, monkeypatch)
     handlers_mod = sys.modules["_skill_oop_ffmpeg_handlers"]
-    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f: _audio_probe(src_codec))
+    monkeypatch.setattr(handlers_mod._deps, "run_ffprobe", lambda f, *_: _audio_probe(src_codec))
     (media_root / "audio.mp3").write_bytes(b"")
     payload = {
         "plan": [

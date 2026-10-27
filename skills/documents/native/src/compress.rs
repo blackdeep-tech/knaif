@@ -62,10 +62,12 @@ pub fn compress(
     profile: &CompressProfile,
     gs: Option<&Path>,
 ) -> anyhow::Result<Method> {
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
     let method = choose_method(quality, gs.is_some());
+    // Ghostscript cannot read a password-protected PDF and writes a blank page instead, exit 0;
+    // the other backends refuse such a file themselves (run-order A/B, 2026-10-20).
+    if method == Method::Ghostscript {
+        crate::pdf::load_unlocked(input)?;
+    }
     match method {
         Method::Ghostscript => ghostscript(
             input,
@@ -213,6 +215,37 @@ mod tests {
         assert_eq!(choose_method("high", false), Method::Lossless);
         assert!(!Method::Rasterize.text_preserved());
         assert!(Method::Lossless.text_preserved());
+    }
+
+    /// Ghostscript cannot read a password-protected PDF and writes a blank page, exit 0 (found
+    /// 2026-10-20 by a run-order A/B, Python side). The file is refused before gs runs.
+    #[test]
+    fn a_locked_pdf_is_refused_before_ghostscript() {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../contracts/parity/fixtures/documents/sample.pdf");
+        let dir = std::env::temp_dir().join(format!("knaif_cmp_locked_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("locked.pdf");
+        let mut doc = crate::pdf::load(&fixture).unwrap();
+        crate::pdf::protect(&mut doc, "secret").unwrap();
+        crate::pdf::save(&mut doc, &input).unwrap();
+        let output = dir.join("out.pdf");
+        let profile = CompressProfile {
+            ghostscript_pdfsettings: "/ebook".into(),
+            lossless: Default::default(),
+            rasterize_fallback: crate::profile::RasterizeFallback {
+                dpi: 150,
+                jpeg_quality: 75,
+            },
+        };
+        // A gs that does not exist: reaching it would fail with a different error.
+        let gs = dir.join("no-such-gs");
+
+        let err = compress(&input, &output, "balanced", &profile, Some(&gs)).unwrap_err();
+
+        assert!(err.to_string().contains("password-protected"), "{err}");
+        assert!(!output.exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// compress_pdf wrote a LARGER file for both fixtures (found 2026-09-26; Python and native).

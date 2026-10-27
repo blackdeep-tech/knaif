@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from knaif.cli.function_step import FunctionStep
+from knaif.cli.function_handler import FunctionHandler
 from knaif.cli.runner import App
 from knaif.registry import ArgSchema, ToolDef
 
@@ -87,7 +87,7 @@ def from_click(
         )
 
     registry: dict[str, ToolDef] = {}
-    tool_map: dict[str, FunctionStep] = {}
+    tool_map: dict[str, FunctionHandler] = {}
 
     for cmd_name, cmd in group.commands.items():
         required_args: list[str] = []
@@ -153,7 +153,7 @@ def from_click(
 
             return wrapper
 
-        tool_map[cmd_name] = FunctionStep(
+        tool_map[cmd_name] = FunctionHandler(
             cmd_name, _make_wrapper(cmd.callback, option_defaults), td
         )
 

@@ -814,6 +814,14 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         for problem in fixture_integrity:
             print(f"  Warning: {problem} — re-run `just eval-fixtures` to restore it", flush=True)
 
+    # URL-input rows (`https://files.knaif.test/...`) are served by a local server; executing
+    # replays fetch from it (knaif.evalsuite.url_server.start_for_corpus).
+    from .url_server import start_for_corpus
+
+    start_for_corpus(
+        _corpus_path(args.skill).parent, fixture_dir, [u for row in corpus for u in row.utterances]
+    )
+
     results: dict[str, dict[str, Any]] = {}
     for backend_name, backend_cfg in backends_cfg.items():
         print(f"\nRunning backend: {backend_name}", flush=True)
@@ -2007,6 +2015,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
     if not backends_cfg:
         sys.exit(f"No backends to compare. Add one to {config_path} or pass --backends.")
 
+    boards: dict[str, dict[str, Any]] = {}
     for backend_name, backend_cfg in backends_cfg.items():
         print(f"\nRunning backend: {backend_name}", flush=True)
         backend_sandbox = sandbox / backend_name
@@ -2023,6 +2032,13 @@ def cmd_compare(args: argparse.Namespace) -> None:
         )
         scoreboard = score_corpus(outputs, corpus, verifiers, args.verifier, backend_sandbox)
         print_scoreboard(scoreboard, backend=backend_name, verbose=args.verbose)
+        boards[backend_name] = scoreboard
+
+    if len(boards) > 1:
+        from .stats import format_paired
+
+        # Same rows, two models: only the flips carry evidence, and McNemar weighs them.
+        print("\n" + format_paired(boards))
 
 
 def cmd_safety(args: argparse.Namespace) -> dict[str, Any]:
@@ -2993,6 +3009,111 @@ def _reclaim_row_dirs(outputs: list, corpus: list, sandbox: Path, scoreboard: di
         cleanup_row_dir(sandbox / f"{out.id}__{out.utterance_idx}", keep=not passed)
 
 
+def cmd_exact_files(args: argparse.Namespace) -> None:
+    """Replay a saved scoreboard's plans for real and report files left in the user's folder.
+
+    No model: each selected row's recorded plan is executed with `dry_run=False` in a fresh
+    copy of the fixtures (see `exact_files.py` for why the scored run cannot see this).
+    Exits 1 when any row left a file that is neither an input nor a deliverable, or when a
+    replay's alerts are not what its plan asked for (`exact_files.alert_problem`).
+    """
+    from knaif import create_agent
+
+    from .exact_files import alert_problem, replay_row, replay_row_native, select_rows
+    from .provisioning import cleanup_row_dir
+
+    board = json.loads(Path(args.board).read_text(encoding="utf-8"))
+    sandbox = Path(args.sandbox) if args.sandbox else Path("sandbox")
+    fixture_dir = (
+        Path(args.fixture_dir) if args.fixture_dir else _default_fixture_dir(sandbox, args.skill)
+    )
+    if not fixture_dir.is_dir():
+        sys.exit(f"ERROR: no fixtures in {fixture_dir}. Run `just eval-fixtures {args.skill}`.")
+    if args.runtime == "native" and not (args.binary and Path(args.binary).is_file()):
+        sys.exit("ERROR: --runtime native needs --binary <path to the knaif executable>")
+    preview_tools = {t for t in (args.preview_tools or "").split(",") if t}
+    rows = select_rows(board["rows"], preview_tools=preview_tools, everything=args.all)
+    if args.ids:
+        wanted = set(args.ids.split(","))
+        rows = [r for r in rows if r["id"] in wanted]
+    work = sandbox / "exact_files" / args.runtime / args.skill
+    print(f"exact-files: {len(rows)} row(s) from {args.board}", flush=True)
+
+    # URL-input rows replay their downloads from the local eval server, approved like the run.
+    from .url_server import start_for_corpus
+
+    start_for_corpus(_corpus_path(args.skill).parent, fixture_dir, [r["utterance"] for r in rows])
+
+    def _python_agent(folder: Path) -> Any:
+        # Rooted at the row with no sandbox, as the CLI runs (root = cwd): a sandbox would refuse
+        # the row's known folders, which sit beside it (`row_known_dir`).
+        agent = create_agent(args.skill, root=folder)
+        agent.allow_download = True
+        return agent
+
+    reports: list[dict[str, Any]] = []
+    # The skill's own `scratch_intermediates:`, read once: the binary routes as Python does.
+    routed = create_agent(args.skill).scratch_intermediates is True
+    for row in rows:
+        row_dir = work / f"{row['id']}__{row.get('utterance_idx') or 0}"
+        if args.runtime == "native":
+            report = replay_row_native(
+                Path(args.binary),
+                args.skill,
+                row["plan"],
+                row["utterance"],
+                fixture_dir,
+                row_dir,
+                alert=bool(row.get("alert")),
+                routed=routed,
+            )
+            report["alert_problem"] = alert_problem(report, planned=bool(row.get("alert")))
+        else:
+            report = replay_row(
+                _python_agent,
+                row["plan"],
+                row["utterance"],
+                fixture_dir,
+                row_dir,
+                alert=bool(row.get("alert")),
+            )
+            report["alert_problem"] = alert_problem(report, planned=bool(row.get("alert")))
+        report.update(
+            id=row["id"], utterance_idx=row.get("utterance_idx") or 0, utterance=row["utterance"]
+        )
+        reports.append(report)
+        status = "LEFT " + ", ".join(report["leftovers"]) if report["leftovers"] else "clean"
+        if report.get("alerts") or report.get("alert_problem"):
+            status += "  alert: " + (
+                report.get("alert_problem") or report["alerts"][0].get("outcome", "?")
+            )
+        if report.get("error"):
+            status += f"  (ERROR: {report['error'][:160]})"
+        print(f"  [{row['id']}#{report['utterance_idx']}]  {status}", flush=True)
+        if not (args.keep and (report["leftovers"] or report.get("alert_problem"))):
+            cleanup_row_dir(row_dir)
+
+    dirty = [r for r in reports if r["leftovers"]]
+    alerts_wrong = [r for r in reports if r.get("alert_problem")]
+    print(f"\n{len(dirty)} of {len(reports)} row(s) left files behind", flush=True)
+    if any("alert_problem" in r for r in reports):
+        print(f"{len(alerts_wrong)} of {len(reports)} row(s) alerted wrongly", flush=True)
+    if args.save:
+        out = {
+            "skill": args.skill,
+            "board": args.board,
+            "rows": len(reports),
+            "dirty": len(dirty),
+            "alerts_wrong": len(alerts_wrong),
+            "reports": reports,
+        }
+        Path(args.save).write_text(
+            json.dumps(redact_local_paths(out), indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+    sys.exit(1 if dirty or alerts_wrong else 0)
+
+
 def cmd_fixtures_regen(args: argparse.Namespace) -> None:
     import hashlib
     import subprocess
@@ -3026,6 +3147,8 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
             continue
 
         print(f"  [regen] {name}", flush=True)
+        # A folder row's fixtures sit in a subfolder (`batch/a.mov`).
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             result = subprocess.run(
                 full_cmd.split(),
@@ -3094,12 +3217,51 @@ def cmd_retrieval(args: argparse.Namespace) -> None:
         summary = {
             "top_k": results["top_k"],
             "skills": {
-                s: {k: v for k, v in r.items() if k != "misses"}
+                s: {k: v for k, v in r.items() if k not in ("misses", "chain_misses")}
                 for s, r in results["skills"].items()
             },
         }
         Path(args.save).write_text(json.dumps(summary, indent=2), encoding="utf-8")
         print(f"\nSaved baseline -> {args.save}")
+
+
+def cmd_error_split(args: argparse.Namespace) -> None:
+    """Bucket a saved scoreboard's rows by where they went wrong (retriever, model, gate)."""
+    from .error_split import capture_shown, format_report, load_corpus_rows, split
+
+    corpus_file = Path(args.corpus) if args.corpus else _corpus_path(args.skill)
+    if not corpus_file.exists():
+        sys.exit(f"Corpus not found: {corpus_file}")
+    if args.capture:
+        shown = capture_shown(args.skill, corpus_file)
+        Path(args.capture).write_text(
+            json.dumps(shown, indent=1, ensure_ascii=False), encoding="utf-8"
+        )
+        print(f"Shown tools for {len(shown)} utterances -> {args.capture}")
+        return
+    if not args.scoreboard:
+        sys.exit("error-split needs --scoreboard (or --capture FILE)")
+
+    def load(p: str | None) -> Any:
+        return json.loads(Path(p).read_text(encoding="utf-8")) if p else None
+
+    result = split(
+        load(args.scoreboard),
+        load_corpus_rows(corpus_file),
+        load(args.shown),
+        shown_now=load(args.shown_now),
+        compare=load(args.compare),
+    )
+    report = format_report(result, title=args.title or f"{args.skill} {Path(args.scoreboard).name}")
+    print(report)
+    if args.save:
+        out = Path(args.save)
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "split.json").write_text(
+            json.dumps(result, indent=1, ensure_ascii=False), encoding="utf-8"
+        )
+        (out / "report.md").write_text(report, encoding="utf-8")
+        print(f"Saved split.json and report.md -> {out}")
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -3635,10 +3797,63 @@ def build_parser() -> argparse.ArgumentParser:
         "--tol", type=float, default=0.02, help="Recall regression tolerance (default 0.02)"
     )
 
+    # error-split
+    p_es = sub.add_parser(
+        "error-split",
+        help="Bucket a saved scoreboard's rows by where they went wrong (retriever, model, gate)",
+    )
+    p_es.add_argument("--skill", required=True)
+    p_es.add_argument(
+        "--corpus", default=None, help="Corpus file (default: the skill's eval.jsonl)"
+    )
+    p_es.add_argument(
+        "--capture",
+        default=None,
+        metavar="FILE",
+        help="Write the tools each utterance's prompt shows (this checkout's retrieval) and exit",
+    )
+    p_es.add_argument("--scoreboard", default=None, help="Saved scoreboard JSON to split")
+    p_es.add_argument("--shown", default=None, help="Shown tools as served (from --capture)")
+    p_es.add_argument("--shown-now", default=None, dest="shown_now", help="Shown tools today")
+    p_es.add_argument("--compare", default=None, help="Another model's scoreboard, same corpus")
+    p_es.add_argument("--title", default=None)
+    p_es.add_argument("--save", default=None, metavar="DIR", help="Write split.json + report.md")
+
     # show-baseline
     p_sb = sub.add_parser("show-baseline", help="Show baseline command for a corpus row")
     p_sb.add_argument("--skill", required=True)
     p_sb.add_argument("--id", required=True)
+
+    # exact-files
+    p_ex = sub.add_parser(
+        "exact-files",
+        help="Replay a scoreboard's plans for real; report files left beside the outputs",
+    )
+    p_ex.add_argument("--skill", required=True)
+    p_ex.add_argument("--board", required=True, metavar="FILE", help="Saved scoreboard JSON")
+    p_ex.add_argument("--sandbox", default=None)
+    p_ex.add_argument("--fixture-dir", default=None, metavar="DIR")
+    p_ex.add_argument(
+        "--preview-tools",
+        default=None,
+        help="Comma-separated tools that preview unless told not to (selection only)",
+    )
+    p_ex.add_argument(
+        "--runtime",
+        choices=("python", "native"),
+        default="python",
+        help="python: execute_plan in-process; native: the binary, with the mock backend "
+        "replaying the recorded plan (no model)",
+    )
+    p_ex.add_argument("--binary", default=None, metavar="PATH", help="knaif executable (native)")
+    p_ex.add_argument(
+        "--all", action="store_true", help="Every executed row, not only chains/previews"
+    )
+    p_ex.add_argument("--ids", default=None, help="Comma-separated row ids to restrict to")
+    p_ex.add_argument(
+        "--keep", action="store_true", help="Keep the folders of rows that left files"
+    )
+    p_ex.add_argument("--save", default=None, metavar="FILE", help="Write the report JSON here")
 
     # fixtures
     p_fix = sub.add_parser("fixtures", help="Manage evaluation fixtures")
@@ -3749,6 +3964,8 @@ def main() -> None:
         "gate": cmd_gate,
         "waive": cmd_waive,
         "equivalence": cmd_equivalence,
+        "exact-files": cmd_exact_files,
+        "error-split": cmd_error_split,
     }
     dispatch[args.command](args)
 

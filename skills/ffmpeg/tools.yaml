@@ -56,6 +56,7 @@ _shared_arg_schemas:
 # ─────────────────────────────────────────────────────────────────────────────
 
 prepare_for_platform:
+  effects: []
   description: "Convert one or more videos so they are suitable for a target platform (WhatsApp, YouTube, etc.)."
   keywords: [whatsapp, youtube, instagram, reels, tiktok, platform, prepare, suitable, post, optimize, preparar, vorbereiten, preparer, подготовить, подготви, 准备, 优化]
   required_args: [inputs, platform]
@@ -68,8 +69,9 @@ prepare_for_platform:
     platform: "{utterance_after:for}"
 
 compress_video:
+  effects: []
   description: "Compress one or more videos to a smaller file size, optionally targeting a delivery channel (email)."
-  keywords: [compress, smaller, shrink, under, tiny, size, filesize, bitrate, kbps, kilobits, comprimir, komprimieren, verkleinern, compresser, réduire, сжать, squeeze, компресирай, намали, размер, 压缩, 减小, 大小, 文件]
+  keywords: [compress, smaller, shrink, under, tiny, size, filesize, bitrate, kbps, kilobits, comprimir, komprimieren, verkleinern, compresser, réduire, сжать, squeeze, компресирай, намали, размер, 压缩, 减小, 大小, 文件, kleiner, сожми]
   required_args: [inputs]
   optional_args: [target, target_size_mb, quality, crf, output, preview]
   safety_category: destructive
@@ -79,8 +81,10 @@ compress_video:
     inputs: ["{utterance_after:compress}"]
 
 convert_video:
+  produces: {arg: container}   # the format asked for, when the step names no output
+  effects: []
   description: "Convert one or more videos to a different container and/or codec."
-  keywords: [convert, container, codec, mp4, mkv, webm, mov, transcode, gif, animate, encode, re-encode, recode, crf, lossless, format, batch, all, every, bulk, convertir, konvertieren, umwandeln, verlustfrei, безгубно, копие, конвертировать, конвертирай, lote, stapel, lot, пакет, партиден, 转换, 批量, 无损, 格式]
+  keywords: [convert, container, codec, mp4, mkv, webm, mov, transcode, gif, animate, encode, re-encode, recode, crf, lossless, format, batch, all, every, bulk, convertir, konvertieren, umwandeln, verlustfrei, безгубно, копие, конвертировать, конвертирай, lote, stapel, lot, пакет, партиден, 转换, 批量, 无损, 格式, convierte]
   required_args: [inputs]
   optional_args: [container, video_codec, audio_codec, quality, crf, output, preview]
   safety_category: destructive
@@ -90,6 +94,7 @@ convert_video:
     inputs: ["{utterance_after:convert}"]
 
 resize_video:
+  effects: []
   description: "Resize or crop one or more videos to a target width/height or aspect ratio."
   keywords: [resize, scale, 1080p, 720p, 480p, resolution, redimensionar, escalar, skalieren, redimensionner, масштабировать, upscale, downscale, преоразмери, 缩放, crop, square, portrait, landscape, aspect, "1:1", "9:16", "16:9", "4:5", reframe, letterbox, pad, stretch, force, zuschneiden, rogner, 裁剪, strecken, einpassen]
   required_args: [inputs]
@@ -101,6 +106,8 @@ resize_video:
     inputs: ["{utterance_after:resize}"]
 
 trim_video:
+  derives: true   # a piece is a new thing: its source stays (the keep rule)
+  effects: []
   description: "Trim a single video to a time range, or grab a fixed number of frames."
   keywords: [trim, cut, clip, segment, recortar, schneiden, couper, обрезать, shorten, изрежи, 剪切, frames]
   required_args: [input]
@@ -127,8 +134,10 @@ trim_video:
     input: "{utterance_after:trim}"
 
 extract_audio:
+  effects: []
+  produces: audio   # the keep rule: a video whose audio is extracted stays (another kind)
   description: "Extract the audio track from one or more videos into a chosen audio format."
-  keywords: [extract, audio, mp3, aac, flac, opus, wav, soundtrack, extraer, extrahieren, extraire, извлечь, rip, извлечи, 提取, 音频]
+  keywords: [extract, audio, mp3, aac, flac, opus, wav, soundtrack, extraer, extrahieren, extraire, извлечь, rip, извлечи, 提取, 音频, извади]
   required_args: [inputs]
   optional_args: [audio_format, format, container, bitrate, quality, start, end, output]
   safety_category: destructive
@@ -138,8 +147,10 @@ extract_audio:
     inputs: ["{utterance_after:from}"]
 
 create_thumbnail:
+  effects: [exec:ffprobe]   # probes its input to plan its pieces (planned_outputs)
+  produces: image
   description: "Create a still-image thumbnail or frame grab from a single video at a given timestamp."
-  keywords: [thumbnail, screenshot, still, poster, frame, miniatura, vorschaubild, vignette, миниатюра, cover, 缩略图, grab, snapshot, capture, framegrab, standbild, einzelbild, bild, fotograma, кадър, снимок, плакат, 截图, 海报, 图片]
+  keywords: [thumbnail, screenshot, still, poster, frame, miniatura, vorschaubild, vignette, миниатюра, cover, 缩略图, grab, snapshot, capture, framegrab, standbild, einzelbild, bild, fotograma, кадър, снимок, плакат, 截图, 海报, 图片, снимка, снимки]
   required_args: [input]
   optional_args: [at_time, image_format, scale, output]
   safety_category: destructive
@@ -154,7 +165,54 @@ create_thumbnail:
   mock_args:
     input: "{utterance_after:from}"
 
+split_video:
+  effects: [exec:ffprobe]   # probes its input to plan its pieces (planned_outputs)
+  derives: true   # each piece is a new thing: a whole converted on the way to the split stays
+  description: "Split one video into several pieces, one every N seconds (every) or N equal parts (parts); writes one numbered file per piece."
+  # Triggered, not ranked: ranking a new tool reshuffles the top tools of most
+  # requests, so it joins a prompt only when the request carries one of these words.
+  triggers: [split, splits, splitting, piece, pieces, parts, chunks, chop, chopped, segments,
+             teile, teilen, aufteilen, zerlege, stücke, dividir, divide, partes, trozos, découpe,
+             découper, morceaux, раздели, разделя, разделете, части, парчета, 分割, 分成, 切成,
+             切分, 每段]
+  required_args: [input]
+  optional_args: [every, parts, output]
+  safety_category: destructive
+  arg_schemas:
+    every:
+      type: string
+    parts:
+      type: integer
+  mock_args:
+    input: "{utterance_after:split}"
+
+extract_frames:
+  effects: [exec:ffprobe]   # probes its input to plan its pieces (planned_outputs)
+  produces: image
+  derives: true
+  description: "Save many still images from one video, one every N seconds (every), every Nth frame (every_nth) or N spread evenly (count); writes one numbered image per frame."
+  triggers: [frames, stills, thumbnails, screenshots, snapshots, "frame every", "picture every",
+             "pictures every", "still every", "image every", "images every", "photo every",
+             "every # seconds", "every second",
+             standbilder, einzelbilder, "sekunden ein bild", fotogramas, кадри, кадъра,
+             "снимка на всеки", снимки, 静帧, 张图片, 画面, 每帧]
+  required_args: [input]
+  optional_args: [every, every_nth, count, image_format, scale, output]
+  safety_category: destructive
+  arg_schemas:
+    every:
+      type: string
+    every_nth:
+      type: integer
+    count:
+      type: integer
+    scale:
+      type: string
+  mock_args:
+    input: "{utterance_after:from}"
+
 reverse_video:
+  effects: []
   description: "Reverse a video (and optionally its audio) so it plays backwards. Re-encodes the full file and buffers it in RAM — keep clips short."
   keywords: [reverse, backwards, backward, rewind, playback, invertir, umkehren, inverser, обратный, обърни, 倒放]
   required_args: [inputs]
@@ -166,6 +224,7 @@ reverse_video:
     inputs: ["{utterance_after:reverse}"]
 
 strip_audio:
+  effects: []
   description: "Remove the audio track from one or more videos, producing a silent video file."
   keywords: [strip, mute, silence, nosound, voiceless, silenciar, stummschalten, muet, заглушить, заглуши, 静音]
   required_args: [inputs]
@@ -178,8 +237,9 @@ strip_audio:
 
 
 adjust_speed:
+  effects: []
   description: "Change the playback speed of one or more videos by a given multiplier (e.g. 2.0 for double speed, 0.5 for half speed)."
-  keywords: [speed, fast, faster, slow, slower, accelerate, decelerate, tempo, timelapse, slowmotion, velocidad, geschwindigkeit, vitesse, скорость, slowdown, скорост, ускори, ускорь, забави, двойно, 速度, 加速, 减速, 倍]
+  keywords: [speed, fast, faster, slow, slower, accelerate, decelerate, tempo, timelapse, slowmotion, velocidad, geschwindigkeit, vitesse, скорость, slowdown, скорост, ускори, ускорь, забави, двойно, 速度, 加速, 减速, 倍, acelera, schnell]
   required_args: [inputs, speed]
   optional_args: [quality, output, preview]
   safety_category: destructive
@@ -190,6 +250,7 @@ adjust_speed:
     speed: "2.0"
 
 adjust_volume:
+  effects: []
   description: "Increase or decrease the audio volume of one or more videos or audio files."
   keywords: [volume, loud, louder, quieter, audio level, boost, reduce, normalize, loudnorm, gain, db,
              volumen, lautstärke, lauter, leiser, normalisieren, громкость, сила на звука,
@@ -203,6 +264,7 @@ adjust_volume:
     inputs: ["{utterance_after:adjust}"]
 
 rotate_video:
+  effects: []
   description: "Rotate or flip one or more videos by a fixed angle or axis."
   keywords: [rotate, flip, turn, upside, mirror, horizontal, vertical, "90", "180", "270",
              girar, drehen, pivoter, повернуть, завърти, 旋转]
@@ -215,11 +277,16 @@ rotate_video:
     inputs: ["{utterance_after:rotate}"]
 
 concat_video:
+  derives: true   # a join is a new thing: the joined pieces stay
+  effects: []
   description: "Concatenate (join) multiple video files in order into a single output file. Use 'base' and 'append' for semantic ordering (append goes after base), or 'inputs' for an explicit ordered list. At least one of inputs/base/append must be provided. target_resolution/target_fps take a size ('1080p', '1920x1080') or 'first'/'second' to match that input."
-  keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并]
+  keywords: [concat, combine, join, merge, stitch, together, append, end, unir, verbinden, zusammenfügen, fusionner, объединить, glue, обедини, склей, 合并, слей, zusammen]
   required_args: []
   optional_args: [inputs, base, append, output, target_resolution, target_fps]
   any_of_args: [inputs, base, append]
+  # Several inputs become ONE output file, not one each: a chain may route that file into the
+  # run scratch when a later step reads it (contracts/parity/scratch_routing_cases.json).
+  joins_inputs: true
   safety_category: destructive
   defaults:
     output: "combined.mp4"
@@ -232,15 +299,8 @@ concat_video:
 # in the order required by the spec's Workflow Language v1.
 # ─────────────────────────────────────────────────────────────────────────────
 
-resolve_inputs:
-  description: "Resolve a list of input media paths (files, globs, folders)."
-  required_args: [paths]
-  optional_args: [extensions]
-  safety_category: safe
-  readonly: true
-  internal: true
-
 inspect_media:
+  effects: [exec:ffprobe, fs.read]
   description: "Probe each input file with ffprobe and return parsed metadata."
   required_args: [files]
   safety_category: safe
@@ -248,6 +308,7 @@ inspect_media:
   internal: true
 
 load_platform_profile:
+  effects: [fs.read]
   description: "Load the platform profile (codec/container/resolution caps) for a given platform."
   required_args: [platform]
   safety_category: safe
@@ -255,6 +316,7 @@ load_platform_profile:
   internal: true
 
 load_quality_profile:
+  effects: [fs.read]
   description: "Load the quality profile (CRF/preset/bitrate) for a given quality level."
   required_args: [quality]
   safety_category: safe
@@ -262,6 +324,7 @@ load_quality_profile:
   internal: true
 
 build_recipes:
+  effects: []
   description: "Combine probes, platform profile, and quality profile into per-input conversion recipes."
   required_args: [probes]
   optional_args: [platform_profile, quality_profile, options]
@@ -270,6 +333,7 @@ build_recipes:
   internal: true
 
 render_preview_command:
+  effects: []
   description: "Render the FFmpeg command for a short preview sample of the first recipe."
   required_args: [recipes]
   optional_args: [sample_seconds, sample_position]
@@ -278,12 +342,14 @@ render_preview_command:
   internal: true
 
 run_preview:
+  effects: [exec:ffmpeg, fs.write]
   description: "Execute the rendered preview FFmpeg command."
   required_args: [command]
   safety_category: safe
   internal: true
 
 verify_preview:
+  effects: [exec:ffprobe, fs.read]
   description: "ffprobe the preview output and confirm it matches the expected profile."
   required_args: [preview_output]
   optional_args: [expected]
@@ -292,6 +358,7 @@ verify_preview:
   internal: true
 
 render_batch_commands:
+  effects: []
   description: "Render the FFmpeg commands for every recipe in the batch."
   required_args: [recipes]
   safety_category: safe
@@ -299,12 +366,14 @@ render_batch_commands:
   internal: true
 
 run_batch:
+  effects: [exec:ffmpeg, exec:ffprobe, fs.write]
   description: "Execute the rendered batch FFmpeg commands one by one."
   required_args: [commands]
   safety_category: safe
   internal: true
 
 run_concat:
+  effects: [exec:ffmpeg, exec:ffprobe, fs.read, fs.write]
   description: "Execute the ffmpeg filter_complex concat to merge multiple inputs into one output file."
   required_args: [output]
   optional_args: [inputs, base, append, probes, target_resolution, target_fps]
@@ -312,6 +381,7 @@ run_concat:
   internal: true
 
 verify_outputs:
+  effects: [exec:ffprobe, fs.read]
   description: "ffprobe every batch output and confirm it matches the expected profile."
   required_args: [outputs]
   optional_args: [expected]
@@ -320,6 +390,7 @@ verify_outputs:
   internal: true
 
 generate_report:
+  effects: []
   description: "Render a human-readable summary of the completed batch."
   required_args: [outputs]
   optional_args: [probes, preview_output]

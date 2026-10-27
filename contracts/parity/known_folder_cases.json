@@ -1,0 +1,107 @@
+{
+  "_comment": "L2 contract for known folders (knaif.known_folders): an output that names Downloads, Desktop, Documents, Pictures, Music, Videos or home goes into the user's real folder, resolved by code and never by the model. `named` cases: which known folder a path value starts with (null for none). `destination` cases: whether a request names a known folder as where something goes, the gate of the known-folder prompt examples. `rewrite` cases: given a plan, folders that exist (relative to the working folder) and an optional sandbox, the plan after the rewrite, a clarify, or a refusal; <known> stands for the folder KNAIF_KNOWN_FOLDERS_ROOT points at, and <work> for the working folder. Consumed by python/core/tests/test_known_folder_parity.py; the native consumer comes with the native mirror.",
+  "_expected_values": "Produced by the reference runtime (knaif.known_folders). DO NOT regenerate to make a failing test pass.",
+  "named": [
+    {"value": "Downloads", "expected": "downloads"},
+    {"value": "downloads/clip.mp4", "expected": "downloads"},
+    {"value": "~/Desktop/x.jpg", "expected": "desktop"},
+    {"value": "./Music/a.mp3", "expected": "music"},
+    {"value": "~\\Videos", "expected": "videos"},
+    {"value": "~/clip.mp4", "expected": "home"},
+    {"value": "~", "expected": "home"},
+    {"value": "out/Downloads/clip.mp4", "expected": null},
+    {"value": "clip.mp4", "expected": null},
+    {"value": "Downloadsx/clip.mp4", "expected": null}
+  ],
+  "destination": [
+    {"text": "save it in Downloads", "expected": true},
+    {"text": "put it on the Desktop", "expected": true},
+    {"text": "extract the audio as mp3 into my Music folder", "expected": true},
+    {"text": "convert clip.mov to mp4, output to Documents", "expected": true},
+    {"text": "shrink report.pdf onto my desktop", "expected": true},
+    {"text": "put an mp4 version of clip.mov in my Downloads folder", "expected": true},
+    {"text": "merge these documents", "expected": false},
+    {"text": "downloads.mp4 to gif", "expected": false},
+    {"text": "delete everything in my videos folder", "expected": false},
+    {"text": "convert all the clips in my Videos folder to mp4", "expected": false},
+    {"text": "make a webm of clip.mp4 in my Downloads folder", "expected": false}
+  ],
+  "rewrite": [
+    {
+      "name": "an_output_into_a_known_folder",
+      "folders": [],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "container": "mp4", "output": "Downloads/clip.mp4"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "container": "mp4", "output": "<known>/Downloads/clip.mp4"}}]
+    },
+    {
+      "name": "the_folder_alone",
+      "folders": [],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "Desktop"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "<known>/Desktop"}}]
+    },
+    {
+      "name": "home",
+      "folders": [],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "~/clip.mp4"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "<known>/clip.mp4"}}]
+    },
+    {
+      "name": "inputs_never_move",
+      "folders": [],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["Downloads/clip.mov"], "container": "mp4"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["Downloads/clip.mov"], "container": "mp4"}}]
+    },
+    {
+      "name": "a_variable_never_moves",
+      "folders": [],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["$clip"], "output": "$out"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["$clip"], "output": "$out"}}]
+    },
+    {
+      "name": "a_same_named_folder_in_the_working_folder_asks",
+      "folders": ["Downloads"],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "Downloads/clip.mp4"}}],
+      "expected_clarify": "There is a Downloads folder at <work>/Downloads, and your Downloads folder is <known>/Downloads. Which one should I save into?"
+    },
+    {
+      "name": "a_same_named_folder_next_to_the_input_does_not_ask",
+      "_comment": "A relative output is under the working folder, never the input's, so only a same-named folder there is a question (owner, 2026-10-24).",
+      "folders": ["media/Desktop"],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["media/clip.mov"], "output": "Desktop"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["media/clip.mov"], "output": "<known>/Desktop"}}]
+    },
+    {
+      "name": "the_question_names_the_folder_as_the_plan_spells_it",
+      "_comment": "The plan's spelling first, then the display name (2026-10-24). Python looped over the two as a set, so on a case-insensitive disk, where both are folders, the question named either.",
+      "folders": ["videos"],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "videos/small"}}],
+      "expected_clarify": "There is a videos folder at <work>/videos, and your Videos folder is <known>/Videos. Which one should I save into?"
+    },
+    {
+      "name": "a_local_folder_that_holds_the_inputs_is_the_one_meant",
+      "_comment": "Owner, 2026-10-25:'convert the mov files in videos to mp4 into a folder called small' plans videos/*.mov -> videos/small. The inputs are in the local videos folder, so that is the folder meant: the output stays there, and nothing asks.",
+      "folders": ["videos"],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["videos/*.mov"], "output": "videos/small"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["videos/*.mov"], "output": "videos/small"}}]
+    },
+    {
+      "name": "an_input_written_with_dot_slash_counts_too",
+      "folders": ["Music"],
+      "plan": [{"tool": "extract_audio", "args": {"input": "./Music/live.mp4", "output": "Music/live.mp3"}}],
+      "expected_plan": [{"tool": "extract_audio", "args": {"input": "./Music/live.mp4", "output": "Music/live.mp3"}}]
+    },
+    {
+      "name": "an_explicit_home_path_does_not_ask",
+      "folders": ["Downloads"],
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "~/Downloads/clip.mp4"}}],
+      "expected_plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "<known>/Downloads/clip.mp4"}}]
+    },
+    {
+      "name": "the_sandbox_wins",
+      "folders": [],
+      "sandbox": "<work>",
+      "plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "output": "Downloads/clip.mp4"}}],
+      "expected_error": "outside the sandbox"
+    }
+  ]
+}

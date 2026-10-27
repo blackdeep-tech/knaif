@@ -138,3 +138,17 @@ def test_the_contract_states_what_the_sandbox_held() -> None:
     # The older case is the control: "resize clip to 720p" -> clip.mp4 stays flagged with no
     # sandbox at all, because `clip` carries no structural marker and is not a stem.
     assert "sandbox_files" not in by_name["bare_stem_is_flagged_here_stems_resolve_later"]
+
+
+def test_both_runtimes_know_the_same_generic_file_words() -> None:
+    """The words that never name a file are listed in each runtime; they must not drift."""
+    import re
+
+    from knaif.nl_clarify_gate import GENERIC_FILE_WORDS
+
+    src = (REPO_ROOT / "native" / "crates" / "knaif-core" / "src" / "clarify_gate.rs").read_text(
+        encoding="utf-8"
+    )
+    block = re.search(r"const GENERIC_FILE_WORDS: \[&str; \d+\] = \[(.*?)\];", src, re.S)
+    assert block, "native GENERIC_FILE_WORDS not found"
+    assert set(re.findall(r'"([^"]+)"', block.group(1))) == set(GENERIC_FILE_WORDS)

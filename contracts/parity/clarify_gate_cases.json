@@ -423,7 +423,7 @@
     },
     {
       "name": "a_bare_word_is_not_a_stem_even_when_the_file_exists",
-      "why": "The case that decides the rule's shape. 'make the video smaller' contains 'video', and a plain stem-substring test would pass video.mp4 - a genuine hallucination - whenever such a file happened to exist. A stem must carry a structural marker (_, - or a digit), the same definition the stem resolver uses, so the guard and the resolver cannot disagree about what is resolvable.",
+      "why": "'make the video smaller' contains 'video', and a plain stem-substring test would pass video.mp4 - a genuine hallucination - whenever such a file happened to exist. Since 2026-10-24 (owner) a plain word names a file only when it is not a word for a kind of file (video, clip, file, ...); a stem with a structural marker (_, - or a digit) counts as before.",
       "registry": "demo",
       "utterance": "make the video smaller",
       "sandbox_files": [
@@ -1354,6 +1354,135 @@
               "inputs": [
                 "clip.mp4"
               ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_plain_word_names_a_file_that_is_there",
+      "why": "'convert beach and city from mov to mkv' asked which file although both are named and both exist (owner, 2026-10-24). A plain word names a file when it is the file's whole stem, the file is in the folder and the plan uses it.",
+      "registry": "demo",
+      "utterance": "compress beach and city",
+      "sandbox_files": [
+        "beach.mov",
+        "city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_plain_word_must_be_the_whole_word",
+      "why": "'beaches' contains 'beach' but names something else (owner, 2026-10-24).",
+      "registry": "demo",
+      "utterance": "compress the beaches",
+      "sandbox_files": [
+        "beach.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'beach.mov' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_misspelled_plain_word_still_asks",
+      "why": "Only the exact stem counts: 'beech' does not name beach.mov, as before (owner, 2026-10-24).",
+      "registry": "demo",
+      "utterance": "compress beech",
+      "sandbox_files": [
+        "beach.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'beach.mov' in your request — which file should I work on?"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a_generic_file_word_never_names_a_file",
+      "why": "'the clip' is any clip: a word for a kind of file (video, clip, file, audio, document, ...) never names one, even when clip.mov is there (owner, 2026-10-24).",
+      "registry": "demo",
+      "utterance": "compress the clip",
+      "sandbox_files": [
+        "clip.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "clip.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_payload": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "You didn't mention 'clip.mov' in your request — which file should I work on?"
             }
           }
         ]

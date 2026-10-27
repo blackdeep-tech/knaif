@@ -127,7 +127,9 @@ pub struct PlanRow {
     pub detail: String,
 }
 
-pub fn render_plan(style: &Style, rows: &[PlanRow]) -> String {
+/// The plan summary: its steps, then `notes` (a batch's "the same for N more files" and what the
+/// plan leaves, `knaif_core::result_set`).
+pub fn render_plan(style: &Style, rows: &[PlanRow], notes: &[String]) -> String {
     let bar = style.paint(Tone::Dim, "│");
     let noun = if rows.len() == 1 { "step" } else { "steps" };
     let mut out = format!(
@@ -153,6 +155,9 @@ pub fn render_plan(style: &Style, rows: &[PlanRow]) -> String {
             row.tool,
             style.paint(Tone::Dim, &row.detail),
         ));
+    }
+    for note in notes {
+        out.push_str(&format!("\n {bar}   {}", style.paint(Tone::Dim, note)));
     }
     out.push_str(&format!("\n {bar}"));
     out
@@ -505,6 +510,7 @@ static VERBOSE: AtomicBool = AtomicBool::new(false);
 static HEADER: AtomicBool = AtomicBool::new(false);
 static CLOSED: AtomicBool = AtomicBool::new(false);
 static WRITTEN: AtomicUsize = AtomicUsize::new(0);
+static WRITTEN_PATHS: Mutex<Vec<std::path::PathBuf>> = Mutex::new(Vec::new());
 static DECLINED: Mutex<Option<(usize, usize)>> = Mutex::new(None);
 static CLOCK: Mutex<Option<Clock>> = Mutex::new(None);
 
@@ -636,6 +642,38 @@ pub fn note_written(n: usize) {
 
 pub fn written() -> usize {
     WRITTEN.load(Ordering::Relaxed)
+}
+
+/// A batch's failed count and size, for the closing line (` · 1 failed · 7.6 MB`): the terminal
+/// view says them there instead of a summary line of their own (owner, 2026-10-25).
+static CLOSE_EXTRA: Mutex<String> = Mutex::new(String::new());
+
+pub fn set_close_extra(text: String) {
+    if let Ok(mut extra) = CLOSE_EXTRA.lock() {
+        *extra = text;
+    }
+}
+
+pub fn close_extra() -> String {
+    CLOSE_EXTRA
+        .lock()
+        .map(|extra| extra.clone())
+        .unwrap_or_default()
+}
+
+/// Record the files a step wrote, for the batch summary's size of what the run left.
+pub fn note_written_paths(paths: &[std::path::PathBuf]) {
+    if let Ok(mut all) = WRITTEN_PATHS.lock() {
+        all.extend(paths.iter().cloned());
+    }
+}
+
+/// Every file the run's steps reported writing, in order.
+pub fn written_paths() -> Vec<std::path::PathBuf> {
+    WRITTEN_PATHS
+        .lock()
+        .map(|all| all.clone())
+        .unwrap_or_default()
 }
 
 /// Print the header once, the first time anything in the run speaks.
@@ -856,6 +894,101 @@ impl Drop for StderrGuard {
     }
 }
 
+// ── `run --stdout`: the run's own lines to stderr, the text to the real stdout ────────────────
+
+/// The real stdout while [`StdoutToStderr`] holds fd 1 on stderr: where `--stdout`'s text goes.
+static TEXT_OUT: Mutex<Option<std::fs::File>> = Mutex::new(None);
+
+/// `run --stdout` (owner, 2026-10-23): until dropped, the process's stdout (fd 1)
+/// points at stderr, so every line the run prints goes there, and [`write_text`] writes to a copy
+/// of the real stdout taken first. A pipe then receives the result's text alone.
+pub struct StdoutToStderr {
+    saved: i32,
+}
+
+/// Write `text` to the real stdout under [`StdoutToStderr`]; to stdout itself otherwise.
+pub fn write_text(text: &str) -> std::io::Result<()> {
+    let mut out = TEXT_OUT.lock().unwrap_or_else(|e| e.into_inner());
+    match out.as_mut() {
+        Some(file) => {
+            file.write_all(text.as_bytes())?;
+            file.flush()
+        }
+        None => {
+            let mut stdout = std::io::stdout();
+            stdout.write_all(text.as_bytes())?;
+            stdout.flush()
+        }
+    }
+}
+
+fn real_stdout() -> Option<std::fs::File> {
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsFd;
+        std::io::stdout()
+            .as_fd()
+            .try_clone_to_owned()
+            .ok()
+            .map(std::fs::File::from)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsHandle;
+        std::io::stdout()
+            .as_handle()
+            .try_clone_to_owned()
+            .ok()
+            .map(std::fs::File::from)
+    }
+}
+
+impl StdoutToStderr {
+    pub fn begin() -> Option<Self> {
+        let _ = std::io::stdout().flush();
+        let copy = real_stdout()?;
+        #[cfg(unix)]
+        // SAFETY: dup/dup2 on fds 1 and 2; the original is restored on drop.
+        let saved = unsafe {
+            let saved = libc::dup(1);
+            if saved < 0 || libc::dup2(2, 1) < 0 {
+                return None;
+            }
+            saved
+        };
+        #[cfg(windows)]
+        // SAFETY: CRT descriptor calls on fds 1 and 2; `_dup2` onto fd 1 also repoints the
+        // process's STD_OUTPUT_HANDLE, which Rust's stdout writes to.
+        let saved = unsafe {
+            let saved = _dup(1);
+            if saved < 0 || _dup2(2, 1) != 0 {
+                return None;
+            }
+            saved
+        };
+        *TEXT_OUT.lock().unwrap_or_else(|e| e.into_inner()) = Some(copy);
+        Some(Self { saved })
+    }
+}
+
+impl Drop for StdoutToStderr {
+    fn drop(&mut self) {
+        let _ = std::io::stdout().flush();
+        *TEXT_OUT.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        // SAFETY: restores the descriptor saved in `begin`.
+        #[cfg(unix)]
+        unsafe {
+            libc::dup2(self.saved, 1);
+            libc::close(self.saved);
+        }
+        #[cfg(windows)]
+        unsafe {
+            _dup2(self.saved, 1);
+            _close(self.saved);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -865,6 +998,114 @@ mod tests {
 
     fn secs(ms: u64) -> Duration {
         Duration::from_millis(ms)
+    }
+
+    /// One `ui_render_cases.json` case through the renderer it names.
+    fn render_case(name: &str, style: &Style, a: &serde_json::Value) -> String {
+        let s = |k: &str| a[k].as_str().unwrap_or_default().to_string();
+        let opt_s = |k: &str| a[k].as_str().map(str::to_string);
+        let n = |k: &str| a[k].as_u64().unwrap() as usize;
+        let ms = |k: &str| a[k].as_u64().map(Duration::from_millis);
+        let f = |k: &str| a[k].as_f64();
+        let list = |k: &str| -> Vec<String> {
+            a[k].as_array()
+                .map(|v| v.iter().map(|x| x.as_str().unwrap().to_string()).collect())
+                .unwrap_or_default()
+        };
+        match name {
+            "fmt_secs" => fmt_secs(ms("ms").unwrap()),
+            "leader" => leader(style, &s("label"), &s("value")),
+            "model_label" => model_label(&s("stem")),
+            "header" => render_header(style, &s("skill"), opt_s("model").as_deref()),
+            "planning" => render_planning(style, ms("load_ms"), ms("infer_ms")),
+            "plan" => {
+                let rows: Vec<PlanRow> = a["rows"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|r| PlanRow {
+                        tool: r[0].as_str().unwrap().into(),
+                        detail: r[1].as_str().unwrap().into(),
+                    })
+                    .collect();
+                render_plan(style, &rows, &list("notes"))
+            }
+            "step_head" => render_step_head(style, n("idx"), n("total"), &s("tool")),
+            "detail" => render_detail(style, &s("text")),
+            "command" => render_command(style, &s("command")),
+            "ok" => render_ok(style, &s("what"), ms("ms")),
+            "fail" => render_fail(style, &s("what"), opt_s("cause").as_deref()),
+            "closing" => {
+                let kind = match s("kind").as_str() {
+                    "clarify" => Closing::Clarify,
+                    "reject" => Closing::Reject,
+                    _ => Closing::Nothing,
+                };
+                render_closing(style, kind, &s("message"), ms("ms"))
+            }
+            "done" => render_done(style, &s("summary"), ms("ms").unwrap()),
+            "declined" => render_declined(style),
+            "declined_close" => render_declined_close(
+                style,
+                n("step"),
+                n("steps"),
+                &s("summary"),
+                ms("ms").unwrap(),
+            ),
+            "stopped" => render_stopped(style, &s("message"), &list("detail"), ms("ms").unwrap()),
+            "box" => {
+                let tone = if s("tone") == "warn" {
+                    Tone::Warn
+                } else {
+                    Tone::Accent
+                };
+                render_box(style, tone, &s("title"), &s("text"))
+            }
+            "fmt_clock" => fmt_clock(f("seconds").unwrap()),
+            "progress" => render_progress(
+                style,
+                n("frame"),
+                ms("elapsed_ms").unwrap(),
+                f("done").unwrap(),
+                f("total"),
+                f("speed"),
+            ),
+            "fmt_bytes" => fmt_bytes(a["n"].as_u64().unwrap()),
+            "files_written" => files_written(n("n")),
+            other => panic!("no renderer {other}"),
+        }
+    }
+
+    /// The renderers both CLIs share, pinned byte for byte
+    /// (`contracts/parity/ui_render_cases.json`, Python `knaif.ui`). Native is the reference:
+    /// `KNAIF_RECORD_CONTRACT=1` writes what it renders into the cases' `expected`.
+    #[test]
+    fn ui_render_cases() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/parity/ui_render_cases.json");
+        let mut doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let record = std::env::var_os("KNAIF_RECORD_CONTRACT").is_some();
+        for case in doc["cases"].as_array_mut().unwrap() {
+            let style = Style {
+                color: case["color"].as_bool().unwrap(),
+            };
+            let got = render_case(case["fn"].as_str().unwrap(), &style, &case["args"]);
+            if record {
+                case["expected"] = serde_json::Value::String(got);
+            } else {
+                assert_eq!(
+                    case["expected"].as_str(),
+                    Some(got.as_str()),
+                    "{}",
+                    case["name"]
+                );
+            }
+        }
+        if record {
+            let text = serde_json::to_string_pretty(&doc).unwrap() + "\n";
+            std::fs::write(&path, text).unwrap();
+        }
     }
 
     #[test]
@@ -928,11 +1169,37 @@ mod tests {
                 detail: "silent.mp4 → small.mp4".into(),
             },
         ];
-        let s = render_plan(&PLAIN, &rows);
+        let s = render_plan(&PLAIN, &rows, &[]);
         assert!(s.contains("Plan · 2 steps"), "{s}");
         assert!(s.contains("├─ 1  strip_audio   "), "{s}");
         assert!(s.contains("└─ 2  resize_video  "), "{s}");
-        assert!(render_plan(&PLAIN, &rows[..1]).contains("Plan · 1 step\n"));
+        assert!(render_plan(&PLAIN, &rows[..1], &[]).contains("Plan · 1 step\n"));
+    }
+
+    #[test]
+    fn the_plan_ends_with_what_it_leaves() {
+        // Every preview ends with the result set; a batch shows the first file's
+        // steps, then the same for the rest.
+        let rows = vec![PlanRow {
+            tool: "convert_video".into(),
+            detail: "beach.mov → beach.mp4".into(),
+        }];
+        let notes = vec![
+            "the same for 2 more files: city.mov, silent.mov".to_string(),
+            "leaves 3 mp4".to_string(),
+        ];
+        let s = render_plan(&PLAIN, &rows, &notes);
+        let lines: Vec<&str> = s.lines().collect();
+        assert!(lines[1].contains("└─ 1  convert_video"), "{s}");
+        assert_eq!(
+            lines[2],
+            " │   the same for 2 more files: city.mov, silent.mov"
+        );
+        assert_eq!(lines[3], " │   leaves 3 mp4");
+        assert!(
+            !render_plan(&PLAIN, &rows, &[]).contains("leaves"),
+            "no notes, no lines"
+        );
     }
 
     #[test]

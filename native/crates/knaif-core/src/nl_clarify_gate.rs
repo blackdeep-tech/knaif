@@ -31,7 +31,7 @@ const INPUT_KEYS: [&str; 8] = [
 ];
 const OUTPUT_KEYS: [&str; 2] = ["output", "outputs"];
 /// Python `_BATCH_SIGNALS`.
-const BATCH_SIGNALS: [&str; 13] = [
+const BATCH_SIGNALS: [&str; 25] = [
     "all",
     "every",
     "each",
@@ -45,7 +45,80 @@ const BATCH_SIGNALS: [&str; 13] = [
     "lote",
     "stapel",
     "lot",
+    "jede",
+    "jeder",
+    "jedes",
+    "jeden",
+    "jedem",
+    "ordner",
+    "verzeichnis",
+    "cada",
+    "carpeta",
+    "chaque",
+    "dossier",
+    "tous",
 ];
+/// Python `_BATCH_SIGNALS_UNICODE`: whole Unicode words, so English keeps its `[a-z]+` runs.
+const BATCH_SIGNALS_UNICODE: [&str; 10] = [
+    "всички",
+    "всичките",
+    "всеки",
+    "всяко",
+    "всяка",
+    "пакетно",
+    "папка",
+    "папката",
+    "директория",
+    "директорията",
+];
+/// Python `_BATCH_SIGNALS_CJK`: substrings.
+const BATCH_SIGNALS_CJK: [&str; 7] = ["所有", "每个", "每個", "批量", "文件夹", "資料夾", "全部"];
+/// Python `_PLURAL_FILE_WORDS`: a request for many files without a batch word lets a glob
+/// through, and nothing else.
+const PLURAL_FILE_WORDS: [&str; 25] = [
+    "videos",
+    "clips",
+    "files",
+    "movies",
+    "recordings",
+    "songs",
+    "tracks",
+    "images",
+    "photos",
+    "pictures",
+    "documents",
+    "pdfs",
+    "mp4s",
+    "movs",
+    "mkvs",
+    "mp3s",
+    "wavs",
+    "gifs",
+    "jpgs",
+    "pngs",
+    "dateien",
+    "bilder",
+    "dokumente",
+    "archivos",
+    "fichiers",
+];
+/// Python `_PLURAL_FILE_WORDS_UNICODE`.
+const PLURAL_FILE_WORDS_UNICODE: [&str; 12] = [
+    "vídeos",
+    "vidéos",
+    "видеа",
+    "видеата",
+    "файлове",
+    "файловете",
+    "клипове",
+    "клиповете",
+    "снимки",
+    "снимките",
+    "документи",
+    "документите",
+];
+/// Python `_PLURAL_FILE_WORDS_CJK`.
+const PLURAL_FILE_WORDS_CJK: [&str; 2] = ["这些", "這些"];
 /// Python `input_refs.GLOB_CHARS`.
 const GLOB_CHARS: [char; 3] = ['*', '?', '['];
 
@@ -111,17 +184,29 @@ fn stem_words(utterance: &str) -> Vec<String> {
 }
 
 /// The gate. Returns *payload* unchanged, or with its plan replaced by one clarify step.
-pub fn nl_clarify_gate(mut payload: Value, utterance: &str, registry: &Registry) -> Value {
+/// `known_files` is the working folder's listing, lowercased: a plain word names one of those
+/// files when it is its whole stem (the hallucinated-filename guard's rule).
+pub fn nl_clarify_gate(
+    mut payload: Value,
+    utterance: &str,
+    registry: &Registry,
+    known_files: &HashSet<String>,
+) -> Value {
     let Some(steps) = payload.get("plan").and_then(Value::as_array) else {
         return payload;
     };
-    if let Some(question) = question_for(steps, utterance, registry) {
+    if let Some(question) = question_for(steps, utterance, registry, known_files) {
         payload["plan"] = json!([{ "tool": "clarify", "args": { "question": question } }]);
     }
     payload
 }
 
-fn question_for(steps: &[Value], utterance: &str, registry: &Registry) -> Option<String> {
+fn question_for(
+    steps: &[Value],
+    utterance: &str,
+    registry: &Registry,
+    known_files: &HashSet<String>,
+) -> Option<String> {
     // 1. Grounded args, batch or not: a batch request still must not carry an invented password.
     for step in steps {
         let tool = step.get("tool").and_then(Value::as_str).unwrap_or("");
@@ -154,7 +239,11 @@ fn question_for(steps: &[Value], utterance: &str, registry: &Registry) -> Option
             };
             for token in strings(value) {
                 if token.contains(GLOB_CHARS) {
-                    continue; // a glob is exempt on its own
+                    // A glob is many files: fine when the request asks for many, else ask.
+                    if asks_for_many(utterance, token) {
+                        continue;
+                    }
+                    return Some(glob_question(token));
                 }
                 if token.contains('/') || token.contains('\\') {
                     continue; // a path, not a media-file reference
@@ -162,7 +251,7 @@ fn question_for(steps: &[Value], utterance: &str, registry: &Registry) -> Option
                 if plan_outputs.contains(token) {
                     continue; // produced by an earlier step
                 }
-                if !is_concretely_specified(token, utterance, &inline) {
+                if !is_concretely_specified(token, utterance, &inline, known_files) {
                     return Some(clarify_question(token, tool));
                 }
             }
@@ -194,12 +283,264 @@ fn is_value_grounded(value: &Value, utterance: &str) -> bool {
     !s.is_empty() && utterance.to_lowercase().contains(&s.to_lowercase())
 }
 
-/// Python `_is_batch_utterance`: any `[a-z]+` word of the lowercased utterance is a signal.
+/// Python `_is_batch_utterance`: an ASCII signal as a `[a-z]+` run of the lowercased
+/// utterance, a non-ASCII one as a whole Unicode word, a Chinese one as a substring.
 fn is_batch_utterance(utterance: &str) -> bool {
-    utterance
-        .to_lowercase()
-        .split(|c: char| !c.is_ascii_lowercase())
+    let low = utterance.to_lowercase();
+    low.split(|c: char| !c.is_ascii_lowercase())
         .any(|w| BATCH_SIGNALS.contains(&w))
+        || unicode_words(&low).any(|w| BATCH_SIGNALS_UNICODE.contains(&w))
+        || BATCH_SIGNALS_CJK.iter().any(|w| low.contains(w))
+}
+
+/// Python `re.findall(r"\w+", text)`: runs of letters, digits and `_`.
+fn unicode_words(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|w| !w.is_empty())
+}
+
+/// Python `_asks_for_many`: a plural file word, or the glob written in the request itself.
+fn asks_for_many(utterance: &str, glob: &str) -> bool {
+    let low = utterance.to_lowercase();
+    low.contains(&glob.to_lowercase())
+        || low
+            .split(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit()))
+            .any(|w| PLURAL_FILE_WORDS.contains(&w))
+        || unicode_words(&low).any(|w| PLURAL_FILE_WORDS_UNICODE.contains(&w))
+        || PLURAL_FILE_WORDS_CJK.iter().any(|w| low.contains(w))
+}
+
+fn url_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)https?://\S+").unwrap())
+}
+
+fn named_file_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    // No `\b` around it: a CJK character is a word character, so "把report.pdf拆分" has none.
+    RE.get_or_init(|| Regex::new(r"(?i)[\w-]+\.([a-z0-9]{2,5})(?:[^a-z0-9]|$)").unwrap())
+}
+
+/// A name the request gives an output ("call it preview.gif", "save them as out.mp4", "als",
+/// "comme", "като", "保存为"): not a file the request is about (2026-10-23).
+/// Python `knaif.nl_clarify_gate._OUTPUT_NAME_RE`.
+fn output_name_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(concat!(
+            r"(?i)(?:\b(?:call(?:ed)?\s+(?:it|them)|name[ds]?\s+(?:it|them)|named|save(?:d)?\s+(?:it\s+|them\s+)?as",
+            r"|as|into|als|nach|namens|como|llamad[oa]s?|comme|vers|appel[ée]e?s?|като)",
+            r"|(?:命名为|保存为|另存为|存为))\s*[\w-]+\.[a-z0-9]{2,5}\b"
+        ))
+        .unwrap()
+    })
+}
+
+/// A name with an extension holding a letter (`clip.mp4`, `x.3gp`); a codec or a number
+/// (`H.264`, `1.25`) names no file. Python `knaif.nl_clarify_gate._names_a_file`.
+fn names_a_file(text: &str) -> bool {
+    named_file_re()
+        .captures_iter(text)
+        .any(|c| c[1].chars().any(|ch| ch.is_ascii_alphabetic()))
+}
+
+/// Whether `utterance` asks for many files: a batch word, a plural file word, or a glob written
+/// in it. The clarify gate's own test, shared with the prompt: the per-file batch rule and its
+/// examples join only such a prompt. What names a place is left out first: a URL, and, when the
+/// request names a file, a known folder after in/into/to/on/onto/from (where that file goes);
+/// with no file named the folder may be the batch. A request that names a file is about that
+/// file, so a batch word alone ("every page of sample.pdf") is not enough there; a glob or a
+/// plural file word still is. Python `knaif.nl_clarify_gate.asks_for_many_files`;
+/// `contracts/parity/many_files_cases.json`.
+pub fn asks_for_many_files(utterance: &str) -> bool {
+    let text = url_re().replace_all(utterance, " ").into_owned();
+    // A URL names a file too; a name given to an output does not.
+    if names_a_file(&output_name_re().replace_all(utterance, " ")) {
+        return asks_for_many(&crate::known_folders::without_folder_places(&text), "*");
+    }
+    is_batch_utterance(&text) || asks_for_many(&text, "*")
+}
+
+/// Number words of the corpora's languages (Python `_COUNT_WORDS`). "both" and its
+/// translations are two; German "ein" is left out, as it is also the article.
+fn count_word(word: &str) -> Option<usize> {
+    const LISTS: [(&str, usize); 5] = [
+        ("one two three four five six seven eight nine ten", 1),
+        ("zwei drei vier fünf sechs sieben acht neun zehn", 2),
+        ("dos tres cuatro cinco seis siete ocho nueve diez", 2),
+        ("deux trois quatre cinq six sept huit neuf dix", 2),
+        ("три четири пет шест седем осем девет десет", 3),
+    ];
+    for (list, first) in LISTS {
+        if let Some(i) = list.split(' ').position(|w| w == word) {
+            return Some(first + i);
+        }
+    }
+    match word {
+        "both" | "beide" | "beiden" | "ambos" | "ambas" | "два" | "две" | "двата" | "двете" => {
+            Some(2)
+        }
+        "трите" => Some(3),
+        _ => None,
+    }
+}
+
+/// A count in Chinese sits right before the file word, without spaces ("两个视频").
+fn cjk_count_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r"([两兩二三四五六七八九十]|\d+)\s*[个個部支份张張]?\s*(?:视频|視頻|影片|文件|檔案|档案|图片|圖片|片段|剪辑|剪輯)",
+        )
+        .unwrap()
+    })
+}
+
+/// The number of files `utterance` asks for. Python `knaif.nl_clarify_gate._requested_count`.
+fn requested_count(utterance: &str) -> Option<usize> {
+    let low = url_re()
+        .replace_all(&utterance.to_lowercase(), " ")
+        .into_owned();
+    let words: Vec<&str> = word_re().find_iter(&low).map(|m| m.as_str()).collect();
+    let is_number = |w: &str| w.chars().all(|c| c.is_ascii_digit()) || count_word(w).is_some();
+    for (i, word) in words.iter().enumerate() {
+        let n = if word.chars().all(|c| c.is_ascii_digit()) {
+            word.parse().ok()
+        } else {
+            count_word(word)
+        };
+        let Some(n) = n else { continue };
+        for later in words.iter().skip(i + 1).take(3) {
+            if PLURAL_FILE_WORDS.contains(later) || PLURAL_FILE_WORDS_UNICODE.contains(later) {
+                return Some(n);
+            }
+            if is_number(later) {
+                break;
+            }
+        }
+    }
+    // A digit that follows a letter is part of a name ("mp4文件"), not a count; the regex crate
+    // has no look-behind, so the character before the match is checked here.
+    let caps = cjk_count_re().captures_iter(&low).find(|c| {
+        let start = c.get(1).map_or(0, |m| m.start());
+        !c[1].starts_with(|ch: char| ch.is_ascii_digit())
+            || !low[..start]
+                .chars()
+                .next_back()
+                .is_some_and(|ch| ch.is_ascii_alphanumeric())
+    })?;
+    let raw = &caps[1];
+    raw.parse().ok().or_else(|| {
+        "两兩二三四五六七八九十"
+            .chars()
+            .zip([2, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+            .find(|(c, _)| raw.starts_with(*c))
+            .map(|(_, n)| n)
+    })
+}
+
+fn word_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"\w+").unwrap())
+}
+
+/// The question to ask when `utterance` asks for a number of files the plan does not touch:
+/// the plan's folder and glob inputs, listed as the per-file batch lists them, plus any
+/// file named beside them; an earlier step's output is not counted again. Only a plan with a
+/// folder or a glob is checked. Python `knaif.nl_clarify_gate.count_question`;
+/// `contracts/parity/count_cases.json`.
+pub fn count_question(
+    utterance: &str,
+    plan: &[Value],
+    base: &std::path::Path,
+    file_kinds: &crate::clarify_gate::FileKinds,
+) -> Option<String> {
+    let wanted = requested_count(utterance)?;
+    let mut touched: Vec<(String, String)> = Vec::new();
+    let mut outputs: HashSet<String> = HashSet::new();
+    let mut listed = false;
+    for step in plan {
+        let Some(args) = step.get("args").and_then(Value::as_object) else {
+            continue;
+        };
+        for key in crate::batch_chain::INPUT_KEYS {
+            let entries: Vec<&str> = match args.get(key) {
+                Some(Value::String(s)) => vec![s.as_str()],
+                Some(Value::Array(items)) => items.iter().filter_map(Value::as_str).collect(),
+                _ => continue,
+            };
+            for entry in entries {
+                if entry.starts_with('$') || entry.contains("://") {
+                    continue;
+                }
+                if outputs.contains(&entry.to_lowercase()) {
+                    continue;
+                }
+                let found =
+                    crate::batch_chain::expand_inputs(&[entry.to_string()], base, file_kinds);
+                let files = match found.get(entry) {
+                    Some(files) => {
+                        listed = true;
+                        files.clone()
+                    }
+                    None => vec![entry.to_string()],
+                };
+                for f in files {
+                    let key = f.to_lowercase();
+                    if !touched.iter().any(|(k, _)| *k == key) {
+                        touched.push((key, f));
+                    }
+                }
+            }
+        }
+        if let Some(out) = args.get("output").and_then(Value::as_str) {
+            outputs.insert(out.to_lowercase());
+        }
+    }
+    let have = touched.len();
+    if !listed || have == wanted || have == 0 {
+        return None;
+    }
+    let kinds: HashSet<Option<&String>> = touched
+        .iter()
+        .map(|(_, f)| {
+            let ext = f.rsplit_once('.').map_or("", |(_, e)| e).to_lowercase();
+            file_kinds.get(&ext)
+        })
+        .collect();
+    let noun = match kinds.iter().next() {
+        Some(Some(kind)) if kinds.len() == 1 => match kind.as_str() {
+            "video" => "videos",
+            "audio" => "audio files",
+            "document" => "documents",
+            "image" => "images",
+            "text" => "text files",
+            _ => "files",
+        },
+        _ => "files",
+    };
+    Some(if have > wanted {
+        format!("Which {wanted} of the {have} {noun}? Name them.")
+    } else {
+        format!("I found {have} {noun} here, not {wanted}. Which ones do you mean?")
+    })
+}
+
+/// Python `_glob_question`: what to ask about a glob the request never asked for.
+fn glob_question(glob: &str) -> String {
+    let normalized = glob.replace('\\', "/");
+    let name = normalized.rsplit('/').next().unwrap_or("");
+    // Python `PurePath.suffix`: from the last dot, unless the name starts or ends with it.
+    let ext = match name.rfind('.') {
+        Some(i) if i > 0 && i + 1 < name.len() => &name[i..],
+        _ => "",
+    };
+    let what = if !ext.is_empty() && !ext.contains(GLOB_CHARS) {
+        format!("{} files", ext.to_lowercase())
+    } else {
+        "files".to_string()
+    };
+    format!("Did you mean all the {what} here? Name the file, or say \"all\" to use every one.")
 }
 
 /// Python `input_refs.parse_inline_filenames`.
@@ -216,7 +557,12 @@ fn inline_filenames(utterance: &str) -> HashSet<String> {
 }
 
 /// Python `_is_concretely_specified` with no injected listing.
-fn is_concretely_specified(token: &str, utterance: &str, inline: &HashSet<String>) -> bool {
+fn is_concretely_specified(
+    token: &str,
+    utterance: &str,
+    inline: &HashSet<String>,
+    known_files: &HashSet<String>,
+) -> bool {
     if token.starts_with('$') {
         return true; // a chain reference
     }
@@ -224,6 +570,8 @@ fn is_concretely_specified(token: &str, utterance: &str, inline: &HashSet<String
         return true; // the user wrote it out
     }
     has_matching_stem_in_utterance(token, utterance)
+        // a plain word for a file that is there, as the guard reads it
+        || crate::clarify_gate::named_by_stem(token, &utterance.to_lowercase(), known_files)
 }
 
 /// Python `_has_matching_stem_in_utterance`: an identifier in the utterance that carries a

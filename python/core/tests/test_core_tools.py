@@ -5,38 +5,43 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from knaif.core_tools import (
-    CORE_STEP_MAP,
-    CORE_STEPS,
     CORE_TOOL_DEFS,
-    ClarifyStep,
-    DoneStep,
-    RejectStep,
-    WaitForConfirmationStep,
+    CORE_TOOL_MAP,
+    CORE_TOOLS,
+    AlertWhenDoneHandler,
+    ClarifyHandler,
+    DoneHandler,
+    RejectHandler,
+    WaitForConfirmationHandler,
 )
-from knaif.tool import Step
+from knaif.tool import Handler
 
 # ── class shape ──────────────────────────────────────────────────────────────
 
 
 def test_all_core_steps_are_step_subclasses():
-    for cls in CORE_STEPS:
-        assert issubclass(cls, Step), f"{cls} is not a Step subclass"
+    for cls in CORE_TOOLS:
+        assert issubclass(cls, Handler), f"{cls} is not a Step subclass"
 
 
 def test_core_step_names():
-    assert ClarifyStep.name == "clarify"
-    assert RejectStep.name == "reject"
-    assert DoneStep.name == "done"
-    assert WaitForConfirmationStep.name == "wait_for_confirmation"
+    assert ClarifyHandler.name == "clarify"
+    assert RejectHandler.name == "reject"
+    assert DoneHandler.name == "done"
+    assert WaitForConfirmationHandler.name == "wait_for_confirmation"
+    assert AlertWhenDoneHandler.name == "alert_when_done"
+
+
+_CORE_NAMES = {"clarify", "reject", "done", "wait_for_confirmation", "alert_when_done"}
 
 
 def test_core_step_map_keys():
-    assert set(CORE_STEP_MAP) == {"clarify", "reject", "done", "wait_for_confirmation"}
+    assert set(CORE_TOOL_MAP) == _CORE_NAMES
 
 
 def test_core_step_map_values_are_instances():
-    for name, obj in CORE_STEP_MAP.items():
-        assert isinstance(obj, Step), f"CORE_STEP_MAP[{name!r}] is not a Step instance"
+    for name, obj in CORE_TOOL_MAP.items():
+        assert isinstance(obj, Handler), f"CORE_STEP_MAP[{name!r}] is not a Step instance"
 
 
 # ── metadata loaded from core_tools.yaml ─────────────────────────────────────
@@ -46,13 +51,13 @@ def test_core_tool_defs_loaded_from_yaml():
     """CORE_TOOL_DEFS is parsed from core_tools.yaml via the registry loader."""
     from knaif.registry import ToolDef
 
-    assert set(CORE_TOOL_DEFS) == {"clarify", "reject", "done", "wait_for_confirmation"}
+    assert set(CORE_TOOL_DEFS) == _CORE_NAMES
     assert all(isinstance(td, ToolDef) for td in CORE_TOOL_DEFS.values())
 
 
 def test_core_tool_defs_match_step_map():
     """Every core Step has a metadata entry and vice versa (no drift)."""
-    assert set(CORE_TOOL_DEFS) == set(CORE_STEP_MAP)
+    assert set(CORE_TOOL_DEFS) == set(CORE_TOOL_MAP)
 
 
 def test_core_tool_defs_fields():
@@ -110,38 +115,38 @@ def _ctx(confirmed=True):
 
 
 def test_clarify_returns_question():
-    result = ClarifyStep().handle({"question": "What format?"}, _ctx())
+    result = ClarifyHandler().handle({"question": "What format?"}, _ctx())
     assert result == {"status": "clarification_needed", "question": "What format?"}
 
 
 def test_reject_returns_reason():
-    result = RejectStep().handle({"reason": "Too dangerous"}, _ctx())
+    result = RejectHandler().handle({"reason": "Too dangerous"}, _ctx())
     assert result == {"status": "rejected", "reason": "Too dangerous"}
 
 
 def test_done_returns_done():
-    result = DoneStep().handle({}, _ctx())
+    result = DoneHandler().handle({}, _ctx())
     assert result == {"status": "done"}
 
 
 def test_wait_for_confirmation_confirmed():
     ctx = _ctx(confirmed=True)
     ctx.confirm.return_value = True
-    result = WaitForConfirmationStep().handle({"prompt": "OK?"}, ctx)
+    result = WaitForConfirmationHandler().handle({"prompt": "OK?"}, ctx)
     assert result == {"status": "confirmed", "prompt": "OK?"}
 
 
 def test_wait_for_confirmation_declined():
     ctx = _ctx(confirmed=False)
     ctx.confirm.return_value = False
-    result = WaitForConfirmationStep().handle({"prompt": "OK?"}, ctx)
+    result = WaitForConfirmationHandler().handle({"prompt": "OK?"}, ctx)
     assert result == {"status": "declined", "prompt": "OK?"}
 
 
 def test_wait_for_confirmation_default_prompt():
     ctx = _ctx(confirmed=True)
     ctx.confirm.return_value = True
-    result = WaitForConfirmationStep().handle({}, ctx)
+    result = WaitForConfirmationHandler().handle({}, ctx)
     assert result["prompt"] == "Proceed?"
 
 
@@ -149,12 +154,12 @@ def test_wait_for_confirmation_passes_dict_preview():
     ctx = MagicMock()
     ctx.confirm.return_value = True
     preview = {"cmd": "rm -rf /"}
-    WaitForConfirmationStep().handle({"prompt": "Sure?", "preview": preview}, ctx)
+    WaitForConfirmationHandler().handle({"prompt": "Sure?", "preview": preview}, ctx)
     ctx.confirm.assert_called_once_with("Sure?", preview)
 
 
 def test_wait_for_confirmation_ignores_non_dict_preview():
     ctx = MagicMock()
     ctx.confirm.return_value = True
-    WaitForConfirmationStep().handle({"prompt": "Sure?", "preview": "bad"}, ctx)
+    WaitForConfirmationHandler().handle({"prompt": "Sure?", "preview": "bad"}, ctx)
     ctx.confirm.assert_called_once_with("Sure?", None)

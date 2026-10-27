@@ -1,4 +1,5 @@
 inspect_document:
+  effects: [fs.read]
   description: "Inspect a document's format, page count, size, encryption, and text-layer status."
   keywords: [inspect, layer, metadata, about, details, properties, review, разгледай, прегледай, съдържание]
   required_args: [input]
@@ -12,12 +13,22 @@ inspect_document:
       path_role: input
 
 extract_text:
-  description: "Read out the text content of a document as per-page records plus joined text. Creates no new file. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf."
+  effects: [exec:tesseract, fs.read, fs.write]
+  produces: text   # a PDF it reads is not refined by it, so it stays
+  # The text is saved as <name>.txt beside its source, one file or many (owner,
+  # 2026-10-23; one file's text used to be printed and saved nowhere). Over many files core gives
+  # each lifted step its `output`; for one file `output` is a declared argument, since the model
+  # names the file once it knows the text is saved (a model check on the GPU: an undeclared
+  # `output` made Python ask). Not `readonly`: it writes a file, so the optimizer must never drop
+  # it before a later step.
+  batch_output: txt
+  # `run --stdout` prints the text instead of saving it, for a pipe (owner, 2026-10-23).
+  stdout: text
+  description: "Read out the text content of a document and save it as <name>.txt beside it. Use only when the user wants the words/text itself — to copy pages into a new PDF (e.g. \"extract the last page into a new pdf\"), use split_pdf."
   keywords: [extract, extrae, extraer, texto, extrahieren, extraire, texte, извлечь, извлечи, 提取]
   required_args: [input]
-  optional_args: [pages, ocr]
+  optional_args: [pages, ocr, output]
   safety_category: safe
-  readonly: true
   mock_args:
     input: "{utterance_after:extract}"
   arg_schemas:
@@ -28,10 +39,14 @@ extract_text:
       type: string
     ocr:
       type: boolean
+    output:
+      type: string
+      path_role: output
 
 find_in_document:
+  effects: [exec:tesseract, fs.read]
   description: "Find a keyword or regex within one document and return page snippets."
-  keywords: [within, find, search, busca, buscar, encuentra, finde, suche, trouve, cherche, найди, найти, намери, 查找]
+  keywords: [within, find, search, busca, buscar, encuentra, finde, suche, trouve, cherche, найди, найти, намери, 查找, mention, mentions, contain, contains]
   required_args: [input, query]
   optional_args: [regex, ignore_case]
   defaults:
@@ -53,10 +68,19 @@ find_in_document:
       type: boolean
 
 merge_pdfs:
+  derives: true   # a join is a new thing; pieces made only for it go to the scratch (keep rule)
+  effects: [fs.read, fs.write]
   description: "Merge multiple PDFs into one output PDF."
-  keywords: [merge, join, combine, together, stitch, append, combina, combinar, une, unir, fusiona, zusammenführen, verbinde, kombiniere, fusionne, fusionner, combiner, объедини, объединить, обедини, слей, 合并]
+  keywords: [merge, join, combine, together, stitch, append, combina, combinar, une, unir, fusiona, zusammenführen, verbinde, kombiniere, fusionne, fusionner, combiner, объедини, объединить, обедини, слей, 合并, zusammen]
   required_args: [inputs, output]
+  # Several inputs become ONE output file, not one each: a chain may route that file into the
+  # run scratch when a later step reads it (contracts/parity/scratch_routing_cases.json).
+  joins_inputs: true
   safety_category: destructive
+  # The model often leaves the merged file's name out ("merge them into one"); like
+  # concat_video's combined.mp4. Filled before the missing-arg check, never shown in the prompt.
+  defaults:
+    output: merged.pdf
   mock_args:
     inputs: ["{sandbox}/a.pdf", "{sandbox}/b.pdf"]
     output: "{sandbox}/merged.pdf"
@@ -70,6 +94,8 @@ merge_pdfs:
       path_role: output
 
 split_pdf:
+  derives: true   # a page range is a new thing: its source stays (the keep rule)
+  effects: [fs.read, fs.write]
   description: "Copy a subset of pages into a new PDF, leaving the original intact. Use whenever the user wants to keep, extract, pull out, split off, or save specific pages — name the pages they WANT. Do not convert this into a removal of the other pages."
   keywords: [split, divide, dividir, teile, aufteilen, divise, diviser, раздели, разделить, 拆分]
   required_args: [input, ranges]
@@ -94,9 +120,39 @@ split_pdf:
       type: string
       path_role: output
 
+split_pdf_every:
+  derives: true   # each piece is a new thing: its source stays (the keep rule)
+  effects: [fs.read, fs.write]
+  description: "Split one PDF into a new file every N pages (every: 1 = one PDF per page), leaving the original intact."
+  # Triggered, not ranked: split_pdf is in nearly every documents prompt, so the
+  # many-files split is a tool of its own that joins a prompt only on these words.
+  triggers: [per page, "pdf for every page", "file for every page", "pdf for each page",
+             "file for each page", "single pages", "pdf per page", "file per page", "every # pages", "chunks of # pages", "#-page parts", "#-page chunks",
+             "# pages each", "pro seite", "je # seiten", "jede seite", "за всяка страница",
+             "всяка страница", "по # страници", 每页, "每#页", 逐页]
+  required_args: [input, every]
+  optional_args: [output, output_dir]
+  safety_category: destructive
+  mock_args:
+    input: "{sandbox}/sample.pdf"
+    every: 1
+  arg_schemas:
+    input:
+      type: string
+      path_role: input
+    every:
+      type: integer
+    output:
+      type: string
+      path_role: output
+    output_dir:
+      type: string
+      path_role: output
+
 rotate_pages:
+  effects: [fs.read, fs.write]
   description: "Rotate selected PDF pages."
-  keywords: [rotate, orientation, sideways, drehe, drehen, rota, gira, girar, pivote, pivoter, tourne, tourner, поверни, разверни, завърти, 旋转]
+  keywords: [rotate, orientation, sideways, degrees, upside, drehe, drehen, grad, rota, gira, girar, grados, pivote, pivoter, tourne, tourner, degres, поверни, разверни, завърти, градуса, градусов, 旋转, 度]
   required_args: [input, degrees]
   optional_args: [pages, output]
   safety_category: destructive
@@ -116,6 +172,7 @@ rotate_pages:
       path_role: output
 
 remove_pages:
+  effects: [fs.read, fs.write]
   description: "Delete specific pages and save a copy without them. Use only when the user wants to remove, delete, drop, or get rid of pages — name the pages they do NOT want. If they instead name the pages to keep, use split_pdf."
   keywords: [remove]
   required_args: [input, pages]
@@ -135,6 +192,7 @@ remove_pages:
       path_role: output
 
 reorder_pages:
+  effects: [fs.read, fs.write]
   description: "Reorder PDF pages into a new order within one PDF (not into separate files)."
   keywords: [reorder, rearrange, move, front, swap, shuffle, reverse, backwards]
   required_args: [input, order]
@@ -154,6 +212,7 @@ reorder_pages:
       path_role: output
 
 watermark:
+  effects: [fs.read, fs.write]
   description: "Apply a text or image watermark to a PDF."
   keywords: [watermark, stamp, overlay]
   required_args: [input]
@@ -185,8 +244,9 @@ watermark:
       path_role: output
 
 add_page_numbers:
+  effects: [fs.read, fs.write]
   description: "Add page numbers to a PDF."
-  keywords: [number, numera, numerar, nummeriere, seitenzahlen, numérote, numéroter, пронумеруй, нумерация, номерирай, 页码, 编号]
+  keywords: [number, numera, numerar, nummeriere, seitenzahlen, numérote, numéroter, пронумеруй, нумерация, номерирай, 页码, 编号, номера]
   required_args: [input]
   optional_args: [position, start_at, output]
   defaults:
@@ -211,6 +271,7 @@ add_page_numbers:
       path_role: output
 
 protect_pdf:
+  effects: [fs.read, fs.write]
   description: "Password-protect a PDF."
   keywords: [protect, lock, encrypt, secure, protege, proteger, schütze, schützen, protège, protéger, защити, защитить, 加密]
   required_args: [input, password]
@@ -233,6 +294,7 @@ protect_pdf:
       path_role: output
 
 unlock_pdf:
+  effects: [fs.read, fs.write]
   description: "Remove PDF password protection when the password is supplied."
   keywords: [unlock]
   required_args: [input, password]
@@ -255,6 +317,8 @@ unlock_pdf:
       path_role: output
 
 convert_document:
+  effects: [exec:soffice, fs.read, fs.write]
+  produces: {arg: to_format}   # the kind of the format asked for (txt -> text, pdf -> document)
   description: "Convert or save a document as a different format (e.g. txt→md, docx→pdf)."
   keywords: [convert, export, markdown, transform, pdf, docx, "as a pdf", "save as", office]
   required_args: [input, to_format]
@@ -276,8 +340,9 @@ convert_document:
       path_role: output
 
 compress_pdf:
+  effects: []
   description: "Compress a PDF using a deterministic inspect-compress-verify workflow."
-  keywords: [compress, comprimir, comprime, komprimiere, komprimieren, verkleinern, compresser, reducir, tamaño, size, сожми, сжать, компресирай, 压缩]
+  keywords: [compress, comprimir, comprime, komprimiere, komprimieren, verkleinern, compresser, reducir, tamaño, size, сожми, сжать, компресирай, 压缩, smaller, shrink, slim, réduire, намали, 减小]
   required_args: [input]
   optional_args: [compress_quality, output]
   defaults:
@@ -298,8 +363,9 @@ compress_pdf:
       path_role: output
 
 ocr_document:
+  effects: []
   description: "Make a scanned PDF or image searchable with local Tesseract OCR."
-  keywords: [ocr]
+  keywords: [ocr, searchable, recognition, scanned, durchsuchbar, texterkennung, разпознай, распознай, 识别]
   required_args: [input]
   optional_args: [output, language]
   defaults:
@@ -318,15 +384,8 @@ ocr_document:
     language:
       type: string
 
-resolve_inputs:
-  description: "Resolve document input paths inside the sandbox."
-  required_args: [paths]
-  optional_args: [extensions]
-  safety_category: safe
-  readonly: true
-  internal: true
-
 run_compress:
+  effects: [exec:gs, fs.read, fs.write]
   description: "Internal step that performs PDF compression."
   required_args: [input, compress_quality, inspection]
   optional_args: [output]
@@ -334,6 +393,7 @@ run_compress:
   internal: true
 
 run_ocr:
+  effects: [exec:tesseract, fs.read, fs.write]
   description: "Internal step that renders pages and applies Tesseract OCR."
   required_args: [input, inspection]
   optional_args: [output, language]
@@ -341,6 +401,7 @@ run_ocr:
   internal: true
 
 verify_output:
+  effects: [fs.read]
   description: "Internal step that verifies compressed PDF output."
   required_args: [compression, inspection]
   safety_category: safe

@@ -207,8 +207,16 @@ def canon_token(tok: str) -> str:
     and as the ``cwd=None`` fallback for raw argv positions below. NOT used to decide
     whether an arbitrary argv *token* is a path in the first place — ``_canon_argv``
     does that positionally; see its docstring for why (audit F7).
+
+    A URL (`https://h/a.mov`) is not a path and compares whole: a plan on the URL and a plan
+    on a local `a.mov` are different plans.
     """
+    if _URL_TOKEN.match(tok):
+        return tok
     return tok.rsplit("/", 1)[-1] if _is_pathlike(tok) else tok
+
+
+_URL_TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 
 
 _DRIVE_ABS = re.compile(r"^[A-Za-z]:/")
@@ -258,6 +266,8 @@ def _canon_argv(argv: list[str], cwd: str | None) -> tuple[str, ...]:
     while two different directories do not. See docs/audits/2026-09-07-core-principles-
     and-rtx5080.md, F7.
     """
+    from knaif.scratch import display
+
     out: list[str] = []
     last = len(argv) - 1
     for i, tok in enumerate(argv):
@@ -265,6 +275,10 @@ def _canon_argv(argv: list[str], cwd: str | None) -> tuple[str, ...]:
         path_position = prev == "-i" or (i == last and i > 0 and not tok.startswith("-"))
         if not path_position:
             out.append(tok)
+        elif (work := display(tok)) != tok:
+            # A run-scratch path: each process has its own `run-<pid>-<hex>`, so compare the
+            # part under it (`<work>/clip_fast.mp4`). Still unlike a file in the user's folder.
+            out.append(work)
         elif cwd is not None:
             out.append(_resolve_against(cwd, tok))
         else:
@@ -402,43 +416,24 @@ def _parse_native_body(stdout: str, stderr: str) -> Outcome:
 def _parse_python_body(stdout: str, stderr: str) -> Outcome:
     """Parse `knaif-cli run <skill> --dry-run` output into an Outcome.
 
-    Python prints command items as `    $ ffmpeg …` and clarify/reject as
-    `❓ CLARIFY: …` / `🚫 REJECT: …` (see app.py). stdout carries the render.
+    Python prints native's plain view (contracts/parity/cli_output_cases.json),
+    so native's parser reads it. One asymmetry stays: Python's dry run renders no command for an
+    intent whose expansion needs a real probe (compress, platform, thumbnail) and says
+    `(nothing to execute)` on stderr. That is a dry-run rendering gap, not a decline, so a
+    partial chain is marked and a plan with no command is `rendered-none`.
     """
-    text = strip_ansi(stdout)
-    cmds: list[list[str]] = []
-    kind = "none"
-    detail = ""
-    for line in text.splitlines():
-        s = line.strip()
-        if not s:
-            continue
-        m = re.match(r"\$\s+(ffmpeg\b.*)$", s)
-        if m:
-            tokens = to_argv(m.group(1))
-            if tokens:
-                cmds.append(tokens)
-            continue
-        if "CLARIFY:" in s:
-            kind, detail = "clarify", s.split("CLARIFY:", 1)[1].strip()
-        elif "REJECT:" in s:
-            kind, detail = "reject", s.split("REJECT:", 1)[1].strip()
-    if cmds:
-        return Outcome(
-            "commands", cmds, raw=stdout + stderr, partial="(nothing to execute)" in text
-        )
-    if kind in ("clarify", "reject"):
-        return Outcome(kind, text=detail, raw=stdout + stderr)
-    # Python planned but its dry-run renders no ffmpeg line for compress/platform/thumbnail/
-    # batch intents (prints "(nothing to execute)" + a `• …` summary). That's a dry-run
-    # rendering asymmetry vs native, not a decline — mark it so it isn't scored as a mismatch.
-    if "(nothing to execute)" in text:
+    out = _parse_native_body(stdout, stderr)
+    gap = "(nothing to execute)" in stderr
+    if out.kind == "commands":
+        out.partial = gap
+        return out
+    if out.kind == "none" and gap:
         return Outcome(
             "rendered-none",
             text="planned; dry-run emits no command for this intent",
             raw=stdout + stderr,
         )
-    return Outcome("none", text=detail, raw=stdout + stderr)
+    return out
 
 
 def _failed(out: Outcome, stderr: str, returncode: int) -> Outcome:
@@ -475,8 +470,16 @@ class Row:
     is_chain: bool
 
 
-def load_rows(skill: str, tags_filter: set[str] | None) -> list[Row]:
-    path = REPO_ROOT / "skills" / skill / "data" / "eval.jsonl"
+def corpus_path(skill: str, corpus: Path | str | None = None) -> Path:
+    """The corpus compared: *corpus* when given (URL rows live in `eval_url.jsonl`), else the
+    skill's `eval.jsonl`."""
+    return Path(corpus) if corpus else REPO_ROOT / "skills" / skill / "data" / "eval.jsonl"
+
+
+def load_rows(
+    skill: str, tags_filter: set[str] | None, *, corpus: Path | str | None = None
+) -> list[Row]:
+    path = corpus_path(skill, corpus)
     rows: list[Row] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -984,7 +987,7 @@ def build_meta(
     `entry_points` satisfies rule 2 (L3d): the record states which command was run on each
     side, so a later reader can check the two halves were the same stage.
     """
-    corpus = REPO_ROOT / "skills" / args.skill / "data" / "eval.jsonl"
+    corpus = corpus_path(args.skill, getattr(args, "corpus", None)).resolve()
     return {
         "purpose": args.purpose or f"L3 behavioral parity — {args.skill} ({args.mode} mode)",
         "captured": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -1165,6 +1168,12 @@ def main() -> int:
         "--limit", type=int, default=0, help="Only the first N matching rows (0 = all)."
     )
     ap.add_argument(
+        "--corpus",
+        default=None,
+        help="Corpus file to compare instead of skills/<skill>/data/eval.jsonl (e.g. the URL "
+        "rows in eval_url.jsonl).",
+    )
+    ap.add_argument(
         "--only",
         help="JSON file listing the row ids to compare (or [id, idx] pairs); an unknown id is an "
         "error. For pre-registered sample runs.",
@@ -1295,7 +1304,7 @@ def main() -> int:
     cwd = (args.cwd or REPO_ROOT).resolve()
     cwd_posix = cwd.as_posix()  # for Outcome.key()'s argv path-position resolution (F7)
     tags_filter = {t.strip() for t in args.tags.split(",") if t.strip()} or None
-    rows = load_rows(args.skill, tags_filter)
+    rows = load_rows(args.skill, tags_filter, corpus=args.corpus)
     if args.only:
         # A JSON list of ids, or of [id, utterance_idx] pairs (the L4 sample format; parity
         # compares each row's first utterance, so the index is not used).
@@ -1576,16 +1585,13 @@ def _self_test() -> int:
             "clip_converted.mp4",
         ]
     ], nat
-    # Python command output (`  $ ffmpeg …`, with ANSI + header noise).
-    py = parse_python(
-        "intent: 1.5s\nffmpeg › convert clip.mp4\n  \x1b[90m$\x1b[0m ffmpeg -y -i clip.mp4 -c copy -movflags +faststart clip_converted.mp4\n    dry-run\n",
-        "",
-    )
+    # Python prints native's plain view.
+    py = parse_python("ffmpeg -y -i clip.mp4 -c copy -movflags +faststart clip_converted.mp4\n", "")
     assert py.kind == "commands" and py.commands == nat.commands, py
     assert nat.key() == py.key(), "identical argv must compare equal"
     # Quoting difference must NOT register (shlex canonicalization).
     a = parse_native('ffmpeg -y -i "my clip.mp4" out.mp4\n', "")
-    b = parse_python("  $ ffmpeg -y -i 'my clip.mp4' out.mp4\n", "")
+    b = parse_python("ffmpeg -y -i 'my clip.mp4' out.mp4\n", "")
     assert a.key() == b.key(), "quoting-only difference should match"
     # clarify / reject.
     assert parse_native("clarify: which file?\n", "").kind == "clarify"
@@ -1605,18 +1611,19 @@ def _self_test() -> int:
         cwd=None,
     )
     assert st == "native-not-implemented", (st, note)
-    assert parse_python("\n❓ CLARIFY: which file?\n", "").kind == "clarify"
-    assert parse_python("\n\U0001f6ab REJECT: no\n", "").kind == "reject"
+    assert parse_python("clarify: which file?\n", "").kind == "clarify"
+    assert parse_python("reject: no\n", "").kind == "reject"
     # A real divergence must register as different keys.
     x = parse_native("ffmpeg -y -i a.mp4 out.mkv\n", "")
-    y = parse_python("  $ ffmpeg -y -i a.mp4 out.mp4\n", "")
+    y = parse_python("ffmpeg -y -i a.mp4 out.mp4\n", "")
     assert x.key() != y.key(), "different container must mismatch"
     # Windows absolute path (backslashes) vs native relative → same action after canon.
     nrel = parse_native("ffmpeg -y -i clip.mp4 -c copy clip_converted.mkv\n", "")
     # The path only has to be Windows-absolute with backslashes — that is what exercises
     # to_argv's forward-slashing. Keep it short and synthetic; never a real checkout path.
+    # A path outside the working folder stays absolute, quoted as native's shell_join does.
     pabs = parse_python(
-        r"  $ ffmpeg -y -i C:\media\clip.mp4 -c copy C:\media\clip_converted.mkv" + "\n",
+        r'ffmpeg -y -i "C:\\media\\clip.mp4" -c copy "C:\\media\\clip_converted.mkv"' + "\n",
         "",
     )
     assert (
@@ -1627,7 +1634,7 @@ def _self_test() -> int:
     ), f"abs vs rel path must canonicalize equal:\n{nrel.key()}\n{pabs.key()}"
     assert nrel.commands != pabs.commands, "raw commands still differ (representation note path)"
     # A different OUTPUT filename (not just abs/rel) must still mismatch.
-    other = parse_python("  $ ffmpeg -y -i clip.mp4 -c copy renamed.mkv\n", "")
+    other = parse_python("ffmpeg -y -i clip.mp4 -c copy renamed.mkv\n", "")
     assert nrel.key() != other.key(), "different basename must mismatch"
     # F7: only `-i`'s value and the trailing output token are path positions — a filter
     # expression containing '/' as arithmetic (pad's centering) must never be touched, so
@@ -1656,17 +1663,14 @@ def _self_test() -> int:
     assert a_dir.key(cwd="/work/fixtures") != b_dir.key(
         cwd="/work/fixtures"
     ), "different source directories sharing a basename must not canonicalize equal"
-    py_abs_same = parse_python("  $ ffmpeg -y -i /work/fixtures/clip.mp4 out.mp4\n", "")
+    py_abs_same = parse_python("ffmpeg -y -i /work/fixtures/clip.mp4 out.mp4\n", "")
     nat_rel_same = parse_native("ffmpeg -y -i clip.mp4 out.mp4\n", "")
     assert nat_rel_same.key(cwd="/work/fixtures") == py_abs_same.key(
         cwd="/work/fixtures"
     ), "native-relative vs python-absolute of the SAME file under the shared cwd must match"
-    # Python compress/platform dry-run: a plan summary + "(nothing to execute)" → rendered-none,
-    # and comparing against native commands must be not-comparable, not a mismatch.
-    rn = parse_python(
-        "intent: 1.1s\n  • compress clip_ctr.mp4 → 480p MP4\n    (nothing to execute)\n    dry-run\n",
-        "",
-    )
+    # Python compress/platform dry-run: no command, "(nothing to execute)" on stderr →
+    # rendered-none, and comparing against native commands must be not-comparable.
+    rn = parse_python("", "(nothing to execute)\n")
     assert rn.kind == "rendered-none", rn
     ncmd = parse_native("ffmpeg -y -i clip_ctr.mp4 -c:v libx264 out.mp4\n", "")
     st, _ = compare(Row("x", "compress clip_ctr.mp4", [], False), ncmd, rn, strict=False)

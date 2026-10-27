@@ -37,12 +37,28 @@ class Skill:
     runtimes: dict[str, Any]  # runtimes: metadata (which runtimes/crate implement the skill)
     # file_kinds: as extension -> kind; chain threading never crosses kinds (see parse_file_kinds)
     file_kinds: dict[str, str] = field(default_factory=dict)
-    # OOP path (set when skill_class: is present in skill.yaml; None for legacy)
+    # batch_kinds: kinds whose batch glob covers the whole kind (knaif.batch_chain.widen_kind_globs)
+    batch_kinds: list[str] = field(default_factory=list)
+    # `scratch_intermediates:` route chain intermediates into the run scratch (both runtimes).
+    scratch_intermediates: bool = False
+    # `url_inputs:` the content types and size cap of http(s) URL inputs (needs `net`).
+    url_inputs: Any | None = None
     tool_map: dict[str, Any] | None = None
     skill_instance: Any | None = None
+    # The skill's tools plus every declared toolkit's (core control tools are merged by the
+    # agent). Toolkit tools are internal unless the skill lists them under `expose:`.
+    registry: dict[str, Any] = field(default_factory=dict)
+    # `rules:` from prompt.yaml: each {tools, text}, added to the header only when one of its
+    # tools is in the prompt (CommandAgent.build_prompt).
+    prompt_rules: list[dict] = field(default_factory=list)
 
     @classmethod
-    def load(cls, skill_dir: Path | str, overrides: list[Path | str] | None = None) -> Skill:
+    def load(
+        cls,
+        skill_dir: Path | str,
+        overrides: list[Path | str] | None = None,
+        toolkits_root: Path | str | None = None,
+    ) -> Skill:
         skill_dir = Path(skill_dir).resolve()
         # Bundle layout: declarative YAML + data live at the bundle root (skill_dir), and
         # the handler package lives in `python/`. Flat layout (handlers alongside the YAML)
@@ -67,11 +83,17 @@ class Skill:
         name: str = manifest["name"]
         description: str = manifest.get("description", "")
 
-        tools_yaml_path = skill_dir / manifest.get("tools", "tools.yaml")
+        for retired in ("skill_class", "tools", "prompt"):
+            if retired in manifest:
+                raise ValueError(
+                    f"skill.yaml at {manifest_path} declares {retired!r}, which is no longer "
+                    f"used: tool classes and the Skill subclass are discovered, and the files "
+                    f"are always tools.yaml and prompt.yaml."
+                )
+        tools_yaml_path = skill_dir / "tools.yaml"
 
-        system_header, examples_block, prompt_examples = _load_prompt(
-            skill_dir / manifest.get("prompt", "prompt.yaml")
-        )
+        system_header, examples_block, prompt_examples = _load_prompt(skill_dir / "prompt.yaml")
+        prompt_rules = _load_prompt_rules(skill_dir / "prompt.yaml")
 
         raw_sets: dict[str, list[str]] = manifest.get("arg_value_sets") or {}
         arg_value_sets = {k: frozenset(v) for k, v in raw_sets.items()}
@@ -88,25 +110,33 @@ class Skill:
         external_tools = tuple(dependencies.get("external_tools") or [])
         runtimes = manifest.get("runtimes") or {}
         file_kinds = parse_file_kinds(manifest.get("file_kinds"))
-
-        skill_class_ref: str | None = manifest.get("skill_class")
-        if not skill_class_ref:
+        batch_kinds = parse_batch_kinds(manifest.get("batch_kinds"), file_kinds)
+        scratch_intermediates = manifest.get("scratch_intermediates", False)
+        if not isinstance(scratch_intermediates, bool):
             raise ValueError(
-                f"skill.yaml at {manifest_path} must declare 'skill_class:' "
-                f"(e.g. 'skill_class: handlers.MySkill'). The legacy HANDLERS/EXPANDERS "
-                f"dict form is no longer supported."
+                f"scratch_intermediates must be true or false, got {scratch_intermediates!r}"
             )
 
-        # tool_map is the source of truth. The legacy dict views
-        # (handlers/expanders/summarizers) and skill-level callables are derived from
-        # it so external consumers (e.g. evalsuite/cli.py reads skill.artifact_runner)
-        # and the existing skill test suites keep working. preflights stays empty: the
-        # wildcard preflight runs via skill_instance.preflight in the agent's OOP
-        # dispatch, and a non-empty dict here would double-run.
-        skill_instance, tool_map = _load_oop_skill(
-            skill_dir, handler_dir, skill_class_ref, tools_yaml_path
+        from .urls import parse_url_inputs
+
+        url_inputs = parse_url_inputs(
+            manifest.get("url_inputs"), list(manifest.get("toolkits") or [])
         )
-        handlers, expanders, summarizers = _derive_oop_views(skill_instance, tool_map)
+
+        # tool_map is the source of truth. The dict views (handlers/expanders/summarizers)
+        # and skill-level callables are derived from it, because the agent and evalsuite
+        # read them. preflights stays empty: the wildcard preflight runs via
+        # skill_instance.preflight in the agent's dispatch, and a non-empty dict here would
+        # double-run.
+        skill_instance, tool_map, registry = _load_skill_tools(
+            skill_dir,
+            handler_dir,
+            tools_yaml_path,
+            toolkits=list(manifest.get("toolkits") or []),
+            expose=list(manifest.get("expose") or []),
+            toolkits_root=_resolve_toolkits_root(skill_dir, toolkits_root),
+        )
+        handlers, expanders, summarizers = _derive_tool_views(tool_map)
         _apply_disabled_tools(disabled_tools, name, tool_map, handlers, expanders, summarizers)
         preflights: dict[str, Any] = {}
         result_formatter = _skill_override(skill_instance, "format_results")
@@ -125,6 +155,7 @@ class Skill:
             system_header=system_header,
             examples_block=examples_block,
             prompt_examples=prompt_examples,
+            prompt_rules=prompt_rules,
             arg_value_sets=arg_value_sets,
             unsafe_phrases=unsafe_phrases,
             recommended_model=recommended_model,
@@ -133,8 +164,12 @@ class Skill:
             external_tools=external_tools,
             runtimes=runtimes,
             file_kinds=file_kinds,
+            batch_kinds=batch_kinds,
+            scratch_intermediates=scratch_intermediates,
+            url_inputs=url_inputs,
             tool_map=tool_map,
             skill_instance=skill_instance,
+            registry=registry,
         )
 
 
@@ -162,6 +197,21 @@ def parse_file_kinds(raw: Any) -> dict[str, str]:
                 raise ValueError(f"file_kinds lists {key!r} under both {kinds[key]!r} and {kind!r}")
             kinds[key] = str(kind)
     return kinds
+
+
+def parse_batch_kinds(raw: Any, file_kinds: dict[str, str]) -> list[str]:
+    """``batch_kinds:``, the kinds whose batch glob covers the whole kind: "every video" read
+    as every video, not only the ``*.mp4`` the model wrote (``knaif.batch_chain.widen_kind_globs``).
+    Each must be a kind ``file_kinds:`` declares. Absent means none."""
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(f"batch_kinds must be a list of kinds, got {raw!r}")
+    declared = set(file_kinds.values())
+    for kind in raw:
+        if kind not in declared:
+            raise ValueError(f"batch_kinds lists {kind!r}, which file_kinds does not declare")
+    return [str(k) for k in raw]
 
 
 def _deep_merge_manifest(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -193,9 +243,9 @@ def _apply_disabled_tools(
     Core control tools (clarify/reject/done/wait_for_confirmation) cannot be disabled —
     the pipeline depends on them. An unknown name is a typo and is rejected.
     """
-    from .core_tools import CORE_STEP_MAP
+    from .core_tools import CORE_TOOL_MAP
 
-    core_names = set(CORE_STEP_MAP)
+    core_names = set(CORE_TOOL_MAP)
     for name in disabled:
         if name in core_names:
             raise ValueError(f"Cannot disable core control tool {name!r} via an override")
@@ -207,54 +257,164 @@ def _apply_disabled_tools(
             view.pop(name, None)
 
 
-def _load_oop_skill(
+def _resolve_toolkits_root(skill_dir: Path, explicit: Path | str | None) -> Path:
+    """Where toolkits live: an explicit root, then ``$KNAIF_TOOLKITS_ROOT``, then the
+    ``toolkits/`` directory beside the skill's ``skills/`` directory (``<repo>/toolkits``)."""
+    import os
+
+    if explicit is not None:
+        return Path(explicit).resolve()
+    env = os.environ.get("KNAIF_TOOLKITS_ROOT")
+    if env:
+        return Path(env).resolve()
+    return skill_dir.parent.parent / "toolkits"
+
+
+def _load_skill_tools(
     skill_dir: Path,
     handler_dir: Path,
-    skill_class_ref: str,
     tools_yaml_path: Path,
-) -> tuple[Any, dict[str, Any]]:
-    """Load a Skill subclass via skill_class: and build the name→Tool map.
+    *,
+    toolkits: list[str],
+    expose: list[str],
+    toolkits_root: Path,
+) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    """Build the skill's registry and name→tool map from YAML plus discovered classes.
 
-    skill_class_ref may be either ``"ClassName"`` (defaults to handlers.py) or
-    ``"module.ClassName"`` (module is relative to the handler directory).
-
-    ``skill_dir`` is the bundle root (used for module-key naming); ``handler_dir`` is
-    where the handler package actually lives (``skill_dir/python`` for a bundle, or
-    ``skill_dir`` for the flat layout).
+    Every tool is defined once in YAML and once as a class (a ``Handler`` or an ``Intent``),
+    matched by ``name`` strictly 1:1. A declared toolkit contributes all of its tools, which
+    are internal unless listed under ``expose:``. Core control tools are merged into the
+    tool map here and into the registry by the agent. A YAML entry for a core tool (a skill
+    may restate one) needs no class: the core class serves it.
     """
-    from .core_tools import CORE_STEP_MAP
-    from .tool import Intent, Step
+    from dataclasses import replace
 
-    if "." in skill_class_ref:
-        module_stem, class_name = skill_class_ref.rsplit(".", 1)
+    from .core_tools import CORE_TOOL_MAP
+    from .effects import check_declared
+    from .registry import load_registry
+    from .skill_base import Skill as SkillBase
+
+    core = set(CORE_TOOL_MAP)
+    registry: dict[str, Any] = dict(load_registry(tools_yaml_path))
+    # Every tool says what it may do (`knaif.effects`); a restated core tool is core's.
+    check_declared(
+        {n: td for n, td in registry.items() if n not in core}, source=str(tools_yaml_path)
+    )
+    classes, skill_classes = _discover_classes(skill_dir, handler_dir)
+    _check_one_to_one(set(registry) - core, classes, tools_yaml_path)
+    owner = dict.fromkeys(registry, "the skill")
+
+    toolkit_tools: set[str] = set()
+    for kit in toolkits:
+        kit_dir = toolkits_root / kit
+        kit_yaml = kit_dir / "tools.yaml"
+        if not kit_yaml.exists():
+            raise ValueError(f"unknown toolkit {kit!r}: no {kit_yaml}")
+        kit_registry = load_registry(kit_yaml)
+        check_declared(kit_registry, source=str(kit_yaml))
+        kit_classes, kit_skill_classes = _discover_classes(kit_dir, kit_dir / "python")
+        if kit_skill_classes:
+            raise ValueError(f"toolkit {kit!r} defines a Skill subclass; toolkits have no hooks")
+        _check_one_to_one(set(kit_registry), kit_classes, kit_yaml)
+        for name, tool_def in kit_registry.items():
+            if name in owner or name in core:
+                where = "a core tool" if name in core else owner[name]
+                raise ValueError(f"tool {name!r} from toolkit {kit!r} collides with {where}")
+            owner[name] = f"toolkit {kit!r}"
+            registry[name] = replace(tool_def, internal=name not in expose)
+            toolkit_tools.add(name)
+        classes.update(kit_classes)
+
+    unknown = [name for name in expose if name not in toolkit_tools]
+    if unknown:
+        raise ValueError(f"expose: names {unknown} that no declared toolkit provides")
+
+    if len(skill_classes) > 1:
+        names = ", ".join(sorted(cls.__name__ for cls in skill_classes))
+        raise ValueError(f"{skill_dir.name} defines more than one Skill subclass: {names}")
+    skill_instance = skill_classes[0]() if skill_classes else SkillBase()
+
+    tool_map: dict[str, Any] = {name: cls() for name, cls in classes.items()}
+    tool_map.update(CORE_TOOL_MAP)
+    return skill_instance, tool_map, registry
+
+
+def _check_one_to_one(entries: set[str], classes: dict[str, type], yaml_path: Path) -> None:
+    missing = sorted(entries - set(classes))
+    if missing:
+        raise ValueError(
+            f"{yaml_path} declares {missing} but no Handler/Intent class has that name"
+        )
+    orphans = sorted(set(classes) - entries)
+    if orphans:
+        raise ValueError(f"tool classes named {orphans} have no entry in {yaml_path}")
+
+
+def _discover_classes(bundle_dir: Path, handler_dir: Path) -> tuple[dict[str, type], list[type]]:
+    """Find the tool classes and Skill subclasses a bundle defines.
+
+    Imports every top-level module in ``handler_dir`` (``handlers`` first) and collects the
+    ``Handler``/``Intent`` subclasses with a ``name`` and the ``Skill`` subclasses that are
+    *defined* in the bundle. A class imported from elsewhere (core, another bundle) is not the
+    bundle's. Two classes with one name are an error.
+    """
+    import inspect
+
+    from .skill_base import Skill as SkillBase
+    from .tool import Handler, Intent
+
+    if not handler_dir.is_dir():
+        return {}, []
+    stems = sorted(
+        p.stem
+        for p in handler_dir.glob("*.py")
+        if p.stem != "__init__" and not p.stem.startswith("test_")
+    )
+    stems.sort(key=lambda stem: stem != "handlers")
+    # The reload contract (see _import_skill_handler_module) applies once, to the first
+    # module. The rest are imported into that same package, or reused if the first import
+    # already loaded them, so no module ever holds classes from a discarded copy.
+    modules = [
+        (
+            _import_skill_handler_module(bundle_dir, handler_dir, stem)
+            if i == 0
+            else _import_skill_submodule(bundle_dir, handler_dir, stem)
+        )
+        for i, stem in enumerate(stems)
+    ]
+
+    if (handler_dir / "__init__.py").exists():
+        prefix = _canonical_pkg_key(bundle_dir.resolve(), handler_dir.resolve())
+        own_modules = {
+            name for name in sys.modules if name == prefix or name.startswith(prefix + ".")
+        }
     else:
-        module_stem, class_name = "handlers", skill_class_ref
+        own_modules = {module.__name__ for module in modules}
 
-    module = _import_skill_handler_module(skill_dir, handler_dir, module_stem)
-    skill_cls = getattr(module, class_name)
-    skill_instance = skill_cls()
-
-    with tools_yaml_path.open(encoding="utf-8") as fh:
-        tools_yaml: dict[str, Any] = yaml.safe_load(fh) or {}
-
-    tool_map: dict[str, Any] = {}
-    for tool_cls in skill_instance.tools:
-        if not (isinstance(tool_cls, type) and issubclass(tool_cls, (Step, Intent))):
-            raise TypeError(f"{tool_cls!r} in {class_name}.tools is not a Step or Intent subclass")
-        t_name = getattr(tool_cls, "name", None)
-        if t_name not in tools_yaml:
-            raise ValueError(
-                f"Tool {t_name!r} in {class_name}.tools has no metadata in {tools_yaml_path}"
-            )
-        if t_name in tool_map:
-            raise ValueError(f"Duplicate tool name {t_name!r} in {class_name}.tools")
-        tool_map[t_name] = tool_cls()
-
-    # Merge core steps (clarify / reject / done / wait_for_confirmation)
-    for t_name, step in CORE_STEP_MAP.items():
-        tool_map[t_name] = step
-
-    return skill_instance, tool_map
+    classes: dict[str, type] = {}
+    skill_classes: list[type] = []
+    seen: set[type] = set()
+    for module_name in sorted(own_modules):
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
+        for obj in vars(module).values():
+            if not isinstance(obj, type) or obj in seen or obj.__module__ not in own_modules:
+                continue
+            seen.add(obj)
+            if issubclass(obj, SkillBase) and obj is not SkillBase:
+                skill_classes.append(obj)
+            elif issubclass(obj, (Handler, Intent)) and not inspect.isabstract(obj):
+                name = getattr(obj, "name", None)
+                if not isinstance(name, str):
+                    continue
+                if name in classes and classes[name] is not obj:
+                    raise ValueError(
+                        f"two classes are named {name!r}: "
+                        f"{classes[name].__qualname__} and {obj.__qualname__}"
+                    )
+                classes[name] = obj
+    return classes, skill_classes
 
 
 def _legacy_module_key(skill_dir: Path, module_stem: str) -> str:
@@ -355,26 +515,43 @@ def _import_skill_handler_module(bundle_dir: Path, handler_dir: Path, module_ste
     return submodule
 
 
-def _derive_oop_views(
-    skill_instance: Any,
+def _import_skill_submodule(bundle_dir: Path, handler_dir: Path, module_stem: str) -> Any:
+    """Import one more module of an already-loaded bundle, without the reload contract."""
+    bundle_dir = bundle_dir.resolve()
+    handler_dir = handler_dir.resolve()
+    if not (handler_dir / "__init__.py").exists():
+        return _import_skill_handler_module(bundle_dir, handler_dir, module_stem)
+    key = f"{_canonical_pkg_key(bundle_dir, handler_dir)}.{module_stem}"
+    if key not in sys.modules:
+        spec = importlib.util.spec_from_file_location(key, handler_dir / f"{module_stem}.py")
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load skill module {handler_dir / module_stem}.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[key] = module
+        spec.loader.exec_module(module)
+    sys.modules[_legacy_module_key(bundle_dir, module_stem)] = sys.modules[key]
+    return sys.modules[key]
+
+
+def _derive_tool_views(
     tool_map: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """Derive legacy handlers/expanders/summarizers dicts from the tool_map.
+    """Derive the handlers/expanders/summarizers dicts from the tool_map.
 
-    Only the skill's *domain* tools (those declared in ``skill_instance.tools``)
-    are included — core control steps (clarify/reject/done/...) are merged into
-    the agent's handlers separately, mirroring the legacy CORE_HANDLERS split.
-    Values are bound methods on the instantiated tools (single source of truth).
+    Only the skill's and its toolkits' tools are included. Core control tools
+    (clarify/reject/done/...) are merged into the agent's handlers separately. Values are
+    bound methods on the instantiated tools (single source of truth).
     """
-    from .tool import Intent, Step
+    from .core_tools import CORE_TOOL_MAP
+    from .tool import Handler, Intent
 
     handlers: dict[str, Any] = {}
     expanders: dict[str, Any] = {}
     summarizers: dict[str, Any] = {}
-    for tool_cls in skill_instance.tools:
-        name = tool_cls.name
-        tool_obj = tool_map[name]
-        if isinstance(tool_obj, Step):
+    for name, tool_obj in tool_map.items():
+        if name in CORE_TOOL_MAP and tool_obj is CORE_TOOL_MAP[name]:
+            continue
+        if isinstance(tool_obj, Handler):
             handlers[name] = tool_obj.handle
         elif isinstance(tool_obj, Intent):
             expanders[name] = tool_obj.expand
@@ -410,6 +587,33 @@ def _load_prompt(prompt_path: Path) -> tuple[str | None, str | None, list[dict]]
     raw_examples: list[dict] = [e for e in (data.get("examples") or []) if isinstance(e, dict)]
     examples_block: str | None = _render_examples(raw_examples)
     return system_header, examples_block, raw_examples
+
+
+def _load_prompt_rules(prompt_path: Path) -> list[dict]:
+    """``rules:`` from prompt.yaml, in order: ``{"tools": [...], "text": "..."}`` joins a prompt
+    that lists one of its tools; ``{"when": "many", "text": "..."}`` one whose request asks for
+    many files (the per-file batch rule); ``words`` also needs one of them in the request."""
+    if not prompt_path.exists():
+        return []
+    with prompt_path.open(encoding="utf-8") as fh:
+        data = yaml.safe_load(fh)
+    rules = data.get("rules") if isinstance(data, dict) else None
+    out: list[dict] = []
+    for rule in rules or []:
+        if not isinstance(rule, dict) or not isinstance(rule.get("text"), str):
+            raise ValueError(f"{prompt_path}: each rule needs `tools` and `text`")
+        when = rule.get("when")
+        if when is not None and when != "many":
+            raise ValueError(f"{prompt_path}: a rule's `when` can only be `many`, not {when!r}")
+        out.append(
+            {
+                "tools": [str(t) for t in rule.get("tools") or []],
+                "when": when,
+                "words": [str(w) for w in rule.get("words") or []],
+                "text": rule["text"],
+            }
+        )
+    return out
 
 
 def _parse_pipeline_inject(pipeline: list) -> list[str]:

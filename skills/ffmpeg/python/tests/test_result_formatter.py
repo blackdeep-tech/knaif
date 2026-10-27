@@ -58,7 +58,8 @@ def test_result_formatter_execute_with_run_batch_outputs(format_fn):
     items = format_fn(results, dry_run=False)
     output_items = [i for i in items if i["kind"] == "output"]
     assert len(output_items) == 2
-    assert {i["message"] for i in output_items} == {"a.mp4", "b.mp4"}
+    # The full path: the CLI shows it relative, folder included.
+    assert {i["message"] for i in output_items} == {"/tmp/a.mp4", "/tmp/b.mp4"}
 
 
 def test_result_formatter_execute_skips_failed_outputs(format_fn):
@@ -77,7 +78,7 @@ def test_result_formatter_execute_skips_failed_outputs(format_fn):
     ]
     items = format_fn(results, dry_run=False)
     output_items = [i for i in items if i["kind"] == "output"]
-    assert [i["message"] for i in output_items] == ["ok.mp4"]
+    assert [i["message"] for i in output_items] == ["/tmp/ok.mp4"]
 
 
 def test_result_formatter_inspect_errors(format_fn):
@@ -124,7 +125,7 @@ def test_result_formatter_multi_intent_accumulates_outputs(format_fn):
     ]
     items = format_fn(results, dry_run=False)
     output_items = [i for i in items if i["kind"] == "output"]
-    assert {i["message"] for i in output_items} == {"clip.mkv", "clip_audio.mp3"}
+    assert {i["message"] for i in output_items} == {"/tmp/clip.mkv", "/tmp/clip_audio.mp3"}
 
 
 def test_result_formatter_multi_intent_dry_run_accumulates_commands(format_fn):

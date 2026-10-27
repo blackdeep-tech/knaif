@@ -27,6 +27,17 @@ use crate::registry::{Registry, ToolDef};
 /// control example, not a domain one. Port of Python `_TERMINAL_TOOLS` — note it does **not**
 /// include `noop`, unlike [`is_system_tool`]'s prompt-listing filter.
 const TERMINAL_TOOLS: &[&str] = &["clarify", "reject", "done"];
+/// Core tools retrieved only by their triggers (`core_tools.yaml` `triggers:`). Port of Python
+/// The tools that join a prompt only by their `triggers:` (the core `alert_when_done` and any
+/// skill tool declaring them): an example that uses one is eligible only when the tool was
+/// retrieved. Python passes the same set to `select_examples(triggered=…)`.
+pub fn triggered_tools(registry: &crate::registry::Registry) -> HashSet<String> {
+    registry
+        .iter()
+        .filter(|(_, td)| !td.triggers.is_empty())
+        .map(|(name, _)| name.clone())
+        .collect()
+}
 
 /// How many domain examples the per-utterance selection keeps, on top of the fixed clarify and
 /// reject slots. Mirrors Python `select_examples`'s `max_tool_examples` default.
@@ -81,6 +92,8 @@ pub struct PromptOverrides {
     pub system_header: Option<String>,
     pub examples_block: Option<String>,
     pub examples: Vec<PromptExample>,
+    /// `rules:`, in order: joined to the header by [`apply_prompt_rules`].
+    pub rules: Vec<PromptRule>,
 }
 
 #[derive(Deserialize)]
@@ -89,6 +102,73 @@ struct RawPrompt {
     system_header: Option<String>,
     #[serde(default)]
     examples: Vec<PromptExample>,
+    #[serde(default)]
+    rules: Vec<PromptRule>,
+}
+
+/// One `prompt.yaml` rule: `tools` joins a prompt that lists one of them; `when: many` a prompt
+/// whose request asks for many files. Mirrors Python `skill._load_prompt_rules`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PromptRule {
+    #[serde(default)]
+    pub tools: Vec<String>,
+    #[serde(default)]
+    pub when: Option<String>,
+    /// The rule also needs one of these words in the request.
+    #[serde(default)]
+    pub words: Vec<String>,
+    pub text: String,
+}
+
+/// Whether `utterance` holds one of `words`: a whole word, any case; a CJK word as a substring.
+/// Python `knaif.prompt._says_any`.
+fn says_any(utterance: &str, words: &[String]) -> bool {
+    static LATIN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static WORD: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let latin_re = LATIN.get_or_init(|| regex::Regex::new(r"[a-z0-9]+").unwrap());
+    let word_re = WORD.get_or_init(|| regex::Regex::new(r"\w+").unwrap());
+    let low = utterance.to_lowercase();
+    let latin: std::collections::HashSet<&str> =
+        latin_re.find_iter(&low).map(|m| m.as_str()).collect();
+    let unicode: std::collections::HashSet<&str> =
+        word_re.find_iter(&low).map(|m| m.as_str()).collect();
+    words.iter().map(|w| w.to_lowercase()).any(|w| {
+        if w.chars()
+            .next()
+            .is_some_and(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
+        {
+            low.contains(&w)
+        } else if w.is_ascii() {
+            latin.contains(w.as_str())
+        } else {
+            unicode.contains(w.as_str())
+        }
+    })
+}
+
+/// `header` with each rule that applies here joined at its end: a rule about tools when one of
+/// them is in this prompt (`present`), a `when: many` rule when the request asks for many files.
+/// Python `knaif.prompt.apply_prompt_rules`; contracts/parity/prompt_rule_cases.json.
+pub fn apply_prompt_rules(
+    header: &str,
+    rules: &[PromptRule],
+    present: &std::collections::HashSet<String>,
+    utterance: &str,
+) -> String {
+    let many = crate::nl_clarify_gate::asks_for_many_files(utterance);
+    let mut out = header.to_string();
+    for rule in rules {
+        let tool_present = rule.tools.iter().any(|t| present.contains(t));
+        let mut applies = (rule.when.as_deref() == Some("many") && many) || tool_present;
+        // A rule with `words` also needs one of them in the request.
+        if !rule.words.is_empty() {
+            applies = (rule.tools.is_empty() || tool_present) && says_any(utterance, &rule.words);
+        }
+        if applies {
+            out = format!("{}\n{}", out.trim_end_matches('\n'), rule.text);
+        }
+    }
+    out
 }
 
 /// One `prompt.yaml` example: the request and the plan the reference answers it with.
@@ -98,6 +178,10 @@ pub struct PromptExample {
     pub request: String,
     #[serde(default)]
     pub output: Option<serde_json::Value>,
+    /// `when: many`: shown only to a request that asks for many files (the per-file batch
+    /// examples). Mirrors the Python example dict's `when` key.
+    #[serde(default)]
+    pub when: Option<String>,
 }
 
 /// Load a skill's `prompt.yaml`. Missing file / non-mapping → empty overrides (the defaults apply),
@@ -113,6 +197,7 @@ pub fn load_prompt_yaml(path: &Path) -> PromptOverrides {
         system_header: raw.system_header,
         examples_block: render_examples(&raw.examples),
         examples: raw.examples,
+        rules: raw.rules,
     }
 }
 
@@ -226,13 +311,21 @@ fn word_set(text: &str) -> HashSet<String> {
         .collect()
 }
 
+/// Whether `text` carries an http(s) URL, matching Python's `_carries_url`.
+fn carries_url(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.contains("http://") || lower.contains("https://")
+}
+
 /// Select the examples most relevant to `query` given the retrieved tool set. Port of Python
 /// `select_examples`.
 ///
 /// Always includes the first clarify example and the first reject example, when the corpus has
 /// them, then fills up to `max_tool_examples` domain examples ranked by how many retrieved tools
 /// the example's plan uses (primary) and how many query words its request shares (tiebreaker),
-/// and re-emits the whole selection in corpus order.
+/// and re-emits the whole selection in corpus order. An example whose request carries an http(s)
+/// URL is eligible only when the query carries one too, and then ranks first at equal tool
+/// overlap.
 ///
 /// Two things a re-derivation gets wrong, both pinned by `contracts/parity/example_cases.json`:
 /// the cap is a **cap, not a relevance threshold** — three domain examples are kept even when
@@ -244,8 +337,12 @@ pub fn select_examples<'a>(
     retrieved_tool_names: &HashSet<String>,
     query: &str,
     max_tool_examples: usize,
+    triggered: &HashSet<String>,
 ) -> Vec<&'a PromptExample> {
     let query_tokens = word_set(query);
+    let query_url = carries_url(query);
+    let query_folder = crate::known_folders::names_known_folder(query);
+    let query_many = crate::nl_clarify_gate::asks_for_many_files(query);
 
     let mut keep: Vec<bool> = vec![false; examples.len()];
     for control in ["clarify", "reject"] {
@@ -254,20 +351,36 @@ pub fn select_examples<'a>(
         }
     }
 
-    let mut domain: Vec<(usize, (usize, usize))> = examples
+    // A URL example is shown only to a request that carries a URL, and ranks first among
+    // examples with the same tool overlap there.
+    let mut domain: Vec<(usize, (usize, usize, usize))> = examples
         .iter()
         .enumerate()
         .filter(|(_, e)| !example_tool_set(e).is_empty())
+        .filter(|(_, e)| query_url || !carries_url(&e.request))
+        // A tool retrieved only by its triggers must not reach a prompt through an example, and
+        // an example that writes into a known folder only reaches a request that names one as a
+        // destination, so a request without either sees the examples it saw before.
+        .filter(|(_, e)| {
+            example_tool_set(e)
+                .iter()
+                .filter(|t| triggered.contains(**t))
+                .all(|t| retrieved_tool_names.contains(*t))
+        })
+        .filter(|(_, e)| query_folder || !crate::known_folders::names_known_folder(&e.request))
+        // A per-file batch example (`when: many`) reaches only a request that asks for many.
+        .filter(|(_, e)| query_many || e.when.as_deref() != Some("many"))
         .map(|(i, e)| {
             let tool_overlap = example_tool_set(e)
                 .iter()
                 .filter(|t| retrieved_tool_names.contains(**t))
                 .count();
+            let url_match = usize::from(query_url && carries_url(&e.request));
             let word_overlap = word_set(&e.request)
                 .iter()
                 .filter(|w| query_tokens.contains(*w))
                 .count();
-            (i, (tool_overlap, word_overlap))
+            (i, (tool_overlap, url_match, word_overlap))
         })
         .collect();
     // Stable, descending by score: ties keep corpus order, as Python's stable reverse sort does.
@@ -327,25 +440,21 @@ pub fn build_prompt_ordered(
                 .unwrap_or_default();
             format!("{arg} ({suffix}{hint})")
         };
-        let req = def
+        // One list, so a tool with only optional args does not start with ", ".
+        let labels = def
             .required_args
             .iter()
             .map(|a| arg_label(a, "required"))
+            .chain(def.optional_args.iter().map(|a| arg_label(a, "optional")))
             .collect::<Vec<_>>()
             .join(", ");
-        let opt = if def.optional_args.is_empty() {
-            String::new()
-        } else {
-            let opts = def
-                .optional_args
-                .iter()
-                .map(|a| arg_label(a, "optional"))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(", {opts}")
-        };
         tool_lines.push(format!("  - {name}: {}", def.description));
-        tool_lines.push(format!("    args: {req}{opt}"));
+        // No trailing space when there are none: it is noise in what the model reads.
+        tool_lines.push(if labels.is_empty() {
+            "    args:".to_string()
+        } else {
+            format!("    args: {labels}")
+        });
     }
 
     let header = overrides
@@ -356,7 +465,13 @@ pub fn build_prompt_ordered(
         .examples_block
         .as_deref()
         .unwrap_or(DEFAULT_EXAMPLES);
-    let system_msg = format!("{header}{}{examples}", tool_lines.join("\n"));
+    // A rendered block starts with "Examples:"; without this it ran on from the last tool line.
+    let sep = if !examples.is_empty() && !examples.starts_with('\n') {
+        "\n"
+    } else {
+        ""
+    };
+    let system_msg = format!("{header}{}{sep}{examples}", tool_lines.join("\n"));
     (system_msg, utterance.to_string())
 }
 
@@ -444,6 +559,7 @@ run_batch:
             output: Some(
                 serde_json::json!({"plan": [{"tool": "compress_video", "args": {"inputs": ["a.mp4"]}}]}),
             ),
+            when: None,
         }];
         let block = render_examples(&examples).unwrap();
         assert!(block.starts_with("Examples:\n  request: \"compress a.mp4\"\n  output:  {"));

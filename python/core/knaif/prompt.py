@@ -60,6 +60,9 @@ def restore_grounded_spelling(value: str, raw_utterance: str) -> str:
 # ── example selection helpers ─────────────────────────────────────────────────
 
 _TERMINAL_TOOLS = frozenset({"clarify", "reject", "done"})
+# Core tools retrieved only by their triggers (core_tools.yaml `triggers:`). An example that uses
+# one must not reach a prompt that does not list the tool.
+_TRIGGERED_TOOLS = frozenset({"alert_when_done"})
 
 
 def _example_tool_set(example: dict) -> frozenset[str]:
@@ -87,11 +90,17 @@ def _is_reject_example(example: dict) -> bool:
     return bool(tools) and "reject" in tools and not _example_tool_set(example)
 
 
+def _carries_url(text: str) -> bool:
+    lower = text.lower()
+    return "http://" in lower or "https://" in lower
+
+
 def select_examples(
     structured_examples: list[dict],
     retrieved_tool_names: frozenset[str],
     query: str,
     max_tool_examples: int = 3,
+    triggered: frozenset[str] = _TRIGGERED_TOOLS,
 ) -> list[dict]:
     """Select the most relevant examples for *query* given the retrieved tool set.
 
@@ -99,11 +108,33 @@ def select_examples(
     Fills up to *max_tool_examples* domain examples ranked by:
       1. number of retrieved tools that appear in the example's plan (primary)
       2. Jaccard overlap between query tokens and example request tokens (tiebreaker)
+    An example whose request carries an http(s) URL is eligible only when *query* carries one
+    too, and then ranks first at equal tool overlap, so adding one changes no other prompt.
+    An example whose plan uses a tool retrieved only by its triggers (*triggered*: the core
+    ``alert_when_done`` and any skill tool with ``triggers:``) is eligible only when that tool
+    was retrieved, and one whose request names a known folder as a
+    destination ("save it in Downloads") only when *query* names one, for the same reason, and
+    one marked ``when: many`` (the per-file batch examples) only when *query* asks for many
+    files (:func:`knaif.nl_clarify_gate.asks_for_many_files`).
     Examples are returned in their original order from *structured_examples*.
     """
+    from .known_folders import names_known_folder
+    from .nl_clarify_gate import asks_for_many_files
+
+    query_url = _carries_url(query)
+    query_folder = names_known_folder(query)
+    query_many = asks_for_many_files(query)
     clarify_exs = [e for e in structured_examples if _is_clarify_example(e)]
     reject_exs = [e for e in structured_examples if _is_reject_example(e)]
-    domain_exs = [e for e in structured_examples if _example_tool_set(e)]
+    domain_exs = [
+        e
+        for e in structured_examples
+        if _example_tool_set(e)
+        and (query_url or not _carries_url(e.get("request", "")))
+        and (_example_tool_set(e) & triggered) <= retrieved_tool_names
+        and (query_folder or not names_known_folder(e.get("request", "")))
+        and (query_many or e.get("when") != "many")
+    ]
 
     fixed: list[dict] = []
     if clarify_exs:
@@ -113,10 +144,11 @@ def select_examples(
 
     query_tokens = set(query.lower().split())
 
-    def _score(ex: dict) -> tuple[int, int]:
+    def _score(ex: dict) -> tuple[int, int, int]:
         tool_overlap = len(_example_tool_set(ex) & retrieved_tool_names)
+        url_match = int(query_url and _carries_url(ex.get("request", "")))
         req_tokens = set(ex.get("request", "").lower().split())
-        return (tool_overlap, len(query_tokens & req_tokens))
+        return (tool_overlap, url_match, len(query_tokens & req_tokens))
 
     ranked_domain = sorted(domain_exs, key=_score, reverse=True)
     selected_domain = ranked_domain[:max_tool_examples]
@@ -132,6 +164,46 @@ def select_examples(
             fixed_ids.discard(eid)
             selected_ids.discard(eid)
     return result
+
+
+def apply_prompt_rules(header: str, rules: list[dict], present: set[str], utterance: str) -> str:
+    """*header* with each of the skill's prompt rules that applies here joined at its end.
+
+    A rule about tools joins when one of them is in this prompt (*present*); a ``when: many``
+    rule when the request asks for many files (the clarify gate's test). Rust mirror:
+    ``knaif_core::prompt::apply_prompt_rules``; contracts/parity/prompt_rule_cases.json.
+    """
+    from .nl_clarify_gate import asks_for_many_files
+
+    many = asks_for_many_files(utterance)
+    for rule in rules:
+        applies = bool(
+            (rule.get("when") == "many" and many) or present & set(rule.get("tools") or [])
+        )
+        # A rule with `words` also needs one of them in the request: the "last N
+        # seconds" hint reaches a request about the end of a clip, not every trim prompt.
+        if rule.get("words"):
+            applies = bool(not rule.get("tools") or present & set(rule["tools"])) and _says_any(
+                utterance, rule["words"]
+            )
+        if applies:
+            header = header.rstrip("\n") + "\n" + rule["text"]
+    return header
+
+
+def _says_any(utterance: str, words: list[str]) -> bool:
+    """Whether *utterance* holds one of *words*: a whole word, any case; a CJK word as a
+    substring (Chinese is written without spaces)."""
+    low = utterance.lower()
+    latin = set(re.findall(r"[a-z0-9]+", low))
+    unicode_words = set(re.findall(r"\w+", low))
+    for word in (w.lower() for w in words):
+        if re.match(r"[一-鿿]", word):
+            if word in low:
+                return True
+        elif word in (latin if word.isascii() else unicode_words):
+            return True
+    return False
 
 
 def render_examples_block(examples: list[dict]) -> str:
@@ -254,17 +326,18 @@ def build_prompt(
         if tool_name in _SYSTEM_TOOLS or tool_def.internal:
             continue
         schemas = tool_def.arg_schemas
-        req = ", ".join(_arg_label(a, schemas, "required") for a in tool_def.required_args)
-        opt = (
-            ", " + ", ".join(_arg_label(a, schemas, "optional") for a in tool_def.optional_args)
-            if tool_def.optional_args
-            else ""
-        )
+        # One list, so a tool with only optional args does not start with ", ".
+        labels = [_arg_label(a, schemas, "required") for a in tool_def.required_args] + [
+            _arg_label(a, schemas, "optional") for a in tool_def.optional_args
+        ]
         tool_lines.append(f"  - {tool_name}: {tool_def.description}")
-        tool_lines.append(f"    args: {req}{opt}")
+        tool_lines.append(f"    args: {', '.join(labels)}" if labels else "    args:")
 
     header = system_header if system_header is not None else _SYSTEM_HEADER
     examples = examples_block if examples_block is not None else _EXAMPLES
+    # A rendered block starts with "Examples:"; without this it ran on from the last tool line.
+    if examples and not examples.startswith("\n"):
+        examples = "\n" + examples
     history_block = _format_history(history) if history else ""
     system_msg = header + "\n".join(tool_lines) + examples + history_block
     return system_msg, user_utterance

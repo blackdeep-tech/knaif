@@ -591,3 +591,25 @@ def test_a_parity_run_under_the_new_bar_records_its_verdict(tree: Path) -> None:
     cell = load_acceptance_record("demo", tree)["layers"]["L3"]["cells"]["unknown-model"]
     assert cell["passed"] is True
     assert cell["port_bugs"] == 0 and cell["max_plan_disagreement"] == 0.05
+
+
+def test_a_declared_toolkit_is_part_of_the_evidence(tree: Path) -> None:
+    """A skill runs its toolkits' tools (`toolkits: [fs]`), so editing a toolkit can change what
+    a run produces without touching the bundle. It must stale the record like a bundle edit."""
+    (tree / "skills" / "demo" / "skill.yaml").write_text(
+        "name: demo\ntoolkits: [fs]\n", encoding="utf-8"
+    )
+    kit = tree / "toolkits" / "fs"
+    (kit / "python").mkdir(parents=True)
+    (kit / "tools.yaml").write_text("t:\n  description: x\n", encoding="utf-8")
+    (kit / "python" / "t.py").write_text("V = 1\n", encoding="utf-8")
+    before = evidence_tuple("demo", tree)["toolkits"]
+    assert before is not None
+
+    (kit / "python" / "t.py").write_text("V = 2\n", encoding="utf-8")
+    edited = evidence_tuple("demo", tree)["toolkits"]
+    assert edited != before
+
+    (tree / "toolkits" / "other").mkdir()
+    (tree / "toolkits" / "other" / "tools.yaml").write_text("u: {description: y}\n", "utf-8")
+    assert evidence_tuple("demo", tree)["toolkits"] == edited  # undeclared toolkits don't count

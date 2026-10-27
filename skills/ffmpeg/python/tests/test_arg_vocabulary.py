@@ -237,4 +237,5 @@ def test_derived_output_is_still_used_when_none_given(engine):
         None,
         {"mode": "convert", "container": "mp4"},
     )
-    assert Path(recipe["output"]).name == "clip_converted.mp4"
+    # A same-format convert never writes over its input: the first free number.
+    assert Path(recipe["output"]).name == "clip_1.mp4"

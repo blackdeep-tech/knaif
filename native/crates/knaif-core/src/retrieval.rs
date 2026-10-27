@@ -59,11 +59,26 @@ fn add_ngrams(run: &str, tokens: &mut HashSet<String>) {
 /// (1..=`CJK_MAX_NGRAM`). Mirrors Python `_query_tokens`.
 fn query_tokens(text: &str) -> HashSet<String> {
     let norm = normalize(text);
-    let mut tokens: HashSet<String> = norm
-        .replace('_', " ")
-        .split_whitespace()
-        .map(str::to_string)
-        .collect();
+    let spaced = norm.replace('_', " ");
+    let words: Vec<&str> = spaced.split_whitespace().collect();
+    let mut tokens: HashSet<String> = HashSet::new();
+    // Punctuation at a word's edge is not part of it ("1080p.", ".mkv"); a dot inside a word
+    // stays. A hyphenated word also counts as its parts ("compresse-le"). Mirrors Python
+    // `_query_tokens`.
+    for w in &words {
+        let stripped = strip_edges(w);
+        if !stripped.is_empty() {
+            tokens.insert(stripped.to_string());
+        }
+        if w.contains('-') {
+            for part in w.split('-') {
+                let part = strip_edges(part);
+                if !part.is_empty() {
+                    tokens.insert(part.to_string());
+                }
+            }
+        }
+    }
     let mut run = String::new();
     for c in norm.chars() {
         if is_cjk(c) {
@@ -77,6 +92,55 @@ fn query_tokens(text: &str) -> HashSet<String> {
         add_ngrams(&run, &mut tokens);
     }
     tokens
+}
+
+/// A word character as Python's `\w` sees it (after normalization): a letter, digit or `_`.
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_'
+}
+
+/// Drop leading and trailing non-word characters. Mirrors Python's `_EDGE_PUNCT`.
+fn strip_edges(word: &str) -> &str {
+    word.trim_matches(|c: char| !is_word_char(c))
+}
+
+/// Python's `_CJK` class: kana, CJK ideographs and extension A, compatibility ideographs,
+/// Hangul syllables.
+fn has_cjk(word: &str) -> bool {
+    word.chars().any(|c| {
+        matches!(c as u32,
+            0x3040..=0x30FF | 0x3400..=0x4DBF | 0x4E00..=0x9FFF | 0xF900..=0xFAFF | 0xAC00..=0xD7AF)
+    })
+}
+
+/// Letters two words must share to be one stem, and how many the longer may add after it.
+const STEM_MIN: usize = 6;
+const STEM_TAIL: usize = 4;
+/// A keyword this long matches a word that only adds letters to it.
+const SUFFIX_MIN_KEYWORD: usize = 5;
+
+/// True when `word` (a normalized query token) is `keyword` or an inflection of it: the word is
+/// the keyword plus up to `STEM_TAIL` letters ("compresse" for "compress"), or the two share a
+/// stem of `STEM_MIN`+ letters with at most `STEM_TAIL` after it ("comprime" and "comprimir").
+/// Alphabetic, non-CJK words only. Mirrors Python `_keyword_matches`.
+pub fn keyword_matches(word: &str, keyword: &str) -> bool {
+    if word == keyword {
+        return true;
+    }
+    let alpha = |s: &str| !s.is_empty() && s.chars().all(char::is_alphabetic);
+    if !alpha(word) || !alpha(keyword) || has_cjk(word) || has_cjk(keyword) {
+        return false;
+    }
+    let (wn, kn) = (word.chars().count(), keyword.chars().count());
+    if kn >= SUFFIX_MIN_KEYWORD && word.starts_with(keyword) {
+        return wn - kn <= STEM_TAIL;
+    }
+    let shared = word
+        .chars()
+        .zip(keyword.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
+    shared >= STEM_MIN && wn.max(kn) - shared <= STEM_TAIL
 }
 
 /// Return the top-`top_k` tools for `query` (score ≥ `min_score`) plus the always-included
@@ -113,16 +177,28 @@ pub fn retrieve_tools<'a>(
     let always: HashSet<&str> = ALWAYS_INCLUDE.iter().copied().collect();
     let mut scores: Vec<(f64, String)> = Vec::new();
     for (name, tool) in registry {
-        if always.contains(name.as_str()) || tool.internal {
+        // A tool with triggers is never ranked (see below).
+        if always.contains(name.as_str()) || tool.internal || !tool.triggers.is_empty() {
             continue;
         }
         let tool_kw: HashSet<String> = tool.keywords.iter().map(|k| normalize(k)).collect();
-        let kw_score: f64 = 3.0
-            * tokens
+        // Each word counts once per tool: its own keyword when it is one, else the inflected
+        // keyword that weighs most (fewest tools claim it), ties on the keyword. Mirrors Python.
+        let mut matched: HashSet<&String> = HashSet::new();
+        for t in &tokens {
+            if let Some(k) = tool_kw.get(t) {
+                matched.insert(k);
+                continue;
+            }
+            if let Some(k) = tool_kw
                 .iter()
-                .filter(|t| tool_kw.contains(*t))
-                .map(|k| 1.0 / df[k] as f64)
-                .sum::<f64>();
+                .filter(|k| keyword_matches(t, k))
+                .min_by(|a, b| df[*a].cmp(&df[*b]).then_with(|| a.cmp(b)))
+            {
+                matched.insert(k);
+            }
+        }
+        let kw_score: f64 = 3.0 * matched.iter().map(|k| 1.0 / df[*k] as f64).sum::<f64>();
 
         let args = tool
             .required_args
@@ -155,6 +231,18 @@ pub fn retrieve_tools<'a>(
             }
         }
     }
+    // A tool with triggers follows the ranked tools when one of them is in the query, and is
+    // absent otherwise, so a request without one sees exactly the tools it did before the tool
+    // existed. Python adds them in registry order; both registries iterate by name.
+    for (name, tool) in registry {
+        if !tool.triggers.is_empty()
+            && !tool.internal
+            && crate::registry::triggered(query, &tool.triggers)
+            && !selected.iter().any(|(n, _)| n == name)
+        {
+            selected.push((name.clone(), tool));
+        }
+    }
     for name in ALWAYS_INCLUDE {
         if let Some(t) = registry.get(*name) {
             selected.push(((*name).to_string(), t));
@@ -171,6 +259,16 @@ mod tests {
 
     fn names(result: &RetrievedTools<'_>) -> Vec<String> {
         result.iter().map(|(n, _)| n.clone()).collect()
+    }
+
+    #[test]
+    fn a_short_word_is_not_a_stem_of_a_longer_keyword() {
+        // Twin of Python's test_a_short_word_is_not_a_stem_of_a_longer_keyword.
+        assert!(!keyword_matches("extra", "extract"));
+        assert!(keyword_matches("extracts", "extract"));
+        assert!(keyword_matches("comprime", "comprimir"));
+        assert!(!keyword_matches("convert", "conversation"));
+        assert!(!keyword_matches("poster", "post"));
     }
 
     #[test]

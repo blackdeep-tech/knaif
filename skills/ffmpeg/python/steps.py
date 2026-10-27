@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import re
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from knaif.handler_api import HandlerContext
-from knaif.tool import Step
+from knaif.tool import Handler
 
 from . import _deps
 from ._engine import (
     _CRF_RE,
+    DEFAULT_NAME,
+    PER_FILE_NAME,
     _build_one_recipe,
     _crf_to_profile_name,
     _dummy_probe,
@@ -25,9 +29,11 @@ from ._engine import (
     _trim_past_end,
     disambiguate_outputs,
 )
+from ._pieces import plan_pieces
+from ._reporting import ffmpeg_failure
 
 
-def require_streams(output: str | Path | None) -> None:
+def require_streams(output: str | Path | None, ctx: HandlerContext) -> None:
     """Fail when ffmpeg exited 0 but wrote a file with no audio and no video in it.
 
     ffmpeg's exit code is not evidence of output: a trim past the end exits 0 with a 185-byte
@@ -37,7 +43,7 @@ def require_streams(output: str | Path | None) -> None:
     if not output or not Path(output).is_file():
         return
     try:
-        probe = _deps.run_ffprobe(Path(output))
+        probe = _deps.run_ffprobe(Path(output), ctx)
     except _deps.FFmpegNotAvailable:
         raise
     except Exception:  # noqa: BLE001 — unprobeable is a different question
@@ -50,12 +56,74 @@ def require_streams(output: str | Path | None) -> None:
         )
 
 
+_FFMPEG_CONTEXT = re.compile(r"^\[[^\]]* @ (?:0x)?[0-9a-fA-F]+\]\s*")
+
+
+def _probe_reason(error: str, path: Path) -> str:
+    """ffprobe's first line of complaint, without the path (it names the user's folders) or
+    ffmpeg's ``[demuxer @ address]`` prefix: ``moov atom not found``."""
+    text = error.removeprefix(f"ffprobe failed for {path}: ")
+    for line in text.splitlines():
+        line = _FFMPEG_CONTEXT.sub("", line.strip()).removeprefix(f"{path}: ")
+        if line:
+            return line
+    return error
+
+
+def _finished(ctx: Any, file: str, failure: str | None) -> None:
+    """Tell core how one file of a batch ended (``ctx.file_finished``), when it is listening."""
+    report = getattr(ctx, "file_finished", None)
+    if report is not None:
+        report(file, failure)
+
+
+def _show(ctx: Any, item: dict[str, Any]) -> bool:
+    """Show a result line now (``ctx.show``), when the caller shows lines live."""
+    show = getattr(ctx, "show", None)
+    return bool(show(item)) if show is not None else False
+
+
+def run_and_commit(command: list[str], output: str | None, ctx: HandlerContext) -> dict[str, Any]:
+    """Run one ffmpeg command so that only a verified output reaches the user's folder.
+
+    The command is rendered with the final path as its last argument (what a dry run shows and
+    the eval replays). For real it writes to a staged path in the run scratch instead
+    (`stage_output`), is checked (`require_streams`, then `commit_output`: not empty), and only
+    then moves into place. A non-zero exit or a failed check leaves the user's folder as it
+    was; the staged file goes with the scratch when the run ends.
+
+    An output that is itself in the scratch (a routed chain intermediate) is written directly:
+    it is already out of the user's view. So is any output when there is no scratch (a bare
+    caller), which keeps the old direct write.
+    """
+    staged: str | None = None
+    work_dir = getattr(ctx, "work_dir", None)
+    if output and command and command[-1] == output and work_dir is not None:
+        if Path(output).resolve().is_relative_to(Path(work_dir).resolve()):
+            ctx.call_tool("ensure_parent", {"path": output})
+        else:
+            staged = ctx.call_tool("stage_output", {"path": output})["staged"]
+            command = [*command[:-1], staged]
+    elif output:
+        # A destination directory (`videos_hevc/clip.mkv`) need not exist yet, and ffmpeg
+        # does not create one. `ensure_parent` makes the RESOLVED parent: the spelling
+        # `../escaped/../sb/out.mp4` passes containment, but walking it would create
+        # `../escaped` on POSIX first.
+        ctx.call_tool("ensure_parent", {"path": output})
+    res = _deps.run_ffmpeg(command, ctx)
+    if res["returncode"] == 0:
+        require_streams(staged or output, ctx)
+        if staged:
+            ctx.call_tool("commit_output", {"staged": staged, "path": output})
+    return res
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Step handlers.
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-class InspectMediaStep(Step):
+class InspectMediaStep(Handler):
     name = "inspect_media"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -79,7 +147,7 @@ class InspectMediaStep(Step):
                     errors.append({"file": str(path), "error": "not found"})
                 continue
             try:
-                raw = _deps.run_ffprobe(path)
+                raw = _deps.run_ffprobe(path, ctx)
             except _deps.FFmpegNotAvailable:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -89,10 +157,14 @@ class InspectMediaStep(Step):
                     errors.append({"file": str(path), "error": str(exc)})
                 continue
             probes.append(_summarise_probe(path, raw))
+        # A file that cannot be read is one failed file of the batch; core counts it, and
+        # ignores the report when it is the only file (its error then takes the usual path).
+        for e in errors:
+            _finished(ctx, e["file"], _probe_reason(e["error"], Path(e["file"])))
         return {"count": len(probes), "probes": probes, "errors": errors}
 
 
-class LoadPlatformProfileStep(Step):
+class LoadPlatformProfileStep(Handler):
     name = "load_platform_profile"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -103,7 +175,7 @@ class LoadPlatformProfileStep(Step):
         return _load_yaml(path)
 
 
-class LoadQualityProfileStep(Step):
+class LoadQualityProfileStep(Handler):
     name = "load_quality_profile"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -124,7 +196,41 @@ class LoadQualityProfileStep(Step):
         return _load_yaml(path)
 
 
-class BuildRecipesStep(Step):
+def _piece_recipes(
+    probes: list[dict[str, Any]],
+    quality_profile: dict[str, Any] | None,
+    options: dict[str, Any],
+    ctx: HandlerContext,
+) -> dict[str, Any]:
+    """One recipe per piece of a tool that writes many files from one (`_pieces`): the same
+    pieces `FFmpegSkill.planned_outputs` promised core before the run."""
+    base = Path(ctx.sandbox if ctx.sandbox is not None else ctx.root)
+    recipes = []
+    for probe in probes:
+        pieces = plan_pieces(
+            options["tool"], options["args"], float(probe.get("duration") or 0.0), probe.get("fps")
+        )
+        for out, piece in (pieces.items if pieces else []):
+            piece = dict(piece)
+            path = Path(out)
+            piece["output_path"] = str(path if path.is_absolute() else base / path)
+            recipes.append(
+                _build_one_recipe(
+                    probe,
+                    None,
+                    quality_profile,
+                    piece,
+                    sandbox=ctx.sandbox,
+                    work_dir=getattr(ctx, "work_dir", None),
+                    home=ctx.sandbox if ctx.sandbox is not None else getattr(ctx, "root", None),
+                )
+            )
+            # A piece's name is the one core was promised before the run; it never moves.
+            recipes[-1].pop(DEFAULT_NAME, None)
+    return {"count": len(recipes), "recipes": recipes}
+
+
+class BuildRecipesStep(Handler):
     name = "build_recipes"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -146,6 +252,9 @@ class BuildRecipesStep(Step):
         # `strip_audio` both succeed on a real silent file (ffmpeg treats them as no-ops), so
         # skipping there would drop work that currently completes.
         skipped: list[str] = []
+        if options.get("mode") == "pieces":
+            return _piece_recipes(probes, quality_profile, options, ctx)
+
         if options.get("mode") == "extract_audio":
             kept = []
             for p in probes:
@@ -153,7 +262,10 @@ class BuildRecipesStep(Step):
                     skipped.append(str(p.get("file", "")))
                 else:
                     kept.append(p)
-            if not kept:
+            if kept:
+                for f in skipped:
+                    _finished(ctx, f, "has no audio track to extract")
+            else:
                 names = ", ".join(Path(f).name for f in skipped) or "the input"
                 raise ValueError(
                     f"No audio to extract: {names} has no audio track."
@@ -178,14 +290,31 @@ class BuildRecipesStep(Step):
             if reason:
                 raise ValueError(reason)
 
+        # More than one file: a literal output name names none of them.
+        per_file = {**options, PER_FILE_NAME: True} if len(probes) > 1 else options
         recipes = [
-            _build_one_recipe(p, platform_profile, quality_profile, options, sandbox=ctx.sandbox)
+            _build_one_recipe(
+                p,
+                platform_profile,
+                quality_profile,
+                per_file,
+                sandbox=ctx.sandbox,
+                work_dir=getattr(ctx, "work_dir", None),
+                home=ctx.sandbox if ctx.sandbox is not None else getattr(ctx, "root", None),
+            )
             for p in probes
         ]
+        recipes, already = _without_copies_of_themselves(recipes, options)
         # Only the batch knows whether two inputs land on one output path, and every command
         # carries -y, so an unresolved clash is a silent overwrite rather than an error.
         recipes = disambiguate_outputs(recipes)
         out = {"count": len(recipes), "recipes": recipes}
+        if already:
+            # Shown when the step runs for real; a dry run (the rehearsal too) leaves it to the
+            # step's report, so it is said once.
+            live = not (ctx.dry_run or ctx.skip_execution)
+            if not (live and _show(ctx, {"kind": "note", "message": already})):
+                out["already"] = already
         # Returning fewer files than asked for without saying why reads as a tool that lost a
         # file. Only present when something was actually dropped.
         if skipped:
@@ -193,7 +322,36 @@ class BuildRecipesStep(Step):
         return out
 
 
-class RenderPreviewCommandStep(Step):
+def _without_copies_of_themselves(
+    recipes: list[dict[str, Any]], options: dict[str, Any]
+) -> tuple[list[dict[str, Any]], str | None]:
+    """*recipes* without the files of a batch convert that would only be copied, as they are,
+    beside themselves: an mp4 among "every video to mp4" became `concert_1.mp4` (owner,
+    2026-10-25). Into another folder the copy is work, and one file the user names keeps
+    its numbered copy. With the note to print, or ``None``. Native `copies_of_themselves`.
+    """
+    if options.get("mode") != "convert" or len(recipes) < 2:
+        return recipes, None
+    kept, skipped = [], []
+    for r in recipes:
+        src, dst = Path(str(r.get("input", ""))), Path(str(r.get("output", "")))
+        # A Windows path compares without case, as the folder does.
+        same_place = src.parent.absolute() == dst.parent.absolute()
+        if r.get("remux") and src.suffix.lower() == dst.suffix.lower() and same_place:
+            skipped.append(src.name)
+        else:
+            kept.append(r)
+    if not skipped:
+        return recipes, None
+    ext = Path(str(recipes[0].get("output", ""))).suffix.lstrip(".").lower()
+    names = ", ".join(skipped)
+    if not kept:
+        verb = "is" if len(skipped) == 1 else "are"
+        raise ValueError(f"Nothing to convert: {names} {verb} already {ext}.")
+    return kept, f"note: skipped {names} (already {ext})"
+
+
+class RenderPreviewCommandStep(Handler):
     name = "render_preview_command"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -216,7 +374,7 @@ class RenderPreviewCommandStep(Step):
         preview_info = {
             "start": start,
             "duration": sample_seconds,
-            "output_override": _preview_output_for(recipe),
+            "output_override": _preview_output_for(recipe, getattr(ctx, "work_dir", None)),
         }
         command = _render_command(recipe, preview=preview_info)
         return {
@@ -227,7 +385,7 @@ class RenderPreviewCommandStep(Step):
         }
 
 
-class RunPreviewStep(Step):
+class RunPreviewStep(Handler):
     name = "run_preview"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -244,7 +402,15 @@ class RunPreviewStep(Step):
         if ctx.dry_run or ctx.skip_execution:
             return {"mode": "dry_run", "command": command, "preview_output": preview_output}
 
-        result = _deps.run_ffmpeg(command)
+        # A clip only makes sense if someone looks at it (owner, 2026-10-10). Without an
+        # interactive confirmer the run acts without asking, so none is rendered and the
+        # confirmation that follows takes `confirmed`. Native has never rendered one here.
+        if getattr(ctx, "confirmer", None) is None:
+            return {"mode": "skipped", "command": command, "preview_output": None}
+
+        if preview_output:
+            ctx.call_tool("ensure_parent", {"path": preview_output})
+        result = _deps.run_ffmpeg(command, ctx)
         return {
             "mode": "execute",
             "command": command,
@@ -254,11 +420,13 @@ class RunPreviewStep(Step):
         }
 
 
-class VerifyPreviewStep(Step):
+class VerifyPreviewStep(Handler):
     name = "verify_preview"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         output_arg = args["preview_output"]
+        if isinstance(output_arg, dict) and output_arg.get("mode") == "skipped":
+            return {"verified": True, "skipped": True, "reason": "no one is asked, no clip made"}
         if isinstance(output_arg, dict):
             path_str = output_arg.get("preview_output") or output_arg.get("output")
         else:
@@ -274,7 +442,7 @@ class VerifyPreviewStep(Step):
             }
 
         try:
-            probe = _deps.run_ffprobe(path)
+            probe = _deps.run_ffprobe(path, ctx)
         except _deps.FFmpegNotAvailable:
             raise
         except Exception as exc:  # noqa: BLE001
@@ -294,7 +462,7 @@ class VerifyPreviewStep(Step):
         }
 
 
-class RenderBatchCommandsStep(Step):
+class RenderBatchCommandsStep(Handler):
     name = "render_batch_commands"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -310,7 +478,7 @@ class RenderBatchCommandsStep(Step):
         return {"count": len(commands), "commands": commands}
 
 
-class RunBatchStep(Step):
+class RunBatchStep(Handler):
     name = "run_batch"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -332,22 +500,34 @@ class RunBatchStep(Step):
                 )
             return {"mode": "dry_run", "count": len(outputs), "outputs": outputs}
 
+        # Over many files, one that fails does not stop the others: each file's end goes to
+        # core (`ctx.file_finished`), which prints a failure as it happens and counts the batch
+        # One command alone keeps its error, as before.
+        many = len(commands) > 1
         for c in commands:
-            # An `output` that named a destination directory (`videos_hevc/clip.mkv`) has a
-            # parent that need not exist yet; ffmpeg does not create one and fails on open.
-            # The path is already sandbox-checked by the engine.
             out = c.get("output")
-            if out:
-                # Create the RESOLVED parent. The stored path keeps the spelling the plan
-                # supplied, so `../escaped/../sb/out.mp4` passes containment (it resolves
-                # inside) while `os.makedirs` on its unnormalised parent walks through
-                # `../escaped` and creates it - on POSIX, which builds each component in
-                # turn. Windows normalises `..` lexically and does not, which is exactly why
-                # this needs to be right rather than observed.
-                Path(out).resolve().parent.mkdir(parents=True, exist_ok=True)
-            res = _deps.run_ffmpeg(c["command"])
-            if res["returncode"] == 0:
-                require_streams(out)
+            # Each command as it starts and its file as it is done, as native prints them; the
+            # step's report then leaves out what was shown.
+            command = [str(t) for t in c.get("command") or []]
+            shown = _show(ctx, {"kind": "command", "message": " ".join(command), "argv": command})
+            started = time.perf_counter()
+            try:
+                res = run_and_commit(c["command"], out, ctx)
+                failure = (
+                    None
+                    if res["returncode"] == 0
+                    else ffmpeg_failure(res["returncode"], res["stderr"])
+                )
+            except _deps.FFmpegNotAvailable:
+                raise
+            except Exception as exc:  # noqa: BLE001 - one file's failure, reported below
+                if not many:
+                    raise
+                res = {"returncode": 1, "stderr": str(exc)}
+                failure = str(exc)
+            seconds = time.perf_counter() - started
+            if shown and failure is None and out:
+                _show(ctx, {"kind": "output", "message": str(out), "seconds": seconds})
             outputs.append(
                 {
                     "mode": "execute",
@@ -355,12 +535,18 @@ class RunBatchStep(Step):
                     "output": c.get("output"),
                     "returncode": res["returncode"],
                     "stderr_tail": res["stderr"][-2000:] if res["stderr"] else "",
+                    # What ran and how long: the CLI shows both, as native does.
+                    "command": c.get("command"),
+                    "seconds": seconds,
+                    # Already shown as it happened: the report leaves its lines out.
+                    "shown": shown,
                 }
             )
+            _finished(ctx, str(c.get("input") or out or ""), failure)
         return {"mode": "execute", "count": len(outputs), "outputs": outputs}
 
 
-class VerifyOutputsStep(Step):
+class VerifyOutputsStep(Handler):
     name = "verify_outputs"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -386,7 +572,7 @@ class VerifyOutputsStep(Step):
                 )
                 continue
             try:
-                probe = _deps.run_ffprobe(path)
+                probe = _deps.run_ffprobe(path, ctx)
             except _deps.FFmpegNotAvailable:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -397,7 +583,7 @@ class VerifyOutputsStep(Step):
         return {"count": len(verifications), "verifications": verifications}
 
 
-class GenerateReportStep(Step):
+class GenerateReportStep(Handler):
     name = "generate_report"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:

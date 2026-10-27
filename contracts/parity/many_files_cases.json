@@ -1,0 +1,153 @@
+{
+  "_comment": "Whether a request asks for many files (owner, 2026-10-20), which decides if the per-file batch rule and its examples (`when: many` in prompt.yaml) join its prompt. The clarify gate's own test: a batch word, a plural file word or a glob in the request (its word lists are pinned by nl_clarify_gate_cases.json). What names a place is left out before testing: a URL (its host can read `files.`), and, when the request names a file (a URL names one too), a known folder after in/into/to/on/onto/from, which is then where that file goes (`put clip.mov in my Downloads folder`, `to Documents`); with no file named, the folder may be the batch (`everything in my Videos folder`). A file is named by a name with an extension holding a letter (`clip.mp4`, `x.3gp`); a codec or a number (`H.264`, `1.25`) names none (2026-10-22). A name the request gives an output (\"call it preview.gif\", \"save them as out.mp4\", \"as audio.mp3\", \"into c.mp4\", \"als\", \"como\", \"comme\", \"като\", \"保存为\") is not a file it is about (2026-10-23). A request that names a file is about that file: a batch word alone (`every page of sample.pdf`, `at all`, `every time`) does not make it ask for many; a glob or a plural file word still does. Python `knaif.nl_clarify_gate.asks_for_many_files`, Rust `knaif_core::nl_clarify_gate::asks_for_many_files`.",
+  "cases": [
+    {
+      "utterance": "convert all the .mov files here to mp4",
+      "many": true
+    },
+    {
+      "utterance": "resize every video in this folder to 720p",
+      "many": true
+    },
+    {
+      "utterance": "rotate the videos 90 degrees",
+      "many": true
+    },
+    {
+      "utterance": "rotate *.mkv by 90 degrees",
+      "many": true
+    },
+    {
+      "utterance": "把这个文件夹里的每个视频缩放到720p",
+      "many": true
+    },
+    {
+      "utterance": "конвертирай всички .mov файлове тук в mp4",
+      "many": true
+    },
+    {
+      "utterance": "convert clip.mov to mp4",
+      "many": false
+    },
+    {
+      "utterance": "compress report.pdf and add page numbers",
+      "many": false
+    },
+    {
+      "utterance": "convert https://files.knaif.test/ffmpeg/holiday.mov to mp4",
+      "many": false
+    },
+    {
+      "utterance": "put an mp4 version of clip.mov in my Downloads folder",
+      "many": false
+    },
+    {
+      "utterance": "make a webm of clip.mp4 in my Downloads folder and beep when it's finished",
+      "many": false
+    },
+    {
+      "utterance": "put a markdown version of sample.txt in Documents",
+      "many": false
+    },
+    {
+      "utterance": "turn sample.txt into markdown, output to Documents",
+      "many": false
+    },
+    {
+      "utterance": "extract the audio from clip.mp4 as mp3 into my Music folder",
+      "many": false
+    },
+    {
+      "utterance": "convert everything in my Videos folder to mp4",
+      "many": true
+    },
+    {
+      "utterance": "convert the clips in my Videos folder and save them to Downloads",
+      "many": true
+    },
+    {
+      "utterance": "download https://files.knaif.test/a.mov and https://files.knaif.test/b.mov and join them",
+      "many": false
+    },
+    {
+      "utterance": "convert all the videos at https://example.com/files/ to mp4",
+      "many": true
+    },
+    {
+      "utterance": "convert clip.mov to mp4 and save it in my Videos folder",
+      "many": false
+    },
+    {
+      "utterance": "resize the videos in my Videos folder to 720p",
+      "many": true
+    },
+    {
+      "utterance": "rotate every page of sample.pdf clockwise",
+      "many": false
+    },
+    {
+      "utterance": "I need to know whether sample.pdf mentions Delta at all before I forward it",
+      "many": false
+    },
+    {
+      "utterance": "grab every 10th frame from clip.mp4 as thumbnails",
+      "many": false
+    },
+    {
+      "utterance": "convert intro.mp4 and all the other videos here to mov",
+      "many": true
+    },
+    {
+      "utterance": "join intro.mp4 with *.mp4",
+      "many": true
+    },
+    {
+      "utterance": "turn the video at https://files.knaif.test/ffmpeg/holiday.mov into an mp4 in my Downloads folder and beep",
+      "many": false
+    },
+    {
+      "utterance": "把report.pdf拆分成每页一个文件，并在每个上面盖上DRAFT",
+      "many": false
+    },
+    {
+      "utterance": "批量转换所有视频为CRF 26的H.264 MP4",
+      "many": true
+    },
+    {
+      "utterance": "batch convert everything to H.264",
+      "many": true
+    },
+    {
+      "utterance": "speed up clip.mp4 by 1.25",
+      "many": false
+    },
+    {
+      "utterance": "make a gif of every video and call it preview.gif",
+      "many": true
+    },
+    {
+      "utterance": "extract the audio from all videos as audio.mp3",
+      "many": true
+    },
+    {
+      "utterance": "convert every video to mp4 and save them as out.mp4",
+      "many": true
+    },
+    {
+      "utterance": "konvertiere alle Videos in mp4 und speichere sie als out.mp4",
+      "many": true
+    },
+    {
+      "utterance": "把所有视频转换成gif并保存为preview.gif",
+      "many": true
+    },
+    {
+      "utterance": "convert clip.mov to mp4 and call it holiday.mp4",
+      "many": false
+    },
+    {
+      "utterance": "merge a.mp4 and b.mp4 into c.mp4",
+      "many": false
+    }
+  ]
+}

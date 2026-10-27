@@ -58,15 +58,43 @@ pub fn extract_pdf_text(doc: &Document, pages: &[i64]) -> anyhow::Result<Vec<Pag
     let mut out = Vec::with_capacity(pages.len());
     for &p in pages {
         let text = doc.extract_text(&[p as u32]).unwrap_or_default();
+        // Without the line breaks at the page's edges, so a match span counts from the page's
+        // first character on both runtimes (owner, 2026-10-24).
+        let text = text.trim_matches(['\r', '\n']).to_string();
         out.push(PageText { page: p, text });
     }
     Ok(out)
+}
+
+/// A document's text as one string: each page without the line breaks at its edges, pages one
+/// blank line apart, one `\n` at the end (owner, 2026-10-24). Python `_document_text`.
+pub fn document_text(records: &[PageText]) -> String {
+    let pages: Vec<&str> = records
+        .iter()
+        .map(|r| r.text.trim_matches(['\r', '\n']))
+        .collect();
+    let text = pages.join("\n\n");
+    if text.is_empty() {
+        text
+    } else {
+        text + "\n"
+    }
 }
 
 /// Extract text records from a document by path. PDF pages honor `pages` (a page spec); plain-text
 /// files (`.txt`/`.md`) are read as a single page-1 record. Other formats (image OCR, office) are
 /// deferred and error here rather than silently returning nothing.
 pub fn extract_text(path: &Path, pages: Option<&str>) -> anyhow::Result<Vec<PageText>> {
+    extract_text_with(path, pages, false)
+}
+
+/// [`extract_text`], reading a PDF by OCR when `ocr` is asked for or no selected page has text (a
+/// scan), as Python's `_extract_text_records` does.
+pub fn extract_text_with(
+    path: &Path,
+    pages: Option<&str>,
+    ocr: bool,
+) -> anyhow::Result<Vec<PageText>> {
     let suffix = suffix_of(path);
     if TEXT_SUFFIXES.contains(&suffix.as_str()) {
         let text = std::fs::read_to_string(path)
@@ -77,7 +105,11 @@ pub fn extract_text(path: &Path, pages: Option<&str>) -> anyhow::Result<Vec<Page
         let doc = pdf::load(path)?;
         let total = pdf::page_count(&doc) as i64;
         let selected = pdf::parse_pages(pages, total, true)?;
-        return extract_pdf_text(&doc, &selected);
+        let records = extract_pdf_text(&doc, &selected)?;
+        if ocr || records.iter().all(|r| r.text.trim().is_empty()) {
+            return crate::ocr::pdf_text_records(path, &selected, "eng");
+        }
+        return Ok(records);
     }
     if OFFICE_SUFFIXES.contains(&suffix.as_str()) {
         return crate::office::extract_office_text(path);
@@ -142,6 +174,32 @@ fn ceil_char_boundary(s: &str, mut i: usize) -> usize {
         i += 1;
     }
     i
+}
+
+/// How many lines of a saved text the terminal shows.
+pub const PREVIEW_LINES: usize = 5;
+
+/// The preview of a saved text: its first five non-empty lines, without trailing spaces, then
+/// "… N more lines" when there are more; "(no text)" when there is none. Python
+/// `skills.documents.python.handlers.text_preview`; `contracts/parity/text_preview_cases.json`.
+pub fn text_preview(text: &str) -> Vec<String> {
+    let lines: Vec<String> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.trim_end().to_string())
+        .collect();
+    if lines.is_empty() {
+        return vec!["(no text)".to_string()];
+    }
+    let mut shown: Vec<String> = lines.iter().take(PREVIEW_LINES).cloned().collect();
+    let rest = lines.len().saturating_sub(PREVIEW_LINES);
+    if rest > 0 {
+        shown.push(format!(
+            "… {rest} more line{}",
+            if rest > 1 { "s" } else { "" }
+        ));
+    }
+    shown
 }
 
 /// Inspect a document: format, size, and (for PDFs) page count / encryption / text-layer presence.
@@ -221,6 +279,32 @@ mod tests {
         );
         assert!(records[1].text.contains("Beta"));
         assert!(records[2].text.contains("Gamma"));
+    }
+
+    #[test]
+    fn a_pdf_page_has_no_line_breaks_at_its_edges() {
+        // Owner, 2026-10-24: lopdf put a line break before each page's text, so every
+        // span was one higher than Python's.
+        let path = write_temp(
+            "edges.pdf",
+            &make_text_pdf(&["Alpha page one", "Beta page two"]),
+        );
+        let records = extract_text(&path, None).unwrap();
+        let texts: Vec<&str> = records.iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(texts, ["Alpha page one", "Beta page two"]);
+        let hits = find(&records, "Beta", false, true).unwrap();
+        assert_eq!((hits[0].page, hits[0].span), (2, (0, 4)));
+    }
+
+    #[test]
+    fn document_text_puts_pages_one_blank_line_apart() {
+        let page = |page: i64, text: &str| PageText {
+            page,
+            text: text.into(),
+        };
+        let records = [page(1, "\nAlpha\n"), page(2, "Beta\r\n"), page(3, "Gamma")];
+        assert_eq!(document_text(&records), "Alpha\n\nBeta\n\nGamma\n");
+        assert_eq!(document_text(&[]), "");
     }
 
     #[test]

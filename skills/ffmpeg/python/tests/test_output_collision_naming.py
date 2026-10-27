@@ -1,6 +1,6 @@
 """The replacement name must itself be free, or the fix creates the bug it removes.
 
-Renaming ``clip.mp4`` to an unexamined ``clip_converted.mp4`` is not safer than not renaming
+Renaming ``clip.mp4`` to an unexamined ``clip_1.mp4`` is not safer than not renaming
 at all: every rendered command carries ``-y``, so the fallback can destroy a file that is
 already on disk, another input of the same plan, or a name a later step has reserved for its
 own output. These tests walk each of those three, plus the reporting — a rename the user is
@@ -45,19 +45,17 @@ def _renamed(plan: list[dict], sandbox: Path) -> tuple[str, list[dict[str, str]]
 def test_a_self_overwrite_is_renamed_at_all(tmp_path: Path) -> None:
     (tmp_path / "clip.mp4").write_bytes(b"")
     out, subs = _renamed([_convert("clip.mp4", "clip.mp4")], tmp_path)
-    assert out == "clip_converted.mp4"
-    assert subs == [
-        {"step": "convert_video", "requested": "clip.mp4", "used": "clip_converted.mp4"}
-    ]
+    assert out == "clip_1.mp4"
+    assert subs == [{"step": "convert_video", "requested": "clip.mp4", "used": "clip_1.mp4"}]
 
 
 def test_the_fallback_skips_a_file_that_already_exists(tmp_path: Path) -> None:
     """`-y` would have destroyed it silently, and the user never named it."""
     (tmp_path / "clip.mp4").write_bytes(b"")
-    (tmp_path / "clip_converted.mp4").write_bytes(b"precious")
+    (tmp_path / "clip_1.mp4").write_bytes(b"precious")
     out, _ = _renamed([_convert("clip.mp4", "clip.mp4")], tmp_path)
-    assert out == "clip_converted_2.mp4"
-    assert (tmp_path / "clip_converted.mp4").read_bytes() == b"precious"
+    assert out == "clip_2.mp4"
+    assert (tmp_path / "clip_1.mp4").read_bytes() == b"precious"
 
 
 def test_the_fallback_skips_another_input_of_the_same_plan(tmp_path: Path) -> None:
@@ -65,12 +63,12 @@ def test_the_fallback_skips_another_input_of_the_same_plan(tmp_path: Path) -> No
     (tmp_path / "clip.mp4").write_bytes(b"")
     plan = [
         _convert("clip.mp4", "clip.mp4"),
-        {"tool": "create_thumbnail", "args": {"inputs": ["clip_converted.mp4"]}},
+        {"tool": "create_thumbnail", "args": {"inputs": ["clip_1.mp4"]}},
     ]
     plan, _ = rebind_colliding_outputs(plan, tmp_path)
-    assert plan[0]["args"]["output"] == "clip_converted_2.mp4"
+    assert plan[0]["args"]["output"] == "clip_2.mp4"
     # ...and the later step is left alone: it named a file the producer never wrote.
-    assert plan[1]["args"]["inputs"] == ["clip_converted.mp4"]
+    assert plan[1]["args"]["inputs"] == ["clip_1.mp4"]
 
 
 def test_the_fallback_skips_an_output_a_later_step_reserved(tmp_path: Path) -> None:
@@ -78,11 +76,11 @@ def test_the_fallback_skips_an_output_a_later_step_reserved(tmp_path: Path) -> N
     (tmp_path / "other.mp4").write_bytes(b"")
     plan = [
         _convert("clip.mp4", "clip.mp4"),
-        _convert("other.mp4", "clip_converted.mp4"),
+        _convert("other.mp4", "clip_1.mp4"),
     ]
     plan, _ = rebind_colliding_outputs(plan, tmp_path)
-    assert plan[0]["args"]["output"] == "clip_converted_2.mp4"
-    assert plan[1]["args"]["output"] == "clip_converted.mp4"
+    assert plan[0]["args"]["output"] == "clip_2.mp4"
+    assert plan[1]["args"]["output"] == "clip_1.mp4"
 
 
 def test_the_walk_is_deterministic(tmp_path: Path) -> None:
@@ -90,7 +88,7 @@ def test_the_walk_is_deterministic(tmp_path: Path) -> None:
     for _ in range(3):
         (tmp_path / "clip.mp4").write_bytes(b"")
         out, _ = _renamed([_convert("clip.mp4", "clip.mp4")], tmp_path)
-        assert out == "clip_converted.mp4"
+        assert out == "clip_1.mp4"
 
 
 def test_an_output_naming_a_different_existing_file_is_left_alone(tmp_path: Path) -> None:
@@ -123,7 +121,7 @@ def test_the_collision_is_seen_through_path_spelling(tmp_path: Path, spelling: s
     (tmp_path / "clip.mp4").write_bytes(b"")
     out, subs = _renamed([_convert("clip.mp4", spelling)], tmp_path)
     assert subs, f"{spelling!r} was not recognised as the step's own input"
-    assert Path(out).name == "clip_converted.mp4"
+    assert Path(out).name == "clip_1.mp4"
 
 
 # -- the shapes the first implementation got wrong -----------------------------
@@ -164,7 +162,7 @@ def test_a_consumer_in_a_different_directory_is_not_rebound(tmp_path: Path) -> N
     (tmp_path / "a" / "clip.mp4").write_bytes(b"")
     (tmp_path / "b" / "clip.mp4").write_bytes(b"")
     plan = [
-        _convert("a/clip.mp4", "clip.mp4"),
+        _convert("a/clip.mp4", "a/clip.mp4"),
         {"tool": "create_thumbnail", "args": {"inputs": ["b/clip.mp4"]}},
     ]
     plan, subs = rebind_colliding_outputs(plan, tmp_path)
@@ -176,11 +174,11 @@ def test_a_consumer_in_the_same_directory_is_rebound_and_keeps_it(tmp_path: Path
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "clip.mp4").write_bytes(b"")
     plan = [
-        _convert("a/clip.mp4", "clip.mp4"),
+        _convert("a/clip.mp4", "a/clip.mp4"),
         {"tool": "create_thumbnail", "args": {"inputs": ["a/clip.mp4"]}},
     ]
     plan, _ = rebind_colliding_outputs(plan, tmp_path)
-    assert plan[1]["args"]["inputs"] == ["a/clip_converted.mp4"], "the directory was dropped"
+    assert plan[1]["args"]["inputs"] == ["a/clip_1.mp4"], "the directory was dropped"
 
 
 def test_the_disk_check_runs_in_the_directory_the_file_lands_in(tmp_path: Path) -> None:
@@ -190,23 +188,10 @@ def test_the_disk_check_runs_in_the_directory_the_file_lands_in(tmp_path: Path) 
     """
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "clip.mp4").write_bytes(b"")
-    (tmp_path / "a" / "clip_converted.mp4").write_bytes(b"precious")
-    plan, _ = rebind_colliding_outputs([_convert("a/clip.mp4", "clip.mp4")], tmp_path)
-    assert plan[0]["args"]["output"] == "clip_converted_2.mp4"
-    assert (tmp_path / "a" / "clip_converted.mp4").read_bytes() == b"precious"
-
-
-def test_an_output_that_lands_elsewhere_is_not_a_self_overwrite(tmp_path: Path) -> None:
-    """An output resolves against the INPUT'S PARENT, not the sandbox — so it can escape it.
-
-    `inputs=["a/clip.mp4"], output="a/clip.mp4"` renders to `<sandbox>/a/a/clip.mp4`, which
-    is not the input at all. Treating the two as one base would invent a collision here.
-    """
-    (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "clip.mp4").write_bytes(b"")
-    plan, subs = rebind_colliding_outputs([_convert("a/clip.mp4", "a/clip.mp4")], tmp_path)
-    assert subs == []
-    assert plan[0]["args"]["output"] == "a/clip.mp4"
+    (tmp_path / "a" / "clip_1.mp4").write_bytes(b"precious")
+    plan, _ = rebind_colliding_outputs([_convert("a/clip.mp4", "a/clip.mp4")], tmp_path)
+    assert plan[0]["args"]["output"] == "a/clip_2.mp4"
+    assert (tmp_path / "a" / "clip_1.mp4").read_bytes() == b"precious"
 
 
 # ── the base an output resolves against is per-tool, not universal ───────────
@@ -253,15 +238,21 @@ def test_concat_output_that_collides_with_nothing_is_left_alone(tmp_path: Path) 
     assert _concat(tmp_path, inputs=["sub/a.mp4", "sub/b.mp4"], output="a.mp4") == "a.mp4"
 
 
-def test_a_per_file_mode_still_resolves_against_its_input(tmp_path: Path) -> None:
-    """The control: convert_video's output IS relative to its input's directory."""
+def test_a_per_file_mode_resolves_against_the_working_folder_too(tmp_path: Path) -> None:
+    """Every tool's relative output is relative to the working folder (owner, 2026-10-24):
+    `sub/a.mp4 -> a.mp4` writes `<sandbox>/a.mp4`, which is no input, so it keeps its name."""
     _two_inputs(tmp_path)
     plan = [{"tool": "convert_video", "args": {"inputs": ["sub/a.mp4"], "output": "a.mp4"}}]
-    out = rebind_colliding_outputs(plan, tmp_path)
-    steps = out[0] if isinstance(out, tuple) else out
-    assert (
-        steps[0]["args"]["output"] != "a.mp4"
-    ), "sub/a.mp4 -> a.mp4 resolves to the input itself for a per-file mode"
+    steps, _ = rebind_colliding_outputs(plan, tmp_path)
+    assert steps[0]["args"]["output"] == "a.mp4"
+
+
+def test_an_output_naming_the_inputs_own_folder_is_a_self_overwrite(tmp_path: Path) -> None:
+    """`sub/a.mp4 -> sub/a.mp4` is the input itself now; it was `sub/sub/a.mp4` before 2026-10-24."""
+    _two_inputs(tmp_path)
+    plan = [{"tool": "convert_video", "args": {"inputs": ["sub/a.mp4"], "output": "sub/a.mp4"}}]
+    steps, _ = rebind_colliding_outputs(plan, tmp_path)
+    assert steps[0]["args"]["output"] != "sub/a.mp4"
 
 
 # -- which name moves: the intermediate, or the destination --------------------

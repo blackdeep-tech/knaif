@@ -8,16 +8,32 @@ display:
   tagline: "Read, convert, combine, and protect documents on your own machine."
   category: documents
 
-tools: tools.yaml
-skill_class: handlers.DocumentsSkill
-prompt: prompt.yaml
+toolkits: [fs, net]
+
+# Chain intermediates go to the run scratch (<OS temp>/knaif/run-<id>/), so only the outputs the
+# user asked for reach their folder. Read by both runtimes; a skill that sets it must accept paths
+# inside the run's scratch wherever it checks the sandbox. See docs/TOOL_SCHEMA.md, The run scratch.
+scratch_intermediates: true
+
+# http(s) URL inputs: downloaded into the run scratch after confirmation (net toolkit).
+url_inputs:
+  accepted:
+    - application/pdf
+    - application/vnd.openxmlformats-officedocument.*
+    - application/vnd.oasis.opendocument.*
+    - application/msword
+    - application/rtf
+    - text/plain
+    - text/markdown
+    - text/csv
+    - image/*
+    - application/octet-stream
+  max_mb: 200
 
 recommended_model: knaif-qwen3-4b-v2  # promoted 2026-09-27 for 1.2.0 (sft-v4; see contracts/models/model-manifest.yaml)
 
 # Which runtimes implement this skill. Consumed by the native runtime + `knaif skills list`.
 runtimes:
-  python:
-    handlers: handlers.DocumentsSkill   # resolved inside skills/documents/python/ (loaded by path)
   native:
     # STATUS IS EVIDENCE-BACKED, not an intention: `just check-gate` fails when this claims more
     # than evals/acceptance/<skill>.json supports (contracts/release/native_status.yaml defines
@@ -90,7 +106,10 @@ data:
 # png does not. An extension listed here nowhere is unrestricted.
 # See docs/plans/2026-09-23-chain-source-threading.md.
 file_kinds:
-  document: [pdf, docx, doc, odt, rtf, txt, md, html, htm]
+  document: [pdf, docx, doc, odt, rtf]
+  # Text is its own kind (owner, 2026-10-13): "compress all the PDFs and extract their text"
+  # keeps both the compressed PDFs and the text.
+  text: [txt, md, html, htm]
   image: [png, jpg, jpeg, tif, tiff, bmp, webp, gif]
 
 arg_value_sets:

@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from knaif.agent import CommandAgent
+from knaif.core_tools import CORE_TOOL_DEFS
 
 FFMPEG_SKILL_DIR = Path(__file__).parents[2]
 
@@ -190,10 +191,18 @@ def test_the_supported_list_matches_the_registry(scope_block: str) -> None:
     a tool, so this passes through that work — but it is what will catch the next one.
     """
     agent = CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox="sandbox")
-    core = {"clarify", "reject", "done", "wait_for_confirmation"}
+    core = set(CORE_TOOL_DEFS)
     real = {n for n, td in agent.registry.items() if not td.internal and n not in core}
-    listed = {n for n in real if n in scope_block}
-    assert listed == real, f"TOOL SCOPE omits {sorted(real - listed)}"
+    # A tool that joins prompts by its triggers is named, instead, by a rule that joins with
+    # it (`rules:` in prompt.yaml): listing it here would change every prompt.
+    triggered = {n for n in real if agent.registry[n].triggers}
+    for name in sorted(triggered):
+        assert any(
+            name in rule["tools"] and name in rule["text"] for rule in agent.prompt_rules
+        ), f"{name} joins prompts by its triggers but no rule names it"
+    ranked = real - triggered
+    listed = {n for n in ranked if n in scope_block}
+    assert listed == ranked, f"TOOL SCOPE omits {sorted(ranked - listed)}"
 
 
 def test_lossless_is_a_quality_profile_not_a_refusal_trigger(

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from knaif.handler_api import HandlerContext
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
 from . import _deps
 from ._engine import (
@@ -26,7 +26,9 @@ from ._engine import (
     _platform_clarify,
     _quality_from_crf,
     _summarise_probe,
+    _within,
 )
+from ._pieces import plan_pieces
 from ._reporting import (
     _fmt_files,
     _load_platform_summary,
@@ -34,7 +36,7 @@ from ._reporting import (
     _preflight_trim_frames,
     _zero_length_end,
 )
-from .steps import require_streams
+from .steps import run_and_commit
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Intent expanders.
@@ -534,10 +536,70 @@ class ExtractAudioIntent(Intent):
         return f"extract audio from {_fmt_files(args.get('inputs'))} as {fmt.upper()}"
 
 
+def _pieces_plan(tool: str, args: dict[str, Any]) -> list[dict[str, Any]]:
+    """The steps of a tool that writes many files from one input (`_pieces`): each piece is a
+    recipe of its own, so one failed piece is reported and the others are written."""
+    inputs = _coerce_inputs(args["input"])
+    return [
+        {
+            "tool": "resolve_inputs",
+            "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+            "output": "$files",
+        },
+        {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},
+        {
+            "tool": "load_quality_profile",
+            "args": {"quality": args.get("quality", "visually_good")},
+            "output": "$quality_profile",
+        },
+        {
+            "tool": "build_recipes",
+            "args": {
+                "probes": "$probes",
+                "quality_profile": "$quality_profile",
+                "options": {"mode": "pieces", "tool": tool, "args": dict(args)},
+            },
+            "output": "$recipes",
+        },
+        *_build_batch_block(),
+    ]
+
+
+class SplitVideoIntent(Intent):
+    name = "split_video"
+
+    def expand(self, args: dict[str, Any]) -> list[dict[str, Any]]:
+        return _pieces_plan(self.name, args)
+
+    def summarize(self, args: dict[str, Any], **kwargs: Any) -> str:
+        files = _fmt_files(args.get("input"))
+        if args.get("every"):
+            return f"split {files} into pieces of {args['every']}"
+        return f"split {files} into {args.get('parts')} equal pieces"
+
+
+class ExtractFramesIntent(Intent):
+    name = "extract_frames"
+
+    def expand(self, args: dict[str, Any]) -> list[dict[str, Any]]:
+        return _pieces_plan(self.name, args)
+
+    def summarize(self, args: dict[str, Any], **kwargs: Any) -> str:
+        files = _fmt_files(args.get("input"))
+        if args.get("every"):
+            return f"save a frame of {files} every {args['every']}"
+        if args.get("every_nth"):
+            return f"save every {args['every_nth']}th frame of {files}"
+        return f"save {args.get('count')} frames spread across {files}"
+
+
 class CreateThumbnailIntent(Intent):
     name = "create_thumbnail"
 
     def expand(self, args: dict[str, Any]) -> list[dict[str, Any]]:
+        # Several times are several stills, one recipe each.
+        if plan_pieces(self.name, args, 0.0, None) is not None:
+            return _pieces_plan(self.name, args)
         inputs = _coerce_inputs(args["input"])
         output = args.get("output")
         image_format = _image_format_from_output(output, args.get("image_format", "jpg"))
@@ -754,6 +816,7 @@ def _concat_filter_args(
     inputs: list[str],
     dry_run: bool,
     *,
+    ctx: Any = None,
     probes: list[dict[str, Any]] | None = None,
     target_resolution: str | None = None,
     target_fps: str | None = None,
@@ -809,7 +872,7 @@ def _concat_filter_args(
                 )
             else:
                 try:
-                    probe = _deps.run_ffprobe(Path(inp))
+                    probe = _deps.run_ffprobe(Path(inp), ctx)
                     summary = _summarise_probe(Path(inp), probe)
                     infos.append(
                         {
@@ -947,7 +1010,7 @@ def _concat_filter_args(
     return result
 
 
-class RunConcatStep(Step):
+class RunConcatStep(Handler):
     name = "run_concat"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -979,7 +1042,8 @@ class RunConcatStep(Step):
         if not Path(output).is_absolute():
             base = ctx.sandbox if ctx.sandbox is not None else ctx.root
             output = str((base / output).resolve())
-        _assert_in_sandbox(Path(output), ctx.sandbox)
+        if not _within(output, getattr(ctx, "work_dir", None)):
+            _assert_in_sandbox(Path(output), ctx.sandbox)
 
         # Unwrap probes from inspect_media result dict or accept a bare list.
         probes_arg = args.get("probes")
@@ -995,6 +1059,7 @@ class RunConcatStep(Step):
         cmd += _concat_filter_args(
             inputs,
             ctx.dry_run or ctx.skip_execution,
+            ctx=ctx,
             probes=probes,
             target_resolution=args.get("target_resolution"),
             target_fps=args.get("target_fps"),
@@ -1009,9 +1074,7 @@ class RunConcatStep(Step):
                 "command": cmd,
             }
 
-        result = _deps.run_ffmpeg(cmd)
-        if result["returncode"] == 0:
-            require_streams(output)
+        result = run_and_commit(cmd, output, ctx)
         return {
             "mode": "execute",
             "count": 1,
@@ -1082,7 +1145,9 @@ class ConcatVideoIntent(Intent):
         return [
             {
                 "tool": "resolve_inputs",
-                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS},
+                # A pattern or folder never matches the join's own output: a second "merge all
+                # the clips here" would read the first one's result back.
+                "args": {"paths": inputs, "extensions": _MEDIA_EXTENSIONS, "exclude": [output]},
                 "output": "$files",
             },
             {"tool": "inspect_media", "args": {"files": "$files"}, "output": "$probes"},

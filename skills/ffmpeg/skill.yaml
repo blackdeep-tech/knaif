@@ -11,16 +11,22 @@ display:
   tagline: "Convert, compress, and resize video without remembering a single flag."
   category: media
 
-tools: tools.yaml
-skill_class: handlers.FFmpegSkill
-prompt: prompt.yaml
+toolkits: [fs, net]
+
+# Chain intermediates go to the run scratch (<OS temp>/knaif/run-<id>/), so only the outputs the
+# user asked for reach their folder. Read by both runtimes; a skill that sets it must accept paths
+# inside the run's scratch wherever it checks the sandbox. See docs/TOOL_SCHEMA.md, The run scratch.
+scratch_intermediates: true
+
+# http(s) URL inputs: downloaded into the run scratch after confirmation (net toolkit).
+url_inputs:
+  accepted: [video/*, audio/*, image/*, application/octet-stream]
+  max_mb: 2000
 
 recommended_model: knaif-qwen3-4b-v2  # promoted 2026-09-27 for 1.2.0 (sft-v4; see contracts/models/model-manifest.yaml)
 
 # Which runtimes implement this skill. Consumed by the native runtime + `knaif skills list`.
 runtimes:
-  python:
-    handlers: handlers.FFmpegSkill   # resolved inside skills/ffmpeg/python/ (loaded by path)
   native:
     # STATUS IS EVIDENCE-BACKED, not an intention: `just check-gate` fails when this claims more
     # than evals/acceptance/<skill>.json supports (contracts/release/native_status.yaml defines
@@ -81,6 +87,11 @@ file_kinds:
   audio: [mp3, aac, wav, flac, ogg, opus, m4a, wma]
   image: [jpg, jpeg, png, bmp, webp, tif, tiff]
   subtitle: [srt, vtt, ass]
+
+# Kinds whose batch glob covers the whole kind: in a request for many files that names no
+# extension, "every video here" written as `*.mp4` also reads the .mov and .mkv files beside it
+# (owner, 2026-10-21; knaif.batch_chain.widen_kind_globs).
+batch_kinds: [video]
 
 arg_value_sets:
   platform:

@@ -23,16 +23,35 @@ def _prefix_pattern(prefix: str) -> re.Pattern[str]:
     return re.compile(body + r"(?![A-Za-z0-9_.-])", flags)
 
 
+def _scratch_pattern(scratch: str) -> re.Pattern[str]:
+    """A run folder under the scratch root, run id included (`<root>/run-<id>`). The one
+    definition lives in `knaif.scratch`; evidence keeps the rest of the path as written."""
+    from knaif.scratch import _run_folder_pattern
+
+    full = _run_folder_pattern(Path(scratch))
+    return re.compile(full.pattern.split("(?P<rest>")[0], full.flags)
+
+
 def redact_local_paths(
-    obj: Any, root: str | Path | None = None, home: str | Path | None = None
+    obj: Any,
+    root: str | Path | None = None,
+    home: str | Path | None = None,
+    scratch: str | Path | None = None,
 ) -> Any:
     """Return *obj* with the checkout (*root*, default: the cwd) and the home directory (*home*,
     default: the user's) replaced by `<repo>` and `~` in every string. The checkout goes first,
     since it often lives under the home directory. A container's `/root` home names nobody and
-    is left alone."""
+    is left alone.
+
+    A run's scratch folder (*scratch*, default: `knaif.scratch.scratch_root()`, plus the
+    `run-<id>` below it) becomes `<work>` before either: it sits in the OS temp dir, which is
+    under the home directory on Windows, and its run id differs on every run."""
+    from knaif.scratch import scratch_root
+
     root = str(root if root is not None else Path.cwd().resolve())
     home = str(home if home is not None else os.path.expanduser("~"))
-    subs = [(_prefix_pattern(root), "<repo>")]
+    scratch = str(scratch if scratch is not None else scratch_root())
+    subs = [(_scratch_pattern(scratch), "<work>"), (_prefix_pattern(root), "<repo>")]
     if home and home.rstrip("/\\") not in ("", "/root"):
         subs.append((_prefix_pattern(home), "~"))
 

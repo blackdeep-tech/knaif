@@ -68,7 +68,11 @@ def test_the_shipped_bundles_select_what_the_contract_says(row: dict) -> None:
     retrieved = retrieve_tools(row["utterance"], registry, top_k=DEFAULT_TOP_K)
     assert sorted(n for n, td in retrieved.items() if not td.internal) == row["retrieved"]
 
-    selected = select_examples(examples, frozenset(row["retrieved"]), row["utterance"])
+    # The agent's set: every tool that joins a prompt only by its triggers.
+    triggered = frozenset(n for n, td in registry.items() if td.triggers)
+    selected = select_examples(
+        examples, frozenset(row["retrieved"]), row["utterance"], triggered=triggered
+    )
     assert [e["request"] for e in selected] == row["expected_requests"]
     assert render_examples_block(selected) == row["expected_block"]
 

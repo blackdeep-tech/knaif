@@ -148,9 +148,13 @@ saves nothing measurable. Runs use it when it is running and load the model them
 it stops after 10 idle minutes.
 
 `run` executes for real and acts straight away; `--confirm` asks `Proceed? [Y/n]` first. It asks
-`Replace <file>? [y/N]` before replacing a file that already exists (Enter keeps it; `--overwrite`
-approves up front), checked just before each step runs — not a lock against another process
-creating the file in between. The native `run` covers `ffmpeg` and `documents`.
+`Replace <file>? [y/N]` before replacing a file that already exists (Enter keeps it), checked just
+before each step runs — not a lock against another process creating the file in between. Whatever
+a run would ask about can be approved up front with `--allow`: `download` (a URL input),
+`overwrite`, `model` (the recommended model's download), as a comma list; `--yes` (`-y`) allows
+everything, now and in later releases. `--stdout` prints a text answer alone, for a pipe, and saves
+nothing (`knaif run --stdout documents "extract the text of report.pdf" | wc -w`). The native `run`
+covers `ffmpeg` and `documents`.
 
 **As a library or SDK** — put a natural-language front end on your own CLI:
 

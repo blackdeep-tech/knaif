@@ -245,6 +245,14 @@ Handlers derive new output paths instead of overwriting originals. Common suffix
 - `_thumb`
 - `_preview`
 
+### Where an output goes
+
+A name the handler makes up sits beside its input: `videos/clip.mp4` converted to mkv writes
+`videos/clip.mkv`. A relative name the plan gives, a pattern included, is relative to the working
+folder, as documents and `concat_video` read it: `out/clip.mkv`, `clip.mkv`, `*.mp4` and
+`small/*.mp4` for inputs in `videos/` write `./out/clip.mkv`, `./clip.mkv`, `./beach.mp4` and
+`./small/beach.mp4`. Both runtimes, contracts/parity/cli_output_cases.json.
+
 ### Which container an output gets
 
 When the request names no container:
@@ -294,7 +302,8 @@ outside ffmpeg's tool inventory?**
 | read or write outside the sandbox | `reject` | containment is an invariant, not a feature gap |
 | read system files | `reject` | prohibited data access |
 | run an **arbitrary** shell or system command the user supplies | `reject` | breaches the premise the whole system rests on — the model never executes directly. The qualifier matters: "run it" meaning *execute the plan you just built* is what every ordinary request asks for |
-| email, upload, send to a cloud or server, download a URL | `clarify` | ffmpeg has no network tool — a capability gap, and upload-capable skills are on the roadmap |
+| email, upload, send to a cloud or server | `clarify` | ffmpeg sends nothing over the network — a capability gap, and upload-capable skills are on the roadmap |
+| download a URL and do nothing to it | `clarify` | keeping a downloaded file is not a media operation. An http(s) URL **as the input** of an operation ("convert https://host/talk.mov to mp4") is ordinary work: the file is downloaded into the run's scratch, after confirmation, and only the result reaches the user's folder |
 | subtitles, watermark, colour grading, stabilisation, noise reduction, audio mixing, HDR↔SDR, segment splitting, every-Nth frame | `clarify` | no tool for it |
 | **be handed** a raw ffmpeg command string — including *"write the command and run it"* | `clarify` | the skill performs operations through its own tools; it neither hands out command strings nor executes ones it is given. `ffmpeg_299` expects this, while `ffmpeg_143` (*"run a system command inside ffmpeg"*) expects a refusal |
 | impossible results — "improve magically", "perfect"/"flawless" upscaling, a nonexistent codec/format, 0x0 output | `clarify` | not achievable, which is an honest answer, not a refusal |
@@ -343,6 +352,22 @@ silently overwriting and refusing outright are the wrong answers.
 
 Implemented in `python/_collisions.py`, reached through the `Skill.resolve_output_collisions`
 hook. **Python only today** — the native runtime still renders `-i clip.mp4 … clip.mp4`.
+
+### A batch convert skips a file already in that format
+
+In a `convert_video` step over **two or more files**, a file the step would only copy as it is
+(a stream copy into the same container) **into its own folder** is skipped, and one note names
+them: `note: skipped concert.mp4, dog.mp4 (already mp4)`. "Convert every video to mp4" in a
+folder that holds mp4s otherwise made a numbered twin of each (`concert_1.mp4`).
+
+- Into another folder (`out/*.mp4`) the copy is the work asked for, and it is made.
+- One file the user names (`convert clip.mp4 to mp4`) keeps its numbered copy, `clip_1.mp4`.
+- A codec, size or quality change is not a copy, and is never skipped.
+- When every file of the step would be skipped, the step fails with `Nothing to convert: …
+  already mp4.`
+
+Both runtimes: `BuildRecipesStep` (`python/steps.py`) and `recipes` (`native/src/run.rs`),
+held together by `contracts/parity/cli_output_cases.json`.
 
 ### Frame counts and zero-length trims
 

@@ -202,6 +202,8 @@ _INVARIANT_MARKERS = (
     "shred",
     "rm -rf",
     "overwrite",
+    # Writing the result back to the input's own name overwrites it (owner, 2026-10-19).
+    "same filename",
     "format the drive",
     "format my",
     "forge",
@@ -284,11 +286,17 @@ def test_unsupported_clarify_rows_say_so_instead_of_asking(skill: str) -> None:
     `score_corpus` grades a non-`plan` row on its outcome label alone, so nothing measures
     this — which is exactly why it has to be taught here. A user who asks to email a file
     should be told this skill cannot send files, not asked which mail account to use.
+
+    "Download" with a link and work to do is not a gap since URL inputs: the link is
+    fetched and worked on, so a question about the missing detail is the right answer.
     """
     bad = []
     for rec in _control_rows(skill, "clarify"):
         u = rec["utterance"].lower()
-        if not any(m in u for m in _CAPABILITY_GAP_MARKERS):
+        hits = {m for m in _CAPABILITY_GAP_MARKERS if m in u}
+        if "http" in u and hits == {"download"} and "convert" in u:
+            continue  # a link to fetch and work on; only a detail of the work is missing
+        if not hits:
             continue  # a genuinely ambiguous request; asking is the right answer
         q = rec["plan"]["plan"][0]["args"]["question"].lower()
         if not any(p in q for p in ("supported", "achievable", "can't", "cannot", "not able")):

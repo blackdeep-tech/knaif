@@ -75,7 +75,7 @@ Model-visible tools (declared in `skills/documents/tools.yaml`):
 
 ```text
 inspect_document     # safe — format, page count, size, encryption, text-layer status
-extract_text         # safe — per-page text records + joined text (creates no file)
+extract_text         # safe — saves <name>.txt beside it: pages one blank line apart, `\n` line ends
 find_in_document     # safe — keyword/regex search returning page snippets
 merge_pdfs           # combine multiple PDFs into one
 split_pdf            # copy a subset of pages into a new PDF (original intact)
@@ -145,7 +145,17 @@ planned but not built.
   `doc-pages-1_2.pdf`), the output moves to the first free `<name>-1<ext>`, `-2`, … and the result
   reports the name actually written. An explicit `output` is a request and is honoured even over
   an existing file — the same rule as ffmpeg. Found 2026-09-24: both runtimes silently replaced
-  the existing file. Python `_engine._next_free`, native `run.rs` `next_free`.
+  the existing file. The rule is the fs toolkit's (`plan_output_path` with documents' `-1`
+  numbering; native `knaif_toolkit_fs::free_output_path`).
+- **Only a good file reaches the user's folder.** Every output is written to a staged path in the
+  run scratch and moved into place only when it exists and is not empty (fs `stage_output` /
+  `commit_output`, both runtimes). A step that fails part-way leaves the folder as it was.
+- **Chain intermediates go to the run scratch** (`scratch_intermediates: true`): in
+  `remove the last page of sample.pdf, then add page numbers`, the model's `sample_trimmed.pdf`
+  is written and read in the scratch, and only `sample_trimmed-numbered.pdf` reaches the folder.
+  A file the user named stays. `merge_pdfs` declares `joins_inputs: true` (several PDFs, one
+  output), so a merge's unnamed result is routed too. A default output derived from a routed
+  input is named where that input would have been, in the user's folder.
 - Dry-run returns the planned operation and expected output path without writing files.
 - Document inputs are resolved and validated inside the sandbox.
 
@@ -164,7 +174,8 @@ from `prompt.yaml`'s SAFETY and TOOL SCOPE blocks.
 | read or write outside the sandbox | `reject` | containment is an invariant, not a feature gap |
 | read system files | `reject` | prohibited data access |
 | **forge or fake someone else's signature** | `reject` | misuse, not a missing tool — **no change to the tool inventory turns this into a capability gap**, which is exactly what separates it from the row below |
-| email, upload to a cloud drive, download a URL, **print, fax** | `clarify` | no network or device tool — a capability gap. Print and fax are the same category as email under a different verb, and the earlier split between them had no argument behind it |
+| email, upload to a cloud drive, **print, fax** | `clarify` | no sending or device tool — a capability gap. Print and fax are the same category as email under a different verb, and the earlier split between them had no argument behind it |
+| download a URL and do nothing to it | `clarify` | keeping a downloaded file is not a document operation. An http(s) URL **as the input** of an operation ("extract the text from https://host/report.pdf") is ordinary work: the file is downloaded into the run's scratch, after confirmation, and only the result reaches the user's folder |
 | translate, summarise or rewrite a document's text | `clarify` | no tool for it |
 | fill in forms, add the user's **own** digital signature, redact, compare or diff two documents | `clarify` | no tool for it |
 

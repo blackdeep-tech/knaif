@@ -22,6 +22,19 @@ fn default_safety() -> String {
     "safe".to_string()
 }
 
+/// `batch_output:` as an extension without its leading dot; empty is none (Python's
+/// `str(...).lstrip(".")` of a truthy value).
+fn batch_output_ext<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    let raw: Option<Value> = Option::deserialize(d)?;
+    Ok(match raw {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => None,
+        Some(Value::String(s)) if s.is_empty() => None,
+        Some(Value::String(s)) => Some(s.trim_start_matches('.').to_string()),
+        Some(Value::Number(n)) => Some(n.to_string()),
+        Some(_) => None,
+    })
+}
+
 /// Typed metadata for a single tool argument (mirrors Python `ArgSchema`).
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct ArgSchema {
@@ -58,6 +71,16 @@ impl Default for ArgSchema {
     }
 }
 
+/// What a tool writes when a step names no output: a kind from the skill's `file_kinds`
+/// (`audio`), or `{arg: <name>}` when the kind follows an argument naming an extension
+/// (`convert_document`'s `to_format`). Anything else fails to load, as in Python.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, serde::Serialize)]
+#[serde(untagged)]
+pub enum Produces {
+    Kind(String),
+    Arg { arg: String },
+}
+
 /// One tool's definition (mirrors Python `ToolDef`). `name` comes from the YAML map key.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ToolDef {
@@ -87,8 +110,45 @@ pub struct ToolDef {
     pub safety_category: String,
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// Whole words or phrases that bring this tool into a prompt. A tool with triggers is never
+    /// ranked: retrieval adds it only when one is in the request (`retrieve_tools`), so a request
+    /// without one gets the same tools as if the tool did not exist (core's `alert_when_done`).
+    /// Mirrors Python `ToolDef.triggers`.
+    #[serde(default)]
+    pub triggers: Vec<String>,
     #[serde(default)]
     pub readonly: bool,
+    /// Several inputs become ONE output (concat), not one output each (a batch). Read by chain
+    /// routing (`scratch::route_intermediates_to_scratch`). Mirrors Python `ToolDef.joins_inputs`.
+    #[serde(default)]
+    pub joins_inputs: bool,
+    /// The kind of file the tool writes when a step names no output (`tools.yaml` `produces:`).
+    /// Read by chain routing's keep rule (`scratch::route_intermediates_to_scratch`). Mirrors
+    /// Python `ToolDef.produces`.
+    #[serde(default)]
+    pub produces: Option<Produces>,
+    /// The tool's output is a NEW thing made from its input (a piece, a page range, a join), not
+    /// the input improved (`tools.yaml` `derives: true`). Read by the keep rule
+    /// (`scratch::route_intermediates_to_scratch`). Mirrors Python `ToolDef.derives`.
+    #[serde(default)]
+    pub derives: bool,
+    /// The extension a tool that only reads (extract_text) saves its result as when it runs over
+    /// many files (`tools.yaml` `batch_output:`, a leading dot dropped): a single-file step
+    /// prints, a lifted one writes `<file's name>.<ext>`. Validation accepts `output` for it, which
+    /// the prompt never lists. Mirrors Python `ToolDef.batch_output`.
+    #[serde(default, deserialize_with = "batch_output_ext")]
+    pub batch_output: Option<String>,
+    /// The result field `run --stdout` prints instead of saving a file (`tools.yaml` `stdout:`,
+    /// e.g. extract_text's `text`; owner, 2026-10-23). A plan with any other tool
+    /// refuses the flag. Mirrors Python `ToolDef.stdout`.
+    #[serde(default)]
+    pub stdout: Option<String>,
+    /// What the tool may do to the world (`crate::effects`): `None` when `tools.yaml` declares
+    /// nothing, which a skill bundle refuses; empty for a tool with none. Mirrors Python
+    /// `ToolDef.effects`. Read by hand in [`load_registry_str`] so a malformed value gets the
+    /// contract's message.
+    #[serde(skip)]
+    pub effects: Option<Vec<String>>,
     #[serde(default)]
     pub mock_args: BTreeMap<String, Value>,
     #[serde(default)]
@@ -103,6 +163,59 @@ pub struct ToolDef {
 
 /// A `name → ToolDef` registry.
 pub type Registry = BTreeMap<String, ToolDef>;
+
+/// True when one of `triggers` is in `text` as a whole word or phrase, ignoring case and accents:
+/// "beep" matches "Beep when done" and not "beeper.mp4". A typographic apostrophe counts as a
+/// plain one, so "when it’s done" matches "when it's done". Mirrors Python `triggered`
+/// (`(?<!\w)phrase(?!\w)` over the normalized, whitespace-collapsed text).
+pub fn triggered(text: &str, triggers: &[String]) -> bool {
+    fn squash(s: &str) -> String {
+        crate::retrieval::normalize(s)
+            .replace('’', "'")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+    fn word(c: Option<char>) -> bool {
+        c.is_some_and(|c| c.is_alphanumeric() || c == '_')
+    }
+    let norm = squash(text);
+    triggers.iter().any(|trigger| {
+        let phrase = squash(trigger);
+        if phrase.is_empty() {
+            return false;
+        }
+        // A `#` stands for a number ("every # pages"). Chinese, Japanese and Korean write no
+        // spaces between words: a trigger in that script matches anywhere
+        // (contracts/parity/trigger_cases.json).
+        let body = phrase
+            .split('#')
+            .map(regex::escape)
+            .collect::<Vec<_>>()
+            .join(r"\d+");
+        let Ok(re) = regex::Regex::new(&body) else {
+            return false;
+        };
+        if phrase.chars().any(is_cjk) {
+            return re.is_match(&norm);
+        }
+        let hit = re.find_iter(&norm).any(|m| {
+            !word(norm[..m.start()].chars().next_back()) && !word(norm[m.end()..].chars().next())
+        });
+        hit
+    })
+}
+
+/// Chinese, Japanese and Korean scripts (Python `registry._CJK`): kana, CJK ideographs and
+/// extension A, compatibility ideographs, Hangul syllables.
+fn is_cjk(c: char) -> bool {
+    matches!(c,
+        '\u{3040}'..='\u{30ff}'
+            | '\u{3400}'..='\u{4dbf}'
+            | '\u{4e00}'..='\u{9fff}'
+            | '\u{f900}'..='\u{faff}'
+            | '\u{ac00}'..='\u{d7af}')
+}
 
 /// Load tool definitions from a YAML file into a `name → ToolDef` map.
 pub fn load_registry(path: &Path) -> anyhow::Result<Registry> {
@@ -133,6 +246,7 @@ pub fn load_registry_str(text: &str) -> anyhow::Result<Registry> {
         let mut tool: ToolDef = serde_yaml::from_value(cfg.clone())
             .map_err(|e| anyhow::anyhow!("parsing tool {name:?}: {e}"))?;
         tool.name = name.to_string();
+        tool.effects = crate::effects::parse_effects(name, cfg_map.get(Value::from("effects")))?;
         tool.order = idx; // preserve tools.yaml order for the prompt (see ToolDef::order)
         registry.insert(name.to_string(), tool);
     }
@@ -168,6 +282,18 @@ mod tests {
 
     fn reg(text: &str) -> Registry {
         load_registry_str(text).unwrap()
+    }
+
+    #[test]
+    fn batch_output_is_an_extension_without_its_dot() {
+        let r = reg("a:\n  description: A\n  effects: []\n  batch_output: .txt\nb:\n  description: B\n  effects: []\n");
+        assert_eq!(r["a"].batch_output.as_deref(), Some("txt"));
+        assert_eq!(r["b"].batch_output, None);
+        let shipped = load_registry(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../skills/documents/tools.yaml"),
+        )
+        .unwrap();
+        assert_eq!(shipped["extract_text"].batch_output.as_deref(), Some("txt"));
     }
 
     #[test]

@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import copy
 import json
+import os
+import shutil
+import tempfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..batch_chain import BatchReport
+from ..known_folders import ROOT_ENV as KNOWN_FOLDERS_ENV
+from ..planner import split_alert
 from .chain import run_command_chain
 from .corpus import CorpusRow
+from .provisioning import row_known_dir, row_scratch_dir
 
 if TYPE_CHECKING:
     from knaif.agent import CommandAgent
@@ -37,6 +47,52 @@ class AgentOutput:
     # filter is applied in an EARLIER step of a chain, e.g. rotate → compress.
     artifact_commands: list[str] = field(default_factory=list)
     utterance_idx: int = 0
+    # Whether the plan asked for an alert (`alert_when_done`), split off before anything ran.
+    alert: bool = False
+    # The row's redirected known folders (`<row>.known`) when the plan was executed, else None.
+    known_dir: Path | None = None
+    # The row's fixture, when the plan was executed: the untouched original of its input.
+    fixture_path: Path | None = None
+    # The plan as the model wrote it (`agent.last_model_plan`), before core rewrote it into
+    # `plan`; None when the agent keeps none.
+    model_plan: dict[str, Any] | None = None
+    # A folder row's own folder after an executing run (`folder_rows`), graded on its files.
+    folder_dir: Path | None = None
+    # How many files of a batch chain failed (`agent.last_batch_report`), None when the run
+    # lifted no batch chain; a folder row's `expected_failures` grades it.
+    batch_failures: int | None = None
+
+
+@contextmanager
+def _env(name: str, value: str) -> Iterator[None]:
+    """*name* set to *value* inside the block, and as it was after it."""
+    before = os.environ.get(name)
+    os.environ[name] = value
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = before
+
+
+def plan_known_folders(agent: Any, sandbox: Path | None = None) -> Path:
+    """Where an eval run's plans put the known folders: a placeholder inside the agent's sandbox.
+
+    The eval agent plans in a sandbox (the fixtures), which refuses a known folder outside it,
+    and planning must never name the user's real Downloads. The run plans dry, so nothing is
+    written here; a replay maps it to the row's own ``<row>.known`` (``chain.resolve_command``).
+    """
+    base = next(
+        (
+            b
+            for b in (getattr(agent, "sandbox", None), getattr(agent, "root", None), sandbox)
+            if isinstance(b, (str, Path))
+        ),
+        Path.cwd(),
+    )
+    return Path(base).resolve() / ".known-folders"
 
 
 def _extract_artifact(results: list[dict[str, Any]]) -> str | None:
@@ -100,6 +156,42 @@ def _extract_artifacts(results: list[dict[str, Any]]) -> list[str]:
     return cmds
 
 
+def _replay_commands(results: list[dict[str, Any]]) -> tuple[list[str], list[int]]:
+    """Every command a row's replay runs, in plan order, and the index of each batch step's
+    first command, whose output is the one graded.
+
+    A batch step can render several commands (a split writes one piece per command, a batch one
+    file per command); a later step reads all of them, so the replay must run every one
+    (ffmpeg_302#1: the trims of pieces 2-5 found nothing). Grading keeps one output
+    per step, the first command's, as :func:`_extract_artifacts` always did, so a chain row's
+    ``outputs`` stay aligned. Without a batch step, the same fallback as ``_extract_artifacts``.
+    """
+    commands: list[str] = []
+    graded: list[int] = []
+    for result in results:
+        if result.get("tool") not in ("run_batch", "run_concat"):
+            continue
+        r = result.get("result") or {}
+        if not isinstance(r, dict):
+            continue
+        outputs = r.get("outputs")
+        step = [
+            " ".join(str(a) for a in o["command"])
+            for o in (outputs if isinstance(outputs, list) else [])
+            if isinstance(o, dict) and isinstance(o.get("command"), list) and o["command"]
+        ]
+        if not step:
+            single = _cmd_string(r)
+            step = [single] if single else []
+        if step:
+            graded.append(len(commands))
+            commands.extend(step)
+    if not commands:
+        fallback = _extract_artifacts(results)
+        return fallback, list(range(len(fallback)))
+    return commands, graded
+
+
 def _build_registry_override(
     agent: Any, utterance: str, top_k: int | None = None
 ) -> dict[str, ToolDef] | None:
@@ -116,6 +208,45 @@ def _build_registry_override(
     if top_k is None:
         return _registry.retrieve_tools(utterance, registry)
     return _registry.retrieve_tools(utterance, registry, top_k=top_k)
+
+
+def _url_downloads(agent: Any) -> Any:
+    """The replay's ``prepare`` hook for a plan with URL inputs, or None.
+
+    The plan was rendered by a dry run, which names each download's place in the run scratch
+    without fetching it (``agent.last_downloads``). The replay maps run-scratch paths to the
+    row's own scratch (``row_scratch_dir``), so each URL is fetched there, under the name the
+    command uses, by the skill's own ``download_file``.
+    """
+    planned = [d for d in getattr(agent, "last_downloads", None) or [] if d.get("dry_run")]
+    tool = (getattr(agent, "tool_map", None) or {}).get("download_file")
+    url_inputs = getattr(agent, "url_inputs", None)
+    if not planned or tool is None or url_inputs is None:
+        return None
+
+    def prepare(row_dir: Path) -> None:
+        from ..handler_api import HandlerContext
+
+        dest = row_scratch_dir(row_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        for d in planned:
+            ctx = HandlerContext(
+                root=dest, dry_run=False, confirmed=True, skill_dir=agent.skill_dir, work_dir=dest
+            )
+            got = tool.handle(
+                {
+                    "url": d["url"],
+                    "dest_dir": str(dest),
+                    "accepted": list(url_inputs.accepted),
+                    "max_bytes": int(url_inputs.max_bytes),
+                },
+                ctx,
+            )
+            want = dest / Path(d["path"]).name
+            if Path(got["path"]) != want:
+                Path(got["path"]).replace(want)
+
+    return prepare
 
 
 def run_corpus(
@@ -147,19 +278,88 @@ def run_corpus(
     apply_retrieval=False (or --no-retrieval on the CLI) to measure the full
     unfiltered prompt for diagnostic comparisons.
     """
+    with _env(KNOWN_FOLDERS_ENV, str(plan_known_folders(agent, sandbox))):
+        return _run_corpus(
+            agent,
+            corpus,
+            limit=limit,
+            use_mock=use_mock,
+            verbose=verbose,
+            execute=execute,
+            sandbox=sandbox,
+            fixture_dir=fixture_dir,
+            apply_retrieval=apply_retrieval,
+            top_k=top_k,
+        )
+
+
+def _run_corpus(
+    agent: CommandAgent,
+    corpus: list[CorpusRow],
+    *,
+    limit: int | None,
+    use_mock: bool,
+    verbose: bool,
+    execute: bool,
+    sandbox: Path | None,
+    fixture_dir: Path | None,
+    apply_retrieval: bool,
+    top_k: int | None,
+) -> list[AgentOutput]:
+    """:func:`run_corpus`, with the known folders already pointing at the plan-time placeholder."""
+    known_root = Path(os.environ[KNOWN_FOLDERS_ENV])
     rows = corpus[:limit] if limit is not None else corpus
     outputs: list[AgentOutput] = []
+    if execute:
+        # URL inputs: an executing run is a real run, so it approves downloads, and its dry-run
+        # planning stands in for the real one, so the preview reads the downloaded bytes
+        # (`CommandAgent.fetch_in_preview`). A plan-level run downloads nothing.
+        agent.allow_download = True
+        agent.fetch_in_preview = True
+    if verbose:
+        # The denominator for progress watchers (scripts/watch_run.sh), before the first row.
+        total = sum(len(row.utterances) if execute else 1 for row in rows)
+        print(f"  rows to run: {total}", flush=True)
 
     for row in rows:
         utterances = row.utterances if execute else [row.utterances[0]]
 
         for utt_idx, utterance in enumerate(utterances):
+            if row.is_folder_row and fixture_dir is not None:
+                output = _run_folder_row(
+                    agent,
+                    row,
+                    utterance,
+                    utt_idx,
+                    use_mock=use_mock,
+                    execute=execute,
+                    sandbox=sandbox,
+                    fixture_dir=fixture_dir,
+                    registry_override=(
+                        _build_registry_override(agent, utterance, top_k)
+                        if apply_retrieval
+                        else None
+                    ),
+                )
+                outputs.append(output)
+                if verbose:
+                    status = "OK  " if output.outcome == row.expected_outcome else "FAIL"
+                    print(
+                        f"  [{row.id}]  {status}  {output.outcome:<8}  "
+                        f"{output.latency_ms:6.0f}ms  {utterance[:55]}",
+                        flush=True,
+                    )
+                continue
             t0 = time.perf_counter()
             plan_payload: dict[str, Any] | None = None
             exec_results: list[dict[str, Any]] = []
             outcome = "error"
             artifact: str | None = None
             error: str | None = None
+            alert = False
+            known_dir: Path | None = None
+            fixture_path: Path | None = None
+            model_plan: dict[str, Any] | None = None
 
             registry_override = (
                 _build_registry_override(agent, utterance, top_k) if apply_retrieval else None
@@ -176,6 +376,14 @@ def run_corpus(
                 # where the attribute is a MagicMock rather than a real string.
                 _raw_pe = getattr(agent, "last_parse_error", None)
                 parse_error = _raw_pe if isinstance(_raw_pe, str) and _raw_pe else None
+                # The plan as the model wrote it, before core's rewrites (linker, threader):
+                # without it a saved row cannot tell a model error from a plan core changed.
+                _raw_mp = getattr(agent, "last_model_plan", None)
+                model_plan = copy.deepcopy(_raw_mp) if isinstance(_raw_mp, dict) else None
+                # The pipeline takes the alert out before it looks at the plan; so does the
+                # eval, so an alert step in front never hides the first real tool.
+                if isinstance(plan_payload, dict):
+                    plan_payload, alert = split_alert(plan_payload)
                 steps = (plan_payload or {}).get("plan") or []
                 first_tool = steps[0]["tool"] if steps else None
 
@@ -230,6 +438,7 @@ def run_corpus(
                 _fp = fixture_dir / row.fixture
                 if _fp.exists():
                     row_dir = sandbox / f"{row.id}__{utt_idx}"
+                    known_dir, fixture_path = row_known_dir(row_dir), _fp
                     # Provision by COPY into a per-row directory and run the plan's commands
                     # there exactly as rendered — the same shape the native lane already
                     # uses. One execution path for every command-based row, single-command
@@ -244,9 +453,20 @@ def run_corpus(
                     # entirely. What both paths share is the contract — per-row provisioning,
                     # faithful paths, and a failure that reaches the outcome.
                     if artifact_commands:
-                        chain = run_command_chain(artifact_commands, fixture_dir, row_dir)
+                        prepare = _url_downloads(agent)
+                        # Every command of every batch step runs; one output per step is
+                        # graded, its first command's (`_replay_commands`).
+                        replay, graded = _replay_commands(exec_results)
+                        chain = run_command_chain(
+                            replay,
+                            fixture_dir,
+                            row_dir,
+                            known_root=known_root,
+                            **({"prepare": prepare} if prepare is not None else {}),
+                        )
+                        firsts = [chain[i] for i in graded if i < len(chain)]
                         artifact_paths = [
-                            Path(r["output"]) for r in chain if Path(r["output"]).exists()
+                            Path(r["output"]) for r in firsts if Path(r["output"]).exists()
                         ]
                         artifact_path = artifact_paths[-1] if artifact_paths else None
                         # **A non-zero exit fails the row.** It used to be invisible: the row
@@ -262,9 +482,17 @@ def run_corpus(
                                 f"{(failed.get('stderr') or '').strip()[-300:]}"
                             )
                     elif agent.artifact_runner is not None:
+                        # Start empty, like the command path (`provision_row_dir`): a kept or
+                        # never-graded folder from an earlier run made documents' free-name
+                        # rule number past a stale output (`sample-1.md`).
+                        shutil.rmtree(row_dir, ignore_errors=True)
+                        shutil.rmtree(row_scratch_dir(row_dir), ignore_errors=True)
                         row_dir.mkdir(parents=True, exist_ok=True)
                         try:
-                            artifact_path = agent.artifact_runner(artifact, _fp, row_dir)
+                            # The replay plans again, through the agent: its known folders are
+                            # the row's own, beside the row folder.
+                            with _env(KNOWN_FOLDERS_ENV, str(known_dir)):
+                                artifact_path = agent.artifact_runner(artifact, _fp, row_dir)
                         except Exception:  # noqa: BLE001
                             artifact_path = None
                         if artifact_path is not None:
@@ -284,6 +512,10 @@ def run_corpus(
                 artifact_paths=artifact_paths,
                 artifact_commands=artifact_commands or ([artifact] if artifact else []),
                 utterance_idx=utt_idx,
+                alert=alert,
+                known_dir=known_dir,
+                fixture_path=fixture_path,
+                model_plan=model_plan,
             )
             outputs.append(output)
 
@@ -295,6 +527,107 @@ def run_corpus(
                 )
 
     return outputs
+
+
+@contextmanager
+def _pointed_at(agent: Any, folder: Path) -> Iterator[None]:
+    """*agent* plans and executes with *folder* as its root and sandbox, restored afterwards."""
+    root, sandbox = agent.root, agent.sandbox
+    agent.root, agent.sandbox = folder, folder
+    try:
+        yield
+    finally:
+        agent.root, agent.sandbox = root, sandbox
+
+
+def _run_folder_row(
+    agent: Any,
+    row: CorpusRow,
+    utterance: str,
+    utt_idx: int,
+    *,
+    use_mock: bool,
+    execute: bool,
+    sandbox: Path | None,
+    fixture_dir: Path,
+    registry_override: dict[str, ToolDef] | None,
+) -> AgentOutput:
+    """Plan and run *utterance* inside a fresh copy of the row's fixture folder.
+
+    A dry run against the shared fixture folder cannot stand in for a folder request: a glob
+    would expand over unrelated fixtures, and a later step of a per-file chain reads what an
+    earlier step wrote. So the folder is copied into the row's own folder and the agent works
+    there: for real when executing (graded on the files, `folder_rows.grade_folder`), as a dry
+    run in a throwaway copy otherwise.
+    """
+    t0 = time.perf_counter()
+    keep = execute and sandbox is not None
+    if keep:
+        assert sandbox is not None
+        row_dir = (sandbox / f"{row.id}__{utt_idx}").resolve()
+        shutil.rmtree(row_dir, ignore_errors=True)
+    else:
+        row_dir = Path(tempfile.mkdtemp(prefix="knaif-folder-row-")) / "row"
+    assert row.fixture is not None
+    shutil.copytree(fixture_dir / row.fixture, row_dir)
+
+    plan_payload: dict[str, Any] | None = None
+    model_plan: dict[str, Any] | None = None
+    exec_results: list[dict[str, Any]] = []
+    outcome, error, parse_error, alert = "error", None, None, False
+    batch_failures: int | None = None
+    try:
+        with _pointed_at(agent, row_dir):
+            plan_payload = agent.infer(
+                utterance, use_mock=use_mock, registry_override=registry_override
+            )
+            _raw_pe = getattr(agent, "last_parse_error", None)
+            parse_error = _raw_pe if isinstance(_raw_pe, str) and _raw_pe else None
+            _raw_mp = getattr(agent, "last_model_plan", None)
+            model_plan = copy.deepcopy(_raw_mp) if isinstance(_raw_mp, dict) else None
+            if isinstance(plan_payload, dict):
+                plan_payload, alert = split_alert(plan_payload)
+            steps = (plan_payload or {}).get("plan") or []
+            first_tool = steps[0]["tool"] if steps else None
+            if parse_error:
+                outcome = "parse_error"
+            elif first_tool in ("clarify", "reject"):
+                outcome = first_tool
+            else:
+                exec_results = agent.execute_plan(
+                    plan_payload, utterance=utterance, dry_run=not execute, confirmed=True
+                )
+                if exec_results and exec_results[0].get("tool") == "clarify":
+                    outcome = "clarify"
+                else:
+                    outcome = "plan"
+                report = getattr(agent, "last_batch_report", None)
+                if isinstance(report, BatchReport):
+                    batch_failures = report.failed
+    except Exception as exc:  # noqa: BLE001
+        error = str(exc)
+        outcome = "error"
+    finally:
+        if not keep:
+            shutil.rmtree(row_dir.parent, ignore_errors=True)
+
+    return AgentOutput(
+        id=row.id,
+        utterance=utterance,
+        plan=plan_payload,
+        artifact=None,
+        outcome=outcome,
+        latency_ms=(time.perf_counter() - t0) * 1000,
+        error=error,
+        parse_error=parse_error,
+        execution_results=exec_results,
+        utterance_idx=utt_idx,
+        alert=alert,
+        model_plan=model_plan,
+        folder_dir=row_dir if keep else None,
+        fixture_path=fixture_dir / row.fixture,
+        batch_failures=batch_failures,
+    )
 
 
 def _find_fixture_extension(fixture_dir: Path, fixture_name: str) -> str | None:

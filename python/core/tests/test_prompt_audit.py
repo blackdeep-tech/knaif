@@ -100,11 +100,40 @@ def test_ffmpeg_full_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> 
     512 of generation, and qwen3 supports 32K above that. What this number guards is
     instruction-following on a 1.7B as the policy block grows: unpredictable, measurable only
     in an eval arm. The 2026-06-18 precedent points the other way, which is why it moved.
+
+    Raised 15,100 → 15,600 on 2026-10-11 for URL inputs: one rule (an http(s) URL is a valid
+    input, passed exactly as written, never an output; "download" with no link given asks for
+    it) and one URL example (to 15,537 on 2026-10-12, the rule tightened to pay for the
+    no-link clause rather than raising this again). The example is shown only to a request that
+    carries a URL (``select_examples``), so every other retrieved prompt grows by the rule alone.
+
+    Raised 15,600 → 16,100 on 2026-10-12 for completion alerts and known folders: the
+    `alert_when_done` core tool's two listing lines, one alert example and one known-folder
+    example (to 16,079). None of them reaches a retrieved prompt that does not ask for it: the
+    tool is retrieved only by its triggers ("beep", "let me know", …; ``retrieve_tools``), the
+    alert example only with the tool, and the folder example only when the request names a known
+    folder as a destination (``select_examples``). Every other retrieved prompt is unchanged,
+    byte for byte.
+
+    Raised 16,100 → 17,600 on 2026-10-20 for the one-file-into-many tools (to
+    17,544): `split_video` and `extract_frames`' listing lines, one prompt rule and two examples.
+    The tools join a prompt only by their triggers ("split", "pieces", "frames", …), the rule
+    only with them (`rules:` in prompt.yaml) and the examples only with them (``select_examples``
+    `triggered`). Measured over both corpora: 928 of 933 ffmpeg prompts and all 212 documents
+    prompts are unchanged, byte for byte; the five that change carry those words (rows 204, 208
+    and 302#1).
+
+    Raised 17,600 → 18,600 on 2026-10-20 for the per-file batch rule (to 18,064):
+    its two examples, marked `when: many` (the rule itself joins only a prompt whose request asks
+    for many files, so the full prompt does not carry it). Both reach a retrieved prompt only when
+    the request asks for many files (``nl_clarify_gate.asks_for_many_files``,
+    contracts/parity/many_files_cases.json). Measured over both corpora: 49 of 933 existing ffmpeg
+    prompts and 3 of 212 documents prompts change, every one of them a request for many files.
     """
     system, _ = ffmpeg_agent.build_prompt("compress a video")
     assert (
-        len(system) < 15_100
-    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 15,100 ceiling"
+        len(system) < 18_600
+    ), f"ffmpeg full prompt is {len(system)} chars — unexpected growth past the 18,600 ceiling"
 
 
 def test_ffmpeg_retrieved_prompt_no_unexpected_growth(ffmpeg_agent: CommandAgent) -> None:
@@ -144,11 +173,20 @@ def test_documents_prompt_no_unexpected_growth(documents_agent: CommandAgent) ->
     Context is not what this guards (worst case is ~1.3k tok against `n_ctx: 8192`). What it
     guards is instruction-following on a 4B as the header grows — documents' header roughly
     tripled, and that block has not yet been run against a model.
+
+    Full ceiling raised 7,000 → 7,600 on 2026-10-20 for `split_pdf_every` (to
+    7,423): its listing line, one prompt rule and one example, none of which reaches a retrieved
+    prompt that does not carry its trigger words ("every 10 pages", "one file per page", …).
+    Measured: all 212 documents corpus prompts unchanged, byte for byte.
+
+    Raised 7,600 → 8,400 on 2026-10-20 for the per-file batch rule's two examples (`when: many`,
+    to 7,996), which reach only a prompt whose request asks for many files: 3 of the 212 documents
+    corpus prompts change.
     """
     system, _ = documents_agent.build_prompt("compress report.pdf")
     assert (
-        len(system) < 7_000
-    ), f"documents full prompt is {len(system)} chars — unexpected growth past the 7,000 ceiling"
+        len(system) < 8_400
+    ), f"documents full prompt is {len(system)} chars — unexpected growth past the 8,400 ceiling"
 
     utterance = "compress report.pdf"
     retrieved = retrieve_tools(utterance, documents_agent.registry)

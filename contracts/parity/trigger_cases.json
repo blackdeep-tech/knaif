@@ -1,0 +1,104 @@
+{
+  "_comment": "When a tool with `triggers:` joins a prompt (it is never ranked). A trigger matches as a whole word or phrase, ignoring case and accents, so \"split\" is not found in \"splitting.mp4\". A trigger written in Chinese, Japanese or Korean script matches anywhere in the text: those languages write no spaces between words, so a word boundary never falls inside a sentence (the one-file-into-many tools:\"把clip.mp4分割成每段10秒\"). Python `knaif.registry.triggered`, Rust `knaif_core::registry::triggered`. A `#` in a trigger stands for a number (\"every # pages\" matches \"every 10 pages\"), so a phrase with a count needs no list of numbers.",
+  "cases": [
+    {
+      "triggers": [
+        "split"
+      ],
+      "utterance": "split clip.mp4 into 10-second parts",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "split"
+      ],
+      "utterance": "convert splitting.mp4 to mov",
+      "expected": false
+    },
+    {
+      "triggers": [
+        "frame every"
+      ],
+      "utterance": "grab a Frame  every 5 seconds of clip.mp4",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "раздели"
+      ],
+      "utterance": "раздели clip.mp4 на части по 10 секунди",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "分割"
+      ],
+      "utterance": "把clip.mp4分割成每段10秒",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "静帧"
+      ],
+      "utterance": "从clip.mp4中均匀截取10张静帧",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "分割"
+      ],
+      "utterance": "把clip.mp4转换成mov",
+      "expected": false
+    },
+    {
+      "triggers": [
+        "分割",
+        "split"
+      ],
+      "utterance": "convert clip.mp4 to mov",
+      "expected": false
+    },
+    {
+      "triggers": [
+        "every # pages"
+      ],
+      "utterance": "split report.pdf every 10 pages",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "every # pages"
+      ],
+      "utterance": "split report.pdf every page",
+      "expected": false
+    },
+    {
+      "triggers": [
+        "#-page parts"
+      ],
+      "utterance": "cut report.pdf into 10-page parts",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "по # страници"
+      ],
+      "utterance": "раздели report.pdf на части по 10 страници",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "每#页"
+      ],
+      "utterance": "把report.pdf按每10页拆分",
+      "expected": true
+    },
+    {
+      "triggers": [
+        "every # pages"
+      ],
+      "utterance": "rotate every page of report.pdf",
+      "expected": false
+    }
+  ]
+}

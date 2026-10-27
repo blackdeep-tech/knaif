@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from knaif.evalsuite import native_lane
 from knaif.evalsuite.native_lane import (
     _DEVICE_RE,
     PLAN_DUMP_MARKER,
@@ -183,6 +184,13 @@ def test_the_plan_dump_marker_matches_the_native_source() -> None:
 
 
 # -- N7: defects the first real L4 run exposed (2026-09-11) -------------------
+
+
+@pytest.fixture(autouse=True)
+def _a_known_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`build_argv` reads the binary's `run --help`; the lanes here name no real binary (or one on
+    PATH, which differs per machine), so they get 1.3.0's flags unless a test says otherwise."""
+    monkeypatch.setattr(native_lane, "_run_help", lambda binary: HELP_1_3_0)
 
 
 def _lane() -> LaneConfig:
@@ -401,3 +409,88 @@ def test_the_lane_approves_replacing_files_so_a_corpus_run_stays_non_interactive
     producing the plan the lane is measuring."""
     argv = build_argv(_lane(), "ffmpeg", "convert a.mov to mp4")
     assert "--overwrite" in argv[: argv.index("--")]
+
+
+# ── the run scratch: chain intermediates are still graded ──────────────────────────────────
+
+
+def test_a_routed_intermediate_in_the_kept_scratch_counts_as_produced(tmp_path: Path) -> None:
+    """Native routes a chain's intermediate into its run scratch and deletes it at the end. The
+    lane keeps the scratch (`KNAIF_KEEP_SCRATCH`, root `<row>.work`) because chain rows grade
+    their intermediates too; staging leftovers and preview clips are not deliverables."""
+    import os
+    import time
+
+    from knaif.evalsuite.native_lane import _produced_files, _snapshot_files, lane_scratch_env
+
+    work = tmp_path / "row"
+    work.mkdir()
+    (work / "clip.mp4").write_bytes(b"in")
+    before = _snapshot_files(work)
+    env = lane_scratch_env(work)
+    assert env["KNAIF_KEEP_SCRATCH"] == "1"
+    run = Path(env["KNAIF_SCRATCH_ROOT"]) / "run-1-ab"
+    for rel in ("clip_trimmed.mp4", "stage/0/x.mp4", "preview/clip_preview.mp4"):
+        (run / rel).parent.mkdir(parents=True, exist_ok=True)
+        (run / rel).write_bytes(b"x")
+    later = time.time() + 5
+    (work / "clip_trimmed_resized.mp4").write_bytes(b"out")
+    os.utime(work / "clip_trimmed_resized.mp4", (later, later))
+    produced = _produced_files(work, before, scratch_root=Path(env["KNAIF_SCRATCH_ROOT"]))
+    assert [p.name for p in produced] == ["clip_trimmed.mp4", "clip_trimmed_resized.mp4"]
+    assert Path(env["KNAIF_SCRATCH_ROOT"]).parent == tmp_path, "beside the row, never inside it"
+
+
+# ── the flags each binary offers ───────────────────────────────────────────────────────────
+
+#: `knaif run --help` of the 1.3.0 release (its option lines, shortened).
+HELP_1_3_0 = """Options:
+      --dry-run            Preview the command(s) without executing anything
+      --sandbox <SANDBOX>  Restrict input/output paths to this directory
+      --yes                Download the recommended model without prompting
+      --confirm            Ask `Proceed? [Y/n]` before each step
+      --overwrite          Replace a file that already exists
+      --model <NAME|PATH>  Model for real inference
+      --verbose            Show llama.cpp's native trace
+      --daemon             Serve this request through the model daemon
+  -h, --help               Print help
+"""
+
+#: The same since 2026-10-23 (owner): `--allow <WHAT>`, `-y, --yes`.
+HELP_F7 = """Options:
+      --dry-run             Preview the command(s) without executing anything
+  -y, --yes                 Allow everything a run could ask about
+      --allow <WHAT>        Approve up front what a run would otherwise ask about
+      --confirm             Ask `Proceed? [Y/n]` before each step
+      --model <NAME|PATH>   Model for real inference
+  -h, --help                Print help
+"""
+
+
+def test_the_offered_flags_are_read_from_the_help() -> None:
+    assert native_lane.offered_flags(HELP_1_3_0) >= {"--yes", "--overwrite", "--model"}
+    assert "--allow" not in native_lane.offered_flags(HELP_1_3_0)
+    assert native_lane.offered_flags(HELP_F7) >= {"--yes", "--allow", "--confirm"}
+
+
+@pytest.mark.parametrize(
+    ("help_text", "utterance", "expected"),
+    [
+        (HELP_F7, "convert a.mov to mp4", ["--allow", "model,overwrite"]),
+        (HELP_F7, "convert https://h.test/a.mov to mp4", ["--allow", "model,overwrite,download"]),
+        (HELP_1_3_0, "convert a.mov to mp4", ["--yes", "--overwrite"]),
+        # 1.3.0 has no URL inputs and no `--allow-download`: passing it would fail the row at
+        # the command line, before the binary could show what it does with a URL.
+        (HELP_1_3_0, "convert https://h.test/a.mov to mp4", ["--yes", "--overwrite"]),
+    ],
+    ids=["new", "new-url", "1.3.0", "1.3.0-url"],
+)
+def test_the_lane_passes_the_flags_the_binary_offers(
+    monkeypatch: pytest.MonkeyPatch, help_text: str, utterance: str, expected: list[str]
+) -> None:
+    """`--allow-download` and `--overwrite` are gone from new binaries, and the lane
+    also runs older ones (a frozen release's, saved builds), so it reads each binary's
+    `run --help` rather than guessing."""
+    monkeypatch.setattr(native_lane, "_run_help", lambda binary: help_text)
+    argv = build_argv(_lane(), "ffmpeg", utterance)
+    assert argv[3 : argv.index("--model")] == expected

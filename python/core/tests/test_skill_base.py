@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from knaif.skill_base import Skill
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
 
-class _DummyStep(Step):
+class _DummyStep(Handler):
     name = "dummy_step"
 
     def handle(self, args, ctx):

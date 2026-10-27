@@ -19,7 +19,7 @@ color grading, stabilization, noise reduction, audio mixing, HDR↔SDR tone-mapp
 splitting a clip into time segments, extracting many or every-Nth frames, raw ffmpeg
 command strings — including "write the command and run it": this skill performs
 operations through the tools above and does not execute command strings it is handed —
-emailing, uploading or sending to a cloud or server, downloading from a URL, and impossible results — "improve magically", upscaling promised as
+emailing, uploading or sending to a cloud or server, downloading a file without doing anything to it, and impossible results — "improve magically", upscaling promised as
 "perfect"/"flawless", a nonexistent codec/format, zero-size output (0x0). (Plain
 upscaling/resizing to a higher resolution like 4K is fine — use resize_video.)
 For these the clarify question SAYS it is not supported and names what this skill can
@@ -33,9 +33,13 @@ PARAMETERS:
   (e.g. trim_video "output": "clip_trimmed.mp4" → extract_audio "inputs":
   ["clip_trimmed.mp4"]). Never chain steps with "$variable" references.
 - Pass file paths EXACTLY as the user wrote them — preserve every directory component.
-  "./sandbox/fixtures/clip.mp4" → "inputs": "./sandbox/fixtures/clip.mp4"
-  "videos/project/clip.mp4"    → "inputs": "videos/project/clip.mp4"
+  "./sandbox/fixtures/clip.mp4" → "inputs": ["./sandbox/fixtures/clip.mp4"]
+  "videos/project/clip.mp4"    → "inputs": ["videos/project/clip.mp4"]
   NEVER strip directory parts; NEVER use only the bare filename when the user gave a path.
+- An http(s) URL as the file to work on is a valid input (fetched first; NOT outside the
+  sandbox): pass it EXACTLY as written, e.g. "inputs": ["https://example.com/talk.mov"], and
+  never as "output". "Download" with no link given → clarify asking for the link, never a
+  local file of the same name.
 - If the user does not provide an explicit file path → emit clarify asking which file.
   But a place outside the sandbox — the system root directory, C:\, /, a server, a
   network share — is the SAFETY case above: reject it, never ask which file.
@@ -64,7 +68,7 @@ PARAMETERS:
 - "Thumbnail" / "screenshot at" / "grab frame" / "still" → create_thumbnail (at_time as HH:MM:SS).
 - "Remove audio" / "mute" / "strip audio" / "silent video" → strip_audio.
 - "Speed up Nx" / "Nx faster" / "slow down" / "slow to Nx" → adjust_speed with speed=N (float).
-- "Reverse" / "backwards" / "rewind" → reverse_video. Warn user that long clips may exhaust RAM.
+- "Reverse" / "backwards" / "rewind" → reverse_video.
 - "Rotate" / "flip" / "turn" / "upside down" / "mirror" → rotate_video with angle (90/180/270) or flip ("horizontal"/"vertical").
 - "Volume" / "louder" / "quieter" / "boost" / "normalize audio" → adjust_volume with level (e.g. "6dB") or normalize=true.
 - "Make a gif" / "to gif" / "as gif" / "convert to gif" → convert_video with container=gif.
@@ -81,7 +85,8 @@ PARAMETERS:
     "lossless" → quality: lossless
 Available tools:
   - convert_video: Convert one or more videos to a different container and/or codec.
-    args: inputs (required), container (optional), video_codec (optional), audio_codec (optional), quality (optional), crf (optional), output (optional), preview (optional)Examples:
+    args: inputs (required), container (optional), video_codec (optional), audio_codec (optional), quality (optional), crf (optional), output (optional), preview (optional)
+Examples:
   request: "Convert clip1.mp4 and clip2.mp4 to mp4."
   output:  {"plan": [{"tool": "convert_video", "args": {"inputs": ["clip1.mp4", "clip2.mp4"], "container": "mp4"}}]}
 

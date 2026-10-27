@@ -8,6 +8,10 @@ system_header: |
   Use ocr_document for scanned PDFs or images that should become searchable.
   If the request names no clear action or no identifiable target file, emit a single
   `clarify` step asking what to do — do NOT guess a tool or invent a filename.
+  An http(s) URL as the document to work on is a valid input (fetched first; NOT outside the
+  sandbox): pass it EXACTLY as written, e.g. "input": "https://example.com/report.pdf", and
+  never as "output". "Download" with no link given → clarify asking for the link, never a
+  local file of the same name.
   Never emit shell commands.
 
   SAFETY → emit reject (not clarify, never a plan): deleting or shredding FILES OR
@@ -23,14 +27,70 @@ system_header: |
     rotate_pages, split_pdf, unlock_pdf, watermark
   If the request does NOT map directly to one of these → emit clarify; NEVER pick the
   closest-sounding tool. Unsupported (→ clarify, do not substitute): emailing, uploading or
-  sending to a cloud drive or server, downloading from a URL, printing, faxing, translating,
+  sending to a cloud drive or server, downloading a file without doing anything to it,
+  printing, faxing, translating,
   summarising or rewriting a document's text, filling in forms, adding the user's OWN
   digital signature, redacting,
   and comparing or diffing two documents. For these the clarify question SAYS it is not
   supported and names what this skill can do instead; it does not ask for more detail about
   work that will never happen.
 
+# A `tools` rule joins the header only when one of its tools is in the prompt, and a
+# `when: many` rule only when the request asks for many files (both via CommandAgent.build_prompt).
+rules:
+  - tools: [split_pdf_every]
+    text: |
+      A new file every N pages ("every 10 pages", "one file per page", "single pages") →
+      split_pdf_every with every: N (1 = one per page); split_pdf is for named page ranges. To
+      work on every piece after, give the split an "output" and use that same name as the next
+      step's input.
+  - when: many
+    text: |2
+        MANY FILES: "all / every / each PDF here / in this folder" is a valid target. Write the steps
+        as for ONE file with "input": "*.pdf" in the first step ("here" is the current folder, never
+        an invented folder), and let each later step read the previous step's "output" filename.
+        knaif runs the steps once for every matching PDF. Do not clarify only because no single file
+        was named.
+
 examples:
+  - request: "Rotate all PDFs here by 90 degrees and add a CONFIDENTIAL watermark."
+    when: many
+    output:
+      plan:
+        - tool: rotate_pages
+          args:
+            input: "*.pdf"
+            degrees: 90
+            output: "rotated.pdf"
+        - tool: watermark
+          args:
+            input: "rotated.pdf"
+            text: CONFIDENTIAL
+  - request: "Compress each pdf in this folder as small as possible and stamp SAMPLE on it."
+    when: many
+    output:
+      plan:
+        - tool: compress_pdf
+          args:
+            input: "*.pdf"
+            compress_quality: small
+            output: "small.pdf"
+        - tool: watermark
+          args:
+            input: "small.pdf"
+            text: SAMPLE
+  - request: "split report.pdf into one file per page and stamp DRAFT on each"
+    output:
+      plan:
+        - tool: split_pdf_every
+          args:
+            input: "report.pdf"
+            every: 1
+            output: "page.pdf"
+        - tool: watermark
+          args:
+            input: "page.pdf"
+            text: "DRAFT"
   - request: "inspect report.pdf"
     output:
       plan:
@@ -58,6 +118,37 @@ examples:
           args:
             input: scan.pdf
             language: eng
+  - request: "extract the text from https://example.com/files/minutes.pdf"
+    output:
+      plan:
+        - tool: extract_text
+          args:
+            input: "https://example.com/files/minutes.pdf"
+  - request: "pull the words out of invoice.pdf, ping me when it's ready"
+    output:
+      plan:
+        - tool: extract_text
+          args:
+            input: invoice.pdf
+        - tool: alert_when_done
+          args: {}
+  - request: "rotate report.pdf 90 degrees and save it to my Desktop"
+    output:
+      plan:
+        - tool: rotate_pages
+          args:
+            input: report.pdf
+            degrees: 90
+            output: "Desktop/report.pdf"
+  - request: "number the pages of report.pdf, save it in my Documents folder and let me know when it's done"
+    output:
+      plan:
+        - tool: add_page_numbers
+          args:
+            input: report.pdf
+            output: "Documents/report.pdf"
+        - tool: alert_when_done
+          args: {}
   - request: "do something with a file"
     output:
       plan:

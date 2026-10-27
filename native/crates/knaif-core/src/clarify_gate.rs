@@ -32,17 +32,81 @@ use crate::registry::Registry;
 /// Both halves are load-bearing — see the module header. `known_files` is the sandbox
 /// listing, lowercased by the caller; it is passed in rather than read here so the gate stays
 /// pure and the L2 contract can state it (`sandbox_files` in
-/// `contracts/parity/clarify_gate_cases.json`).
-fn named_by_stem(value: &str, u_lower: &str, known_files: &HashSet<String>) -> bool {
+/// `contracts/parity/clarify_gate_cases.json`). The NL clarify gate asks it too.
+pub(crate) fn named_by_stem(value: &str, u_lower: &str, known_files: &HashSet<String>) -> bool {
     let name = value.rsplit(['/', '\\']).next().unwrap_or(value);
     let stem = match name.rfind('.') {
         Some(i) => &name[..i],
         None => name,
     };
-    if stem.is_empty() || !is_stem_candidate(stem) {
+    if stem.is_empty() || !known_files.contains(&name.to_lowercase()) {
         return false;
     }
-    u_lower.contains(&stem.to_lowercase()) && known_files.contains(&name.to_lowercase())
+    let low = stem.to_lowercase();
+    if is_stem_candidate(stem) {
+        return u_lower.contains(&low);
+    }
+    // A plain word names the file too when it is the whole stem, said as a word, and not a word
+    // for a kind of file (owner, 2026-10-24: "convert beach and city from mov to mkv").
+    stem.chars().all(|c| c.is_ascii_alphabetic())
+        && !GENERIC_FILE_WORDS.contains(&low.as_str())
+        && said_as_a_word(u_lower, &low)
+}
+
+/// Words for a kind of file: "the video", "the clip" mean any one, so they never name a file.
+/// Python `nl_clarify_gate.GENERIC_FILE_WORDS`.
+const GENERIC_FILE_WORDS: [&str; 40] = [
+    "video",
+    "clip",
+    "file",
+    "movie",
+    "film",
+    "recording",
+    "song",
+    "track",
+    "audio",
+    "sound",
+    "music",
+    "voice",
+    "image",
+    "photo",
+    "picture",
+    "pic",
+    "thumbnail",
+    "frame",
+    "gif",
+    "document",
+    "doc",
+    "pdf",
+    "page",
+    "scan",
+    "text",
+    "report",
+    "folder",
+    "output",
+    "input",
+    "result",
+    "copy",
+    "mp4",
+    "mov",
+    "mkv",
+    "avi",
+    "webm",
+    "mp3",
+    "wav",
+    "jpg",
+    "png",
+];
+
+/// `word` in `text` with no letter, digit or `_` on either side. Python's
+/// `(?<![a-z0-9_])word(?![a-z0-9_])`.
+fn said_as_a_word(text: &str, word: &str) -> bool {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    text.match_indices(word).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + word.len()..].chars().next();
+        !before.is_some_and(is_word) && !after.is_some_and(is_word)
+    })
 }
 
 /// A stem is an extension-less identifier carrying a structural marker (`_`, `-` or a digit).
@@ -67,7 +131,7 @@ fn is_stem_candidate(stem: &str) -> bool {
 }
 
 /// Terminal control tools carry no file inputs (mirrors Python `_TERMINAL_TOOLS`).
-const TERMINAL_TOOLS: &[&str] = &["done", "clarify", "reject"];
+pub(crate) const TERMINAL_TOOLS: &[&str] = &["done", "clarify", "reject"];
 
 /// Tools whose schema accepts an `output` arg — eligible chain-intermediate producers.
 /// Tools that can be handed an `output` filename.
@@ -349,6 +413,37 @@ pub fn load_file_kinds(skill_yaml: &Path) -> Result<FileKinds, String> {
     file_kinds_from_groups(groups)
 }
 
+/// Read `batch_kinds:` from a bundle's `skill.yaml`: the kinds whose batch glob covers the whole
+/// kind ("every video" read as every video, `crate::batch_chain::widen_kind_globs`). Each must be
+/// a kind `file_kinds` declares. A missing file or section means none. Python
+/// `knaif.skill.parse_batch_kinds`.
+pub fn load_batch_kinds(skill_yaml: &Path, file_kinds: &FileKinds) -> Result<Vec<String>, String> {
+    let Ok(text) = std::fs::read_to_string(skill_yaml) else {
+        return Ok(Vec::new());
+    };
+    let doc: serde_yaml::Value =
+        serde_yaml::from_str(&text).map_err(|e| format!("{}: {e}", skill_yaml.display()))?;
+    let Some(raw) = doc.get("batch_kinds").filter(|v| !v.is_null()) else {
+        return Ok(Vec::new());
+    };
+    let list = raw
+        .as_sequence()
+        .ok_or("batch_kinds must be a list of kinds")?;
+    let mut kinds = Vec::new();
+    for kind in list {
+        let kind = kind
+            .as_str()
+            .ok_or("batch_kinds: a kind must be a string")?;
+        if !file_kinds.values().any(|k| k == kind) {
+            return Err(format!(
+                "batch_kinds lists '{kind}', which file_kinds does not declare"
+            ));
+        }
+        kinds.push(kind.to_string());
+    }
+    Ok(kinds)
+}
+
 /// Basename of a path-ish string, lower-cased for comparison.
 fn basename_lower(value: &str) -> String {
     value
@@ -382,7 +477,7 @@ fn is_word(c: char) -> bool {
 /// inside `myclip.mp4` or `clip.mp4.bak` is not a mention, while `./clip.mp4` or `clip.mp4,`
 /// is. Scanned like a regex: on a match the search resumes after it, otherwise one character
 /// on, so the count agrees with `re.findall` for any name.
-fn mention_count(utterance: &str, name: &str) -> usize {
+pub(crate) fn mention_count(utterance: &str, name: &str) -> usize {
     let u = utterance.to_lowercase();
     let n = name.to_lowercase();
     if n.is_empty() {
@@ -453,7 +548,10 @@ fn intermediate_name(src: &str, taken: &HashSet<String>) -> String {
 /// - **the user named the source more than once** — a repeated name is their choice, and a
 ///   fan-out (several steps reading one file) must run as written;
 /// - **the producer's declared output is a different kind of file** from its source, per the
-///   skill's `file_kinds` (a thumbnail of a video). An unlisted extension is unrestricted.
+///   skill's `file_kinds` (a thumbnail of a video). An unlisted extension is unrestricted;
+/// - **the later step runs the same tool and names its own output**: a second result from the
+///   source ("cut 1-3 s of clip.mp4 as 1.mp4 and the rest as 2.mp4"), not the next link. The
+///   same tool again without an output of its own is still threaded.
 ///
 /// See docs/plans/2026-09-23-chain-source-threading.md.
 fn forward_thread_reused_sources(
@@ -504,6 +602,14 @@ fn forward_thread_reused_sources(
             let Some(map) = later.get("args").and_then(Value::as_object) else {
                 continue;
             };
+            // The same operation again, into its own file: a second result, not the next link.
+            let names_output = map
+                .get("output")
+                .and_then(Value::as_str)
+                .is_some_and(|o| !o.trim().is_empty());
+            if ltool == tool && names_output {
+                continue;
+            }
             for (key, value) in map {
                 if key == "output" {
                     continue;
@@ -694,7 +800,7 @@ fn string_values(value: &Value) -> Vec<&str> {
 /// True if `value` ends with a file extension: `.` then a letter then 1–4 alphanumerics
 /// (mirrors Python `_FILENAME_RE = \.[a-z][a-z0-9]{1,4}$`, case-insensitive). Anchored at the
 /// end, so `H.264` (digit-led) and bare stems (`clip`) don't match.
-fn looks_like_filename(value: &str) -> bool {
+pub(crate) fn looks_like_filename(value: &str) -> bool {
     let Some(dot) = value.rfind('.') else {
         return false;
     };
@@ -891,6 +997,27 @@ mod tests {
         assert!(load_file_kinds(Path::new("/no/such/skill.yaml"))
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn batch_kinds_load_and_must_be_declared_kinds() {
+        let skills = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../skills");
+        let ffmpeg_yaml = skills.join("ffmpeg/skill.yaml");
+        let kinds = load_file_kinds(&ffmpeg_yaml).unwrap();
+        assert_eq!(
+            load_batch_kinds(&ffmpeg_yaml, &kinds).unwrap(),
+            vec!["video"]
+        );
+        let docs_yaml = skills.join("documents/skill.yaml");
+        let doc_kinds = load_file_kinds(&docs_yaml).unwrap();
+        assert!(load_batch_kinds(&docs_yaml, &doc_kinds).unwrap().is_empty());
+        let dir = std::env::temp_dir().join(format!("knaif-batch-kinds-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bad = dir.join("skill.yaml");
+        std::fs::write(&bad, "file_kinds:\n  video: [mp4]\nbatch_kinds: [audio]\n").unwrap();
+        let err = load_batch_kinds(&bad, &load_file_kinds(&bad).unwrap()).unwrap_err();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(err.contains("does not declare"), "{err}");
     }
 
     #[test]

@@ -1,0 +1,67 @@
+# fs toolkit — shared file tools. The canonical contract for each tool: a skill that declares
+# `toolkits: [fs]` gets these tools from here, never from a copy in its own tools.yaml.
+# Toolkit tools are internal (the model never sees them) unless the skill lists them under
+# `expose:`.
+
+resolve_inputs:
+  effects: [fs.read]
+  description: >
+    Resolve a list of input paths (files, folders, globs) inside the sandbox.
+    Returns {count, files}; consumers accept either a bare list or this dict.
+  required_args: [paths]
+  # exclude: paths a glob's or folder's matches leave out (a join's own output).
+  optional_args: [extensions, recursive, exclude]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+stage_output:
+  effects: [fs.write]
+  description: >
+    A path in the run scratch that will become `path`: the same file name, in a folder of its
+    own. Write there, then hand it to commit_output. Returns {staged}.
+  required_args: [path]
+  safety_category: safe
+  internal: true
+
+commit_output:
+  effects: [fs.write]
+  description: >
+    Check a staged file (it exists and is not empty), then move it to its final `path` inside the
+    sandbox. A failure removes the staged file and leaves the user's folder untouched. A final
+    path inside the run scratch is refused. Returns {path, bytes}.
+  required_args: [staged, path]
+  safety_category: destructive
+  internal: true
+
+ensure_parent:
+  effects: [fs.write]
+  description: >
+    Make the folder `path` will be written into (the resolved parent, inside the sandbox or the
+    run scratch). Returns {path}.
+  required_args: [path]
+  safety_category: safe
+  internal: true
+
+plan_output_path:
+  effects: [fs.read]
+  description: >
+    The first free name for `path`, neither taken nor on disk. The caller chooses the rule:
+    `suffix` after the stem, then `<separator><n>` from `first_number`; `keep_requested` returns
+    `path` itself when it is free. Returns {path}.
+  required_args: [path]
+  optional_args: [suffix, separator, first_number, keep_requested, taken]
+  safety_category: safe
+  readonly: true
+  internal: true
+
+user_side_path:
+  effects: []
+  description: >
+    `path`, or where it would sit in the user's folder when it is in the run scratch (routing
+    keeps an intermediate's place, so the mapping is exact). Anchor a default output on it so an
+    output derived from a routed intermediate lands in the user's folder. Returns {path}.
+  required_args: [path]
+  safety_category: safe
+  readonly: true
+  internal: true

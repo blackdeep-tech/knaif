@@ -131,9 +131,6 @@ impl OcrEngine for TesseractOcr {
 /// Produce a searchable PDF from `input` at `output`. A PDF that already has a text layer is copied
 /// unchanged; an image is OCR'd directly; a scanned PDF is rendered page-by-page then OCR'd + merged.
 pub fn ocr_document(input: &Path, output: &Path, language: &str) -> anyhow::Result<OcrMethod> {
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
     let suffix = suffix_of(input);
     if suffix == "pdf" {
         if text::inspect(input)?.has_text_layer {
@@ -185,6 +182,49 @@ fn ocr_pdf(input: &Path, output: &Path, language: &str) -> anyhow::Result<()> {
     let out = run();
     let _ = std::fs::remove_dir_all(&dir);
     out
+}
+
+/// The text of `pages` of a PDF read by OCR: each page rendered (PDFium, 144 dpi) and read by
+/// Tesseract. Port of `_ocr_pdf_text_records`, for a scan with no text layer.
+#[cfg(feature = "pdfium")]
+pub fn pdf_text_records(
+    input: &Path,
+    pages: &[i64],
+    language: &str,
+) -> anyhow::Result<Vec<text::PageText>> {
+    use crate::render::{PdfiumRasterizer, Rasterizer};
+
+    let tess = TesseractOcr::detect()?;
+    let rasterizer = PdfiumRasterizer::new()?;
+    let dir = temp_dir("knaif_ocr_text");
+    let run = || -> anyhow::Result<Vec<text::PageText>> {
+        let mut records = Vec::with_capacity(pages.len());
+        for &page in pages {
+            let raster = rasterizer.render_page(input, page as u32, 144.0)?;
+            let png = dir.join(format!("p{page}.png"));
+            save_rgba_png(&raster, &png)?;
+            records.push(text::PageText {
+                page,
+                text: tess.image_file_to_text(&png, language)?,
+            });
+        }
+        Ok(records)
+    };
+    let out = run();
+    let _ = std::fs::remove_dir_all(&dir);
+    out
+}
+
+#[cfg(not(feature = "pdfium"))]
+pub fn pdf_text_records(
+    _input: &Path,
+    _pages: &[i64],
+    _language: &str,
+) -> anyhow::Result<Vec<text::PageText>> {
+    anyhow::bail!(
+        "This PDF has no text layer; reading it needs OCR with the PDFium rasterizer (build with \
+         --features pdfium)"
+    )
 }
 
 #[cfg(not(feature = "pdfium"))]
@@ -265,6 +305,26 @@ mod tests {
         assert_eq!(method, OcrMethod::Tesseract);
         assert_eq!(crate::pdf::page_count(&crate::pdf::load(&out).unwrap()), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A scanned PDF's text is read by OCR when it has no text layer, as Python's
+    /// `_extract_text_records` does ("compress every pdf and extract the text"
+    /// saved an empty file for the batch folder's scan). Gated on PDFium, Tesseract and the
+    /// generated fixture.
+    #[cfg(feature = "pdfium")]
+    #[test]
+    fn a_scanned_pdf_gives_its_text_by_ocr() {
+        let scan = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../sandbox/fixtures/documents/batch_pdf/scan.pdf");
+        if std::env::var("KNAIF_PDFIUM_PATH").is_err()
+            || TesseractOcr::detect().is_err()
+            || !scan.is_file()
+        {
+            return;
+        }
+        let records = crate::text::extract_text(&scan, None).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].text.trim(), "Scanned image text");
     }
 
     /// A PDF that already has a text layer is copied, not re-OCR'd.

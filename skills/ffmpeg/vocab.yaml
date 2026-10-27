@@ -48,7 +48,9 @@ scale_presets:
 output_suffix_by_mode:
   platform: "_{platform}"
   compress: _compressed
-  convert: _converted
+  # None: a convert changes the format, so beach.mov -> beach.mkv cannot clash; a taken name
+  # (a same-format convert, a file that exists) gets a number, beach_1.mkv.
+  convert: ""
   resize: _resized
   trim: _trimmed
   extract_audio: _audio

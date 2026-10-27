@@ -53,7 +53,7 @@ def _native(cmd: str, plan: list[dict]):
 
 
 def _python(cmd: str, plan: list[dict]):
-    return pc.parse_python(f"  $ {cmd}\n", _dump(plan))
+    return pc.parse_python(f"{cmd}\n", _dump(plan))
 
 
 def _row():
@@ -88,7 +88,7 @@ def test_equal_commands_are_a_match_whatever_the_plans() -> None:
 
 def test_without_a_dump_a_mismatch_cannot_be_called_a_port_bug() -> None:
     nat = pc.parse_native(CMD_A + "\n", "")
-    py = pc.parse_python(f"  $ {CMD_B}\n", "")
+    py = pc.parse_python(f"{CMD_B}\n", "")
     status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
     assert status == "mismatch"
 
@@ -97,13 +97,14 @@ def test_without_a_dump_a_mismatch_cannot_be_called_a_port_bug() -> None:
 
 # The two renders of "crop clip.mp4 to a square" from the stopped R5c run. Both runtimes pass
 # `iw\,ih` to ffmpeg (L4 executed the row correctly on native). Native prints a POSIX-quoted
-# line (`shell_join` doubles a backslash inside quotes); Python prints the argv unquoted.
+# line (`shell_join` doubles a backslash inside quotes); Python printed the argv unquoted
+# with absolute paths until 2026-10-23, and its old line must still read the same.
 CROP = r"crop=trunc(min(iw\,ih*1/1)/2)*2:trunc(min(ih\,iw*1/1)/2)*2"
 CROP_NATIVE = (
     'ffmpeg -y -i clip.mp4 -vf "crop=trunc(min(iw\\\\,ih*1/1)/2)*2:trunc(min(ih\\\\,iw*1/1)/2)*2"'
     " -c:a copy clip_resized.mp4"
 )
-CROP_PYTHON = r"ffmpeg -y -i C:\w\clip.mp4 -vf " + CROP + r" -c:a copy C:\w\clip_resized.mp4"
+CROP_PYTHON = CROP_NATIVE  # Python now prints native's line
 CROP_PLAN = [
     {"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "fit": "crop", "aspect": "1:1"}}
 ]
@@ -146,12 +147,8 @@ REVERSE = "ffmpeg -y -i clip_trimmed.mp4 -vf reverse clip_trimmed_reversed.mp4"
 
 def _python_partial_chain(plan: list[dict]):
     """Python's dry-run of trim -> reverse: reverse stops at its preview/confirmation."""
-    out = (
-        "  • trim from 00:00:01 to 00:00:06 from clip.mp4\n"
-        f"    $ {TRIM}\n    dry-run\n"
-        "  • reverse clip_trimmed.mp4\n    (nothing to execute)\n    dry-run\n"
-    )
-    return pc.parse_python(out, _dump(plan))
+    out = f"step 1 of 2:\n{TRIM}\nstep 2 of 2:\n"
+    return pc.parse_python(out, "(nothing to execute)\n" + _dump(plan))
 
 
 def test_a_chain_python_renders_only_in_part_is_not_comparable_when_the_plans_agree() -> None:
@@ -272,7 +269,7 @@ def _argv_dump(argv: list[str]) -> str:
 def test_a_dumped_argv_is_taken_verbatim_over_the_display_line() -> None:
     argv = ["ffmpeg", "-y", "-i", "silent clip.mp4", "-vf", CROP, "silent clip_thumb.jpg"]
     nat = pc.parse_native("ffmpeg -y -i garbled\n", _dump(PLAN) + _argv_dump(argv))
-    py = pc.parse_python("  $ ffmpeg -y -i also garbled\n", _dump(PLAN) + _argv_dump(argv))
+    py = pc.parse_python("ffmpeg -y -i also garbled\n", _dump(PLAN) + _argv_dump(argv))
     assert nat.commands == py.commands
     assert "silent clip.mp4" in nat.commands[0] and CROP in nat.commands[0]
     status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
@@ -355,7 +352,7 @@ def test_same_plan_but_python_asks_and_native_runs_is_a_port_bug() -> None:
     so the difference is the port's, whatever the two outcomes are."""
     mov = [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]
     nat = _native("ffmpeg -y -i mov -vf reverse mov_reversed.mp4", mov)
-    py = pc.parse_python("\n❓ CLARIFY: Which mov did you mean?\n", _dump(mov))
+    py = pc.parse_python("clarify:Which mov did you mean?\n", _dump(mov))
     status, note = pc.compare(_row(), nat, py, strict=False, cwd="/w")
     assert status == "port-bug"
     assert "outcome" in note
@@ -363,7 +360,7 @@ def test_same_plan_but_python_asks_and_native_runs_is_a_port_bug() -> None:
 
 def test_different_plans_with_different_outcomes_stay_disagreement() -> None:
     nat = _native(CMD_A, PLAN)
-    py = pc.parse_python("\n❓ CLARIFY: Which file?\n", _dump(OTHER_PLAN))
+    py = pc.parse_python("clarify:Which file?\n", _dump(OTHER_PLAN))
     status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
     assert status == "mismatch"
 
@@ -371,7 +368,7 @@ def test_different_plans_with_different_outcomes_stay_disagreement() -> None:
 def test_both_asking_the_same_plan_is_a_match() -> None:
     mov = [{"tool": "reverse_video", "args": {"inputs": ["mov"]}}]
     nat = pc.parse_native("clarify: Which mov did you mean?\n", _dump(mov))
-    py = pc.parse_python("\n❓ CLARIFY: Which mov did you mean?\n", _dump(mov))
+    py = pc.parse_python("clarify:Which mov did you mean?\n", _dump(mov))
     status, _ = pc.compare(_row(), nat, py, strict=False, cwd="/w")
     assert status == "match"
 
@@ -464,6 +461,60 @@ def test_only_keeps_the_named_rows_in_corpus_order_and_refuses_unknown_ids() -> 
     assert [r.id for r in pc.select_rows(rows, ["c", "a"])] == ["a", "c"]
     with pytest.raises(SystemExit):
         pc.select_rows(rows, ["a", "zzz"])
+
+
+def test_scratch_paths_of_two_runs_compare_equal(tmp_path: Path, monkeypatch) -> None:
+    """A routed intermediate lives in each process's own `<scratch>/run-<pid>-<hex>/`, so the two
+    runtimes can never print the same folder. Same plan, same file under the run folder: a match,
+    not the 13 "port bugs" the 2026-10-11 chain run reported."""
+    root = tmp_path / "knaif"
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", str(root))
+    a, b = (root / "run-111-aaaa1111").as_posix(), (root / "run-222-bbbb2222").as_posix()
+    nat = ["ffmpeg", "-y", "-i", "clip.mp4", "-an", f"{a}/clip_fast.mp4"]
+    nat2 = ["ffmpeg", "-y", "-i", f"{a}/clip_fast.mp4", "-c", "copy", "clip_fast_silent.mp4"]
+    py = ["ffmpeg", "-y", "-i", "/w/clip.mp4", "-an", f"{b}/clip_fast.mp4"]
+    py2 = ["ffmpeg", "-y", "-i", f"{b}/clip_fast.mp4", "-c", "copy", "/w/clip_fast_silent.mp4"]
+    n = pc.parse_native("", _dump(PLAN) + _argv_dump(nat) + _argv_dump(nat2))
+    p = pc.parse_python("", _dump(PLAN) + _argv_dump(py) + _argv_dump(py2))
+    status, _ = pc.compare(_row(), n, p, strict=False, cwd="/w")
+    assert status == "match"
+
+
+def test_a_scratch_path_is_not_the_same_file_in_the_users_folder(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Routing is ported to native: one runtime writing the intermediate into the user's folder
+    while the other routes it to scratch is a real port bug, and must stay one."""
+    root = tmp_path / "knaif"
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", str(root))
+    routed = ["ffmpeg", "-y", "-i", "clip.mp4", "-an", f"{(root / 'run-1-a').as_posix()}/x.mp4"]
+    in_folder = ["ffmpeg", "-y", "-i", "clip.mp4", "-an", "x.mp4"]
+    n = pc.parse_native("", _dump(PLAN) + _argv_dump(routed))
+    p = pc.parse_python("", _dump(PLAN) + _argv_dump(in_folder))
+    status, _ = pc.compare(_row(), n, p, strict=False, cwd="/w")
+    assert status == "port-bug"
+
+
+def test_a_url_compares_whole_not_by_its_file_name():
+    """A plan arg `https://h/a.mov` is not the local `a.mov`: two runtimes that disagree on whether
+    the input is the URL or a local file of the same name planned different things."""
+    assert pc.canon_token("https://files.knaif.test/ffmpeg/a.mov") == (
+        "https://files.knaif.test/ffmpeg/a.mov"
+    )
+    assert pc.canon_token("https://files.knaif.test/ffmpeg/a.mov") != pc.canon_token("a.mov")
+    assert pc.canon_token("videos/a.mov") == "a.mov"  # a path still compares by its name
+
+
+def test_a_corpus_other_than_eval_jsonl_can_be_compared(tmp_path):
+    """URL rows live in `eval_url.jsonl`, apart from the snapshot's population."""
+    corpus = tmp_path / "eval_url.jsonl"
+    corpus.write_text(
+        json.dumps({"id": "u1", "utterances": ["convert https://h.test/a.mov to mp4"], "tags": []})
+        + "\n",
+        encoding="utf-8",
+    )
+    rows = pc.load_rows("ffmpeg", None, corpus=corpus)
+    assert [(r.id, r.utterance) for r in rows] == [("u1", "convert https://h.test/a.mov to mp4")]
 
 
 def test_l3_on_the_release_subset_compares_its_rows() -> None:

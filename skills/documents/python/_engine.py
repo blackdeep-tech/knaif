@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -47,47 +48,75 @@ def _replace_fixture_placeholder(value: Any, fixture_path: Path) -> Any:
     return value
 
 
+def _resolve(raw: str, ctx: HandlerContext) -> Path:
+    """*raw* resolved inside the sandbox, or inside this run's scratch (a routed intermediate)."""
+    return _resolve_path(raw, ctx.root, ctx.sandbox, ctx.work_dir)
+
+
 def _input_path(args: dict[str, Any], ctx: HandlerContext) -> Path:
-    return _resolve_path(args["input"], ctx.root, ctx.sandbox)
+    return _resolve(args["input"], ctx)
 
 
 def _input_paths(args: dict[str, Any], ctx: HandlerContext) -> list[Path]:
-    return [_resolve_path(path, ctx.root, ctx.sandbox) for path in args["inputs"]]
+    return [_resolve(path, ctx) for path in args["inputs"]]
 
 
-def _next_free(path: Path) -> Path:
-    """`path` if nothing is there, else `<stem>-1<suffix>`, `-2`, ... — the first free one.
+def _user_side(path: Path, ctx: HandlerContext) -> Path:
+    """Where *path* sits in the user's folder: itself, unless it is a routed intermediate."""
+    return Path(ctx.call_tool("user_side_path", {"path": str(path)})["path"])
+
+
+def _free_name(path: Path, ctx: HandlerContext) -> Path:
+    """*path* if nothing is there, else `<stem>-1<suffix>`, `-2`, ... (fs `plan_output_path`).
 
     For a name the plan did not choose. A derived default that already exists is someone's
     file: `convert notes.txt to markdown` wrote `notes.md` over the user's own (2026-09-24 L4).
-    Mirrored in skills/documents/native/src/run.rs (`next_free`).
+    The same rule natively (skills/documents/native/src/run.rs, `knaif_toolkit_fs`).
     """
-    if not path.exists():
-        return path
-    n = 1
-    while True:
-        candidate = path.with_name(f"{path.stem}-{n}{path.suffix}")
-        if not candidate.exists():
-            return candidate
-        n += 1
+    rule = {"keep_requested": True, "separator": "-", "first_number": 1}
+    return Path(ctx.call_tool("plan_output_path", {"path": str(path), **rule})["path"])
 
 
 def _output_path(input_path: Path, args: dict[str, Any], ctx: HandlerContext, suffix: str) -> Path:
     raw = args.get("output")
     if raw:
         # An explicit output is a request, and honoured even over an existing file — the same
-        # rule as ffmpeg's collision pass. Only a name nobody asked for moves.
-        return _resolve_path(raw, ctx.root, ctx.sandbox)
+        # rule as ffmpeg's collision pass. Only a name nobody asked for moves. It may be in the
+        # scratch: a chain intermediate routed there.
+        return _resolve(raw, ctx)
+    # A default is named after the input, beside it in the user's folder; an input that is a
+    # routed intermediate counts as where it would have been, so nothing derived lands in scratch.
+    anchor = _user_side(input_path, ctx)
     if suffix.startswith("."):
-        return _next_free(input_path.with_suffix(suffix))
-    return _next_free(input_path.with_name(f"{input_path.stem}{suffix}"))
+        return _free_name(anchor.with_suffix(suffix), ctx)
+    return _free_name(anchor.with_name(f"{anchor.stem}{suffix}"), ctx)
 
 
 def _output_dir(args: dict[str, Any], ctx: HandlerContext, default: Path) -> Path:
     raw = args.get("output_dir")
     if raw:
-        return _resolve_path(raw, ctx.root, ctx.sandbox)
-    return default
+        return _resolve(raw, ctx)
+    return _user_side(default, ctx)
+
+
+@contextmanager
+def _writing(output: Path, ctx: HandlerContext) -> Iterator[Path]:
+    """Where to write *output*; on leaving the block, check it and move it into place.
+
+    The step writes to a staged path in the run scratch (fs `stage_output`), and only a good
+    file reaches the user's folder (fs `commit_output`: it exists and is not empty). A step that
+    raises, or writes nothing, leaves the folder as it was; the staged file goes with the scratch.
+    An output already in the scratch (a routed intermediate) is written in place. Without a
+    scratch (a bare caller) it is written directly, its folder made first (fs `ensure_parent`).
+    """
+    work = ctx.work_dir
+    if work is None or output.resolve().is_relative_to(Path(work).resolve()):
+        ctx.call_tool("ensure_parent", {"path": str(output)})
+        yield output
+        return
+    staged = Path(ctx.call_tool("stage_output", {"path": str(output)})["staged"])
+    yield staged
+    ctx.call_tool("commit_output", {"staged": str(staged), "path": str(output)})
 
 
 def _profile(skill_dir: Path, quality: str) -> dict[str, Any]:
@@ -96,9 +125,39 @@ def _profile(skill_dir: Path, quality: str) -> dict[str, Any]:
         return yaml.safe_load(fh) or {}
 
 
-def _pdf_page_count(path: Path) -> int:
+def _password_message(path: Path) -> str:
+    return (
+        f"{Path(path).name} is password-protected. Unlock it first (with the password), then "
+        "try again."
+    )
+
+
+def _open_pdf(path: Path) -> Any:
+    """pikepdf's `Pdf.open`, failing as native's `pdf::load_unlocked` does: a protected PDF
+    says so, a broken one is `could not open PDF <name>: …`, never the file's absolute path."""
     pikepdf = _require_pikepdf()
-    with pikepdf.Pdf.open(path) as pdf:
+    try:
+        return pikepdf.Pdf.open(path)
+    except pikepdf.PasswordError:
+        raise ValueError(_password_message(path)) from None
+    except pikepdf.PdfError as exc:
+        cause = str(exc)
+        for spelling in (str(path), str(Path(path).resolve())):
+            cause = cause.replace(f"{spelling}: ", "")
+        raise ValueError(f"could not open PDF {Path(path).name}: {cause}") from None
+
+
+def _read_pdf(path: Path) -> Any:
+    """pypdf's `PdfReader`, failing as `_open_pdf` does."""
+    pypdf = _require_pypdf()
+    try:
+        return pypdf.PdfReader(str(path))
+    except pypdf.errors.PyPdfError as exc:
+        raise ValueError(f"could not open PDF {Path(path).name}: {exc}") from None
+
+
+def _pdf_page_count(path: Path) -> int:
+    with _open_pdf(path) as pdf:
         return len(pdf.pages)
 
 
@@ -115,6 +174,19 @@ def _page_records_for_text(text: str) -> list[dict[str, Any]]:
     return [{"page": 1, "text": text}]
 
 
+def _document_text(records: list[dict[str, Any]]) -> str:
+    """A document's text as one string: each page without the line breaks at its edges, pages
+    one blank line apart, one `\\n` at the end (owner, 2026-10-24; native `document_text`).
+    """
+    text = "\n\n".join(str(record["text"]).strip("\r\n") for record in records)
+    return f"{text}\n" if text else ""
+
+
+def _write_text(target: Path, text: str) -> None:
+    """Save text with plain `\\n` line ends on every OS, as native writes it."""
+    target.write_bytes(text.encode("utf-8"))
+
+
 def _extract_text_records(path: Path, args: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     args = args or {}
     suffix = path.suffix.lower()
@@ -123,14 +195,7 @@ def _extract_text_records(path: Path, args: dict[str, Any] | None = None) -> lis
     if suffix in IMAGE_SUFFIXES:
         return _ocr_image_text_records(path, args.get("language", "eng"))
     if suffix == PDF_SUFFIX:
-        try:
-            from pypdf import PdfReader
-        except ImportError as exc:  # pragma: no cover - covered when extra absent
-            raise DocumentsDependencyError(
-                "Install the documents dep group (uv pip install --group documents) to extract PDF text."
-            ) from exc
-
-        reader = PdfReader(str(path))
+        reader = _read_pdf(path)
         if reader.is_encrypted:
             raise ValueError(
                 "Cannot extract text from encrypted PDF without a password. Unlock it first."
@@ -139,7 +204,10 @@ def _extract_text_records(path: Path, args: dict[str, Any] | None = None) -> lis
         records: list[dict[str, Any]] = []
         for page_number in selected_pages:
             page = reader.pages[page_number - 1]
-            records.append({"page": page_number, "text": page.extract_text() or ""})
+            # Without the line breaks at the page's edges, so a match span counts from the
+            # page's first character on both runtimes.
+            text = (page.extract_text() or "").strip("\r\n")
+            records.append({"page": page_number, "text": text})
         if args.get("ocr") or not any(record["text"].strip() for record in records):
             return _ocr_pdf_text_records(path, args, selected_pages)
         return records
@@ -242,7 +310,6 @@ def _write_ocr_image_pdf(input_path: Path, output_path: Path, language: str) -> 
     _require_tesseract()
     pytesseract = _require_pytesseract()
     Image = _require_pillow_image()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(input_path) as image:
         pdf_bytes = pytesseract.image_to_pdf_or_hocr(image, extension="pdf", lang=language)
     output_path.write_bytes(pdf_bytes)
@@ -256,7 +323,6 @@ def _write_ocr_pdf(input_path: Path, output_path: Path, language: str) -> int:
     pdfium = _require_pypdfium2()
     pdf = pdfium.PdfDocument(str(input_path))
     writer = pypdf.PdfWriter()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         for page_number in range(1, len(pdf) + 1):
             image = _render_pdf_page_image(pdf, page_number)
@@ -446,7 +512,7 @@ def _write_text_overlay_pdf(
     font_size: int = 36,
 ) -> None:
     pypdf = _require_pypdf()
-    reader = pypdf.PdfReader(str(input_path))
+    reader = _read_pdf(input_path)
     writer = pypdf.PdfWriter()
     for index, page in enumerate(reader.pages, start=1):
         width = float(page.mediabox.width)
@@ -462,7 +528,6 @@ def _write_text_overlay_pdf(
         )
         writer.add_page(page)
         writer.pages[-1].merge_page(overlay)
-    output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as fh:
         writer.write(fh)
 
@@ -476,7 +541,7 @@ def _write_image_overlay_pdf(
     opacity: float = 1.0,
 ) -> None:
     pypdf = _require_pypdf()
-    reader = pypdf.PdfReader(str(input_path))
+    reader = _read_pdf(input_path)
     writer = pypdf.PdfWriter()
     for page in reader.pages:
         width = float(page.mediabox.width)
@@ -490,14 +555,13 @@ def _write_image_overlay_pdf(
         )
         writer.add_page(page)
         writer.pages[-1].merge_page(overlay)
-    output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as fh:
         writer.write(fh)
 
 
 def _lossless_compress(input_path: Path, output_path: Path) -> None:
     pikepdf = _require_pikepdf()
-    with pikepdf.Pdf.open(input_path) as pdf:
+    with _open_pdf(input_path) as pdf:
         pdf.save(
             output_path,
             compress_streams=True,
@@ -506,8 +570,11 @@ def _lossless_compress(input_path: Path, output_path: Path) -> None:
         )
 
 
-def _ghostscript_compress(input_path: Path, output_path: Path, gs: str, pdfsettings: str) -> None:
-    subprocess.run(
+def _ghostscript_compress(
+    input_path: Path, output_path: Path, gs: str, pdfsettings: str, ctx: HandlerContext
+) -> None:
+    ctx.exec(
+        "gs",
         [
             gs,
             "-sDEVICE=pdfwrite",
