@@ -213,6 +213,12 @@ pub fn lexically_normalize(path: &Path) -> PathBuf {
     out
 }
 
+/// "The last frame" is not a time: duration minus 0.1 s was ~3 frames early at 30 fps, and no
+/// fixed offset is right on a variable frame rate. It stays this token and renders as
+/// `-sseof -1 … -update 1`, which leaves exactly the final frame (2026-10-27). Port of Python's
+/// `LAST_FRAME`.
+pub const LAST_FRAME: &str = "last";
+
 /// Symbolic instants a user can name but a model cannot compute: the duration is only known
 /// after probing. Port of `_resolve_at_time`. Returns `None` for a token this skill does not
 /// know - callers refuse it rather than invent an instant.
@@ -242,13 +248,7 @@ fn resolve_at_time(value: Option<&String>, duration: Option<f64>) -> Option<Stri
         text.as_str(),
         "last_frame" | "last" | "end" | "final_frame" | "final"
     ) {
-        let d = duration?;
-        if d <= 0.0 {
-            return None;
-        }
-        // Step back from the very end: seeking exactly to the duration lands past the last
-        // frame and writes nothing.
-        return Some(format_seconds((d - 0.1).max(0.0)));
+        return Some(LAST_FRAME.to_string());
     }
     None
 }
@@ -596,17 +596,26 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             post.extend(["-b:a".to_string(), b.clone()]);
         }
     } else if mode == "thumbnail" {
-        post.extend([
-            "-ss".to_string(),
-            recipe
-                .at_time
-                .clone()
-                .unwrap_or_else(|| "00:00:01".to_string()),
-        ]);
+        let last = recipe.at_time.as_deref() == Some(LAST_FRAME);
+        if last {
+            pre.extend(["-sseof".to_string(), "-1".to_string()]);
+        } else {
+            post.extend([
+                "-ss".to_string(),
+                recipe
+                    .at_time
+                    .clone()
+                    .unwrap_or_else(|| "00:00:01".to_string()),
+            ]);
+        }
         if let Some(scale) = &recipe.scale {
             post.extend(["-vf".to_string(), format!("scale={scale}")]);
         }
-        post.extend(["-vframes".to_string(), "1".to_string()]);
+        if last {
+            post.extend(["-update".to_string(), "1".to_string()]);
+        } else {
+            post.extend(["-vframes".to_string(), "1".to_string()]);
+        }
     } else if mode == "strip_audio" {
         post.push("-an".to_string());
         push_kept_video(&mut post, recipe);
@@ -2353,6 +2362,21 @@ mod tests {
         }
     }
 
+    /// Mirrors Python's test_the_last_frame_is_written_by_decoding_to_the_end.
+    #[test]
+    fn the_last_frame_is_written_by_decoding_to_the_end() {
+        let probe = probe_of("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2", true);
+        let opts = Options {
+            mode: Some("thumbnail".into()),
+            at_time: Some("last".into()),
+            ..Default::default()
+        };
+        let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        let (pre, post) = build_flags(&r, &bundle_vocab()).unwrap();
+        assert_eq!(pre, ["-sseof", "-1"]);
+        assert_eq!(post, ["-update", "1"]);
+    }
+
     /// Mirrors Python's test_keeping_the_video_still_copies_what_the_container_can_hold.
     #[test]
     fn keeping_the_video_still_copies_what_the_container_can_hold() {
@@ -2926,10 +2950,13 @@ mod trim_frames_tests {
 
     #[test]
     fn symbolic_at_time_resolves_against_duration() {
+        // Mirrors Python's test_symbolic_at_time_names_the_last_frame_not_a_time: the last frame
+        // is not a time, and needs no duration.
         for token in ["last_frame", "last", "end"] {
-            let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();
-            let secs: f64 = got.parse().unwrap();
-            assert!((11.0..12.0).contains(&secs), "{token} -> {got}");
+            for duration in [Some(12.0), None] {
+                let got = resolve_at_time(Some(&token.to_string()), duration);
+                assert_eq!(got.as_deref(), Some(LAST_FRAME), "{token} {duration:?}");
+            }
         }
         for token in ["middle", "midpoint", "halfway"] {
             let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();

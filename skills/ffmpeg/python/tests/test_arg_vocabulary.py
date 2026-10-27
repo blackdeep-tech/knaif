@@ -132,11 +132,22 @@ def test_ordinary_range_is_untouched(engine):
 
 # ── 4. symbolic times resolved against the probed duration ───────────────────
 @pytest.mark.parametrize("token", ["last_frame", "last", "end"])
-def test_symbolic_at_time_resolves_to_the_end_of_the_clip(engine, token):
-    """ "The last frame" is only computable here — the model does not know the duration."""
-    resolved = engine._resolve_at_time(token, duration=12.0)
-    assert resolved is not None
-    assert 11.0 <= float(resolved) < 12.0, f"{token} -> {resolved!r}"
+@pytest.mark.parametrize("duration", [12.0, None])
+def test_symbolic_at_time_names_the_last_frame_not_a_time(engine, token, duration):
+    """ "The last frame" is not a time: duration minus 0.1 s was ~3 frames early at 30 fps and no
+    fixed offset is right on a variable frame rate. It stays `last`, rendered as a seek from the
+    end, so it needs no duration either."""
+    assert engine._resolve_at_time(token, duration=duration) == engine.LAST_FRAME
+
+
+def test_the_last_frame_is_written_by_decoding_to_the_end(engine):
+    """`-sseof -1` then `-update 1`: every frame of the last second is written over the one image,
+    so the file left is the final frame — exact on 30 fps, 24 fps and variable-fps clips (checked
+    against the frame selected by number, 2026-10-27)."""
+    probe = {"file": "clip.mp4", "container": "mov", "duration": 2.0, "video_codec": "h264"}
+    recipe = engine._build_one_recipe(probe, None, None, {"mode": "thumbnail", "at_time": "last"})
+    assert recipe["pre_input_flags"] == ["-sseof", "-1"]
+    assert recipe["post_input_flags"] == ["-update", "1"]
 
 
 @pytest.mark.parametrize("token", ["middle", "midpoint", "halfway"])

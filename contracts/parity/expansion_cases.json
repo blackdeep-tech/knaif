@@ -702,6 +702,34 @@
           "clip_trimmed.mp4"
         ]
       ]
+    },
+    {
+      "name": "thumbnail_of_the_last_frame",
+      "_why": "\"The last frame\" was the duration minus 0.1 s, about 3 frames early at 30 fps and not the last frame at all on a variable frame rate. Seeking to a second before the end and writing every decoded frame over the one image (`-update 1`) leaves exactly the last one, checked byte for byte against the frame selected by number on 30 fps, 24 fps, variable-fps, 0.4 s and long-GOP clips (2026-10-27). It needs no duration.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "create_thumbnail",
+            "args": {
+              "input": "clip.mp4",
+              "at_time": "last"
+            }
+          }
+        ]
+      },
+      "expected_commands": [
+        [
+          "ffmpeg",
+          "-y",
+          "-sseof",
+          "-1",
+          "-i",
+          "clip.mp4",
+          "-update",
+          "1",
+          "clip_thumb.jpg"
+        ]
+      ]
     }
   ]
 }

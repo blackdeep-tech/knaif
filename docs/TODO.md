@@ -414,7 +414,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   that cannot hold it (re-encode, or keep the source container and say so), and the prompt or
   training should make "save it as webm" a `convert_video` step. Measured on the row; a fix
   re-locks ffmpeg.
-- [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
+- [x] **Exact last-frame extraction** — **fixed 2026-10-27** on `release/1.4.0` (`fix/1.4.0-bugs`): "last" stays the `LAST_FRAME` token instead of a time and renders `-sseof -1 … -update 1`, which leaves exactly the final frame and needs no duration. Both runtimes, mirrored tests and the L2 case `thumbnail_of_the_last_frame`; checked byte for byte against the frame selected by number on 30 fps, 24 fps, variable-fps, 0.4 s and long-GOP clips, and run for real in both CLIs. Was: `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame.
 - [x] **Default the CLI confirmations to Yes (`[Y/n]`)** — BUILT 2026-10-06 on `feat/1.3.0` (as built: no prompt unless `--confirm`; see the 1.3.0 index) — — owner, 2026-09-29, from the RC3 manual
   tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding
   an opt-in flag to ask first; keep `--yes` as an accepted no-op, and keep the first-run model

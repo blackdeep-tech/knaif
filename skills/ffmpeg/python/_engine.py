@@ -534,9 +534,12 @@ _AT_TIME_END_TOKENS = frozenset({"last_frame", "last", "end", "final_frame", "fi
 _AT_TIME_START_TOKENS = frozenset({"first", "first_frame", "start", "beginning"})
 _AT_TIME_MIDDLE_TOKENS = frozenset({"middle", "midpoint", "halfway", "mid", "centre", "center"})
 
-# Step back from the very end: seeking exactly to the duration lands past the last frame and
-# writes nothing.
-_LAST_FRAME_EPSILON = 0.1
+# "The last frame" is not a time. Duration minus 0.1 s was ~3 frames early at 30 fps, and no fixed
+# offset is right on a variable frame rate. It stays this token and renders as a seek to a second
+# before the end with every decoded frame written over the one image (`-sseof -1 … -update 1`),
+# which leaves exactly the final frame (checked against the frame selected by number on 30 fps,
+# 24 fps, variable-fps, 0.4 s and long-GOP clips, 2026-10-27). Rust: `LAST_FRAME`.
+LAST_FRAME = "last"
 
 
 def _resolve_at_time(value: Any, *, duration: float | None) -> Any:
@@ -557,9 +560,7 @@ def _resolve_at_time(value: Any, *, duration: float | None) -> Any:
             return None
         return _format_seconds(duration / 2.0)
     if text in _AT_TIME_END_TOKENS:
-        if duration is None or duration <= 0:
-            return None
-        return _format_seconds(max(0.0, duration - _LAST_FRAME_EPSILON))
+        return LAST_FRAME
     return None
 
 
@@ -1392,11 +1393,15 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
         if bitrate:
             post += ["-b:a", str(bitrate)]
     elif mode == "thumbnail":
-        post += ["-ss", str(recipe.get("at_time", "00:00:01"))]
+        last = recipe.get("at_time") == LAST_FRAME
+        if last:
+            pre += ["-sseof", "-1"]
+        else:
+            post += ["-ss", str(recipe.get("at_time", "00:00:01"))]
         scale = recipe.get("scale")
         if scale:
             post += ["-vf", f"scale={scale}"]
-        post += ["-vframes", "1"]
+        post += ["-update", "1"] if last else ["-vframes", "1"]
     elif mode == "strip_audio":
         post += ["-an", *_kept_video_flags(recipe)]
     elif mode == "adjust_speed":
