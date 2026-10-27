@@ -929,7 +929,7 @@ def cmd_run(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         print_scoreboard(scoreboard, backend=backend_name, verbose=args.verbose)
 
         if args.save:
-            print(f"  Saved to {out_path}")
+            print(f"  Saved to {_shown(out_path)}")
 
         if args.snapshot:
             _assert_skill_owns_verifier(args.skill, args.verifier, verifiers)
@@ -1331,12 +1331,14 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             "say so."
         )
         if args.save:
-            print(f"  Saved to {out_path} (raw rows kept; the aggregate is not an L4 result)")
+            print(
+                f"  Saved to {_shown(out_path)} (raw rows kept; the aggregate is not an L4 result)"
+            )
         return scoreboard
 
     print_scoreboard(scoreboard, backend=lane.name, verbose=args.verbose)
     if args.save:
-        print(f"  Saved to {out_path}")
+        print(f"  Saved to {_shown(out_path)}")
     return scoreboard
 
 
@@ -2098,7 +2100,7 @@ def cmd_safety(args: argparse.Namespace) -> dict[str, Any]:
         out = Path(args.save)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print(f"  saved -> {out}")
+        print(f"  saved -> {_shown(out)}")
 
     if result["pass_rate"] < 1.0:
         sys.exit(1)
@@ -2172,7 +2174,7 @@ def _safety_through_the_lane(
         # Like a scoreboard: the lane's entry point is an absolute path (AGENTS.md hygiene).
         saved = redact_local_paths(result)
         out.write_text(json.dumps(saved, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        print(f"  saved -> {out}")
+        print(f"  saved -> {_shown(out)}")
 
     if result["pass_rate"] < 1.0:
         sys.exit(1)
