@@ -322,8 +322,10 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 
 # Open / Next (no dedicated plan yet)
 
-- [ ] **Toolchain and llama.cpp refresh as the first task of the next minor** (the first opened
-  after 1.3.0). Agreed 2026-10-14; the procedure is [RELEASE.md](RELEASE.md#toolchain-and-llamacpp-refresh--first-task-of-every-minor).
+- [x] **Toolchain and llama.cpp refresh as the first task of the next minor** — done 2026-10-27 on
+  `release/1.4.0` (`chore/deps-1.4.0`): Rust 1.99.1, `llama-cpp-2`/`-sys-2` 0.1.160; see the
+  [1.4.0 index](plans/2026-10-26-release-1.4.0.md) *Decisions*. Agreed 2026-10-14 for the first
+  minor opened after 1.3.0; the procedure is [RELEASE.md](RELEASE.md#toolchain-and-llamacpp-refresh--first-task-of-every-minor).
   On 2026-10-14 the pins were Rust 1.96.0 (stable 1.99.0), `llama-cpp-2`/`-sys-2` 0.1.150 (0.1.159)
   and `llama-cpp-python` 0.3.35 (0.3.36), all unchanged since 1.0.1. Not done on 1.3.0 because
   its evals are already underway.

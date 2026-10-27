@@ -105,7 +105,7 @@ On a `chore/deps-X.Y.0` branch into the release, one PR:
 
 | Pin | Files that must agree |
 |---|---|
-| Rust toolchain (latest stable) | `rust-toolchain.toml` `channel`, `mise.toml` `rust`, `Cargo.toml` `rust-version`, the stack table in [NATIVE.md](NATIVE.md) |
+| Rust toolchain (latest stable) | `rust-toolchain.toml` `channel`, `mise.toml` `rust`, `Cargo.toml` `rust-version`, `RUST_VERSION` in `installers/linux/Dockerfile` and `Dockerfile.cuda`, the stack table in [NATIVE.md](NATIVE.md) |
 | `llama-cpp-2` + `llama-cpp-sys-2` (same version) | `native/crates/knaif-llm/Cargo.toml`, `Cargo.lock`, [NATIVE.md](NATIVE.md) |
 | `llama-cpp-python` | `uv.lock` (`uv lock --upgrade-package llama-cpp-python`) |
 
@@ -114,10 +114,18 @@ Before the PR:
 - `just check-native` and `just test-native`. A new Rust release usually means a few new clippy
   lints, and the warnings count as errors.
 - Re-read the comments in `knaif-llm/Cargo.toml` against the new wrapper: `default-features = false`
-  keeps `openmp` out, and the direct `llama-cpp-sys-2` dependency is only there because the
-  wrapper does not forward `vulkan`. Drop that workaround if the wrapper now forwards it.
-- Build every kind the release ships (CPU, Vulkan, CUDA, Metal) and check offload is really on the
-  GPU (`detect_backend()` and placement, [INFERENCE.md](INFERENCE.md)).
+  keeps `openmp` out, and the direct `llama-cpp-sys-2` dependency is only there for `BACKENDS_DIR`
+  (the `dynamic-backends` dev fallback), which moved from the wrapper to the -sys crate in 0.1.160.
+  Drop it if the wrapper exposes that constant again. Every feature goes through the wrapper.
+- The wrapper's API can move between versions (0.1.160 moved tokenizing and detokenizing to
+  `LlamaVocab`). Port `knaif-llm/src/llama.rs` with the same settings (no BOS, special tokens
+  parsed) and let the parity read below confirm nothing the model sees changed.
+- Build every kind the release ships (CPU, Vulkan, CUDA, Metal) with `scripts/build_native_kind.sh`
+  and check offload is really on the GPU (`detect_backend()` and placement,
+  [INFERENCE.md](INFERENCE.md); `knaif plan --verbose` prints `offloaded N/N layers to GPU`). The
+  script replaces llama.cpp's libraries beside the exe from the build that made it: llama-cpp-sys-2
+  links them there only when the name is absent, so after a bump a direct run of
+  `target/release-<kind>/knaif` otherwise loads the previous version's libraries.
 - `just check-contracts`, then `just parity <skill> --limit 20` per skill as a quick read. The full
   L3/L4 runs come later, in §4, on the frozen commit.
 

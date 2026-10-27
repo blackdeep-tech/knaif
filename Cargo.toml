@@ -17,7 +17,7 @@ members = [
 version = "1.3.0"
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.96"
+rust-version = "1.99"
 # Same holder and address as the wheel's `authors` (python/core/pyproject.toml), so the two
 # runtimes are attributable to one party wherever they are published. Cargo takes a single
 # "Name <email>" string where PEP 621 splits the two fields.
