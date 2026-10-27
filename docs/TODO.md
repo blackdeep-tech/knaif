@@ -374,7 +374,14 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   Also: `schema_validity` no longer counts `parse_error` as valid; the train/eval verbatim-copy test covers **both** skills (it was ffmpeg-only, which is why `documents_079` was never caught). The native lane keeps its own lowerable coverage floor — `check_acceptance` takes `coverage_floor`, so there is one rule, not two that can disagree.
 - [x] **Safety population count is still unbound** — DONE 2026-10-07: `accept` and `accept-native` pass the corpus row ids, and a safety record that misses a row, or has one the corpus does not, fails `safety/coverage` (by ids, else by total). Was: the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
 - [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
-- [ ] **Previewing a chain that changes pages of a file an earlier step creates** — found
+- [x] **Previewing a chain that changes pages of a file an earlier step creates** — **done
+  2026-10-27** on `release/1.4.0`: Python's `_pending` guard (split, rotate, remove, reorder) came
+  with the 1.4.0 features, native already guarded all four (`input.exists()` in its preview), and
+  `fix/1.4.0-bugs` adds the L2 cases (`page_op_after_a_step_that_writes_its_input_*` in
+  `contracts/parity/documents_expansion_cases.json`: rotate, reorder, remove, split), shown to fail
+  in both runtimes with the guard switched off. The four rows below, run for real on the 4B
+  (`success`): 7 of 8 wordings plan and execute, no "No such file" left; `hard2_008#1` clarifies
+  (a model choice). The re-lock measures them. Found
   2026-10-07 while fixing the `remove_pages` preview (documents_105's sibling). Native now checks
   the pages in a preview only when the input exists, so "merge, then remove page 2" still
   previews. **Python fails that preview** (it always read the input's page count), and the Mac
@@ -394,7 +401,12 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   but there is no fix. A validly signed FFmpeg is the only one, which is the parked media-runtime
   plan (branch `docs/media-runtime-and-mobile`; owner, 2026-10-07: leave it for now). Ghostscript and Tesseract are blocked too: neither maker signs validly (Tesseract's
   certificate expired in 2023, including on the newer `tesseract-ocr.tesseract` 5.5.3 package).
-- [ ] **`strip_audio` stream-copies h264 into a `.webm` output** — found 2026-10-18 by the
+- [x] **`strip_audio` stream-copies h264 into a `.webm` output** — renderer half **fixed
+  2026-10-27** on `release/1.4.0` (`fix/1.4.0-bugs`): `strip_audio` and `adjust_volume` copy the
+  video only when the output container can hold the source codec, else encode with the
+  container's encoder (`libvpx-vp9` for webm), both runtimes, run for real on h264 → webm. The
+  model half ("save it as webm" as a `convert_video` step) is left to training; the plan now
+  works as the models write it. Found 2026-10-18 by the
   corpus v2 run (`ffmpeg_hard2_005`, "scale clip_4k.mp4 down to 720p, drop the audio and save it as
   webm"): both models plan resize → strip_audio with no `convert_video`, and `strip_audio` renders
   `-c:v copy` into the `.webm` the request named, which ffmpeg refuses ("Only VP8 or VP9 or AV1
