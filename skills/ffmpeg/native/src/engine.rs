@@ -410,6 +410,10 @@ pub struct Recipe {
     pub source_duration: Option<f64>,
     /// Human-readable operation summary (drives the plan preview); not used by `build_flags`.
     pub operations: Vec<String>,
+    /// An operation that keeps its video (`strip_audio`, `adjust_volume`) encodes it with
+    /// `video.encoder` instead of copying it: the output container cannot hold the source codec
+    /// (h264 into `.webm`). Port of Python's `copy_video`, negated so the default still copies.
+    pub encode_kept_video: bool,
 }
 
 /// Requested audio format → ffmpeg encoder (default `copy`); port of `_audio_encoder_for`.
@@ -512,6 +516,16 @@ fn push_video(post: &mut Vec<String>, v: &Video, pixfmt: bool) {
 }
 
 /// Emit `-c:a[/-b:a]` for an audio block (bitrate only when `bitrate`).
+/// The video flags of an operation that keeps its video: a stream copy, or an encode with the
+/// recipe's encoder when the container cannot hold the source codec. Port of `_kept_video_flags`.
+fn push_kept_video(post: &mut Vec<String>, recipe: &Recipe) {
+    if recipe.encode_kept_video {
+        push_video(post, &recipe.video, false);
+    } else {
+        post.extend(["-c:v".to_string(), "copy".to_string()]);
+    }
+}
+
 fn push_audio(post: &mut Vec<String>, a: &Audio, bitrate: bool) {
     if let Some(c) = &a.codec {
         post.extend(["-c:a".to_string(), c.clone()]);
@@ -594,7 +608,8 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
         }
         post.extend(["-vframes".to_string(), "1".to_string()]);
     } else if mode == "strip_audio" {
-        post.extend(["-an".to_string(), "-c:v".to_string(), "copy".to_string()]);
+        post.push("-an".to_string());
+        push_kept_video(&mut post, recipe);
     } else if mode == "adjust_speed" {
         let speed = recipe.speed.unwrap_or(1.0);
         anyhow::ensure!(
@@ -657,7 +672,7 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             post.extend(["-af".to_string(), format!("volume={level}")]);
         }
         if !recipe.audio_only {
-            post.extend(["-c:v".to_string(), "copy".to_string()]);
+            push_kept_video(&mut post, recipe);
         }
         push_audio(&mut post, &recipe.audio, false);
     } else if recipe.container.as_deref() == Some("gif") {
@@ -1745,6 +1760,18 @@ pub fn build_one_recipe(
         _ => {}
     }
 
+    // An operation that keeps its video copies it, unless the output container cannot hold the
+    // source codec: h264 copied into a `.webm` is refused ("Only VP8 or VP9 or AV1 video";
+    // ffmpeg_hard2_005). The encoding guard above has already set webm's encoder in `video`.
+    if matches!(mode.as_str(), "strip_audio" | "adjust_volume") && !recipe.audio_only {
+        recipe.encode_kept_video = container == "webm"
+            && probe
+                .video_codec
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .is_some_and(|src| !["vp8", "vp9", "av1"].contains(&src));
+    }
+
     if drop_video {
         recipe.video = Video::default();
     }
@@ -2301,6 +2328,51 @@ mod tests {
         }
         let mkv = probe_of("clip.mkv", "matroska,webm", true);
         assert_eq!(reversed_name(&mkv, Some("mp4")), "clip_reversed.mp4");
+    }
+
+    /// Mirrors Python's test_keeping_the_video_into_webm_reencodes_an_h264_source: `-c:v copy`
+    /// of h264 into a `.webm` is refused ("Only VP8 or VP9 or AV1 video"; ffmpeg_hard2_005).
+    #[test]
+    fn keeping_the_video_into_webm_reencodes_an_h264_source() {
+        let probe = probe_of("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2", true);
+        for mode in ["strip_audio", "adjust_volume"] {
+            let opts = Options {
+                mode: Some(mode.into()),
+                output_path: Some("out.webm".into()),
+                level: Some("2.0".into()),
+                ..Default::default()
+            };
+            let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+            let (_, post) = build_flags(&r, &bundle_vocab()).unwrap();
+            assert!(
+                !post.windows(2).any(|w| w == ["-c:v", "copy"]),
+                "{mode}: {post:?}"
+            );
+            let i = post.iter().position(|f| f == "-c:v").unwrap();
+            assert_eq!(post[i + 1], "libvpx-vp9", "{mode}: {post:?}");
+        }
+    }
+
+    /// Mirrors Python's test_keeping_the_video_still_copies_what_the_container_can_hold.
+    #[test]
+    fn keeping_the_video_still_copies_what_the_container_can_hold() {
+        let mut vp9 = probe_of("clip.webm", "matroska,webm", true);
+        vp9.video_codec = Some("vp9".into());
+        let mp4 = probe_of("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2", true);
+        for mode in ["strip_audio", "adjust_volume"] {
+            for (probe, output) in [(&vp9, "out.webm"), (&mp4, "out.mp4")] {
+                let opts = Options {
+                    mode: Some(mode.into()),
+                    output_path: Some(output.into()),
+                    level: Some("2.0".into()),
+                    ..Default::default()
+                };
+                let r = build_one_recipe(probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+                let (_, post) = build_flags(&r, &bundle_vocab()).unwrap();
+                let i = post.iter().position(|f| f == "-c:v").unwrap();
+                assert_eq!(post[i + 1], "copy", "{mode} -> {output}: {post:?}");
+            }
+        }
     }
 
     #[test]

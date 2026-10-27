@@ -1230,6 +1230,14 @@ def _build_one_recipe(
         recipe.pop("audio", None)
     if mode == "adjust_speed":
         recipe["speed"] = float(options.get("speed", 1.0))
+    # An operation that keeps its video copies it (`-c:v copy`), unless the output container
+    # cannot hold the source's codec: h264 copied into a `.webm` is refused ("Only VP8 or VP9 or
+    # AV1 video"; ffmpeg_hard2_005, 2026-10-18). Then the video is encoded with the container's
+    # encoder, which the encoding guard above has already put in `recipe["video"]`.
+    if mode in ("strip_audio", "adjust_volume") and not recipe.get("audio_only"):
+        src_video = probe.get("video_codec")
+        compatible = _COMPATIBLE_VIDEO.get(container)
+        recipe["copy_video"] = not (src_video and compatible and src_video not in compatible)
 
     # Audio-only re-encode into a single-codec container: no video stream to map,
     # so the render path must not emit -c:v / -pix_fmt / scale.
@@ -1390,7 +1398,7 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             post += ["-vf", f"scale={scale}"]
         post += ["-vframes", "1"]
     elif mode == "strip_audio":
-        post += ["-an", "-c:v", "copy"]
+        post += ["-an", *_kept_video_flags(recipe)]
     elif mode == "adjust_speed":
         speed = float(recipe.get("speed", 1.0))
         if not math.isfinite(speed) or speed <= 0:
@@ -1460,7 +1468,7 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             level = _coerce_volume_level(recipe.get("level"))
             post += ["-af", f"volume={level}"]
         if not recipe.get("audio_only"):
-            post += ["-c:v", "copy"]  # video input: keep the video stream untouched
+            post += _kept_video_flags(recipe)  # video input: keep the video stream
         audio = recipe.get("audio", {})
         if audio.get("codec"):
             post += ["-c:a", audio["codec"]]
@@ -1542,6 +1550,21 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             post += ["-movflags", "+faststart"]
 
     return pre, post
+
+
+def _kept_video_flags(recipe: dict[str, Any]) -> list[str]:
+    """The video flags of an operation that keeps its video: a stream copy, or, when the output
+    container cannot hold the source codec (`recipe["copy_video"]` false), an encode with the
+    recipe's encoder, as rotate and reverse render one."""
+    if recipe.get("copy_video", True):
+        return ["-c:v", "copy"]
+    video = recipe.get("video", {})
+    flags = ["-c:v", video["encoder"]]
+    if video.get("crf") is not None:
+        flags += ["-crf", str(video["crf"])]
+    if video.get("preset"):
+        flags += ["-preset", video["preset"]]
+    return flags
 
 
 def _render_command(recipe: dict[str, Any], *, preview: dict[str, Any] | None = None) -> list[str]:

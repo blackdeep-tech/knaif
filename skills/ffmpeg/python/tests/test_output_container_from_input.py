@@ -172,3 +172,32 @@ def test_a_delivery_operation_still_defaults_to_mp4(engine, mode):
         _probe("clip.mkv", "matroska,webm"), None, None, {"mode": mode}
     )
     assert recipe["container"] == "mp4"
+
+
+# ── an operation that keeps the video must not copy it into a container that cannot hold it ──
+
+
+@pytest.mark.parametrize("mode", ["strip_audio", "adjust_volume"])
+def test_keeping_the_video_into_webm_reencodes_an_h264_source(engine, mode):
+    """`-c:v copy` of h264 into a `.webm` is refused by ffmpeg ("Only VP8 or VP9 or AV1 video";
+    ffmpeg_hard2_005, corpus v2 run 2026-10-18: resize then strip_audio, saved as webm). The video
+    is encoded with the container's encoder instead, as a remux into webm already is."""
+    probe = _probe("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2")
+    options = {"mode": mode, "output_path": "out.webm", "level": "2.0"}
+
+    recipe = engine._build_one_recipe(probe, None, None, options)
+
+    post = recipe["post_input_flags"]
+    assert ["-c:v", "copy"] not in [post[i : i + 2] for i in range(len(post) - 1)], post
+    assert post[post.index("-c:v") + 1] == "libvpx-vp9", post
+
+
+@pytest.mark.parametrize("mode", ["strip_audio", "adjust_volume"])
+def test_keeping_the_video_still_copies_what_the_container_can_hold(engine, mode):
+    vp9 = _probe("clip.webm", "matroska,webm")
+    vp9["video_codec"] = "vp9"
+    mp4 = _probe("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2")
+    for probe, output in ((vp9, "out.webm"), (mp4, "out.mp4")):
+        options = {"mode": mode, "output_path": output, "level": "2.0"}
+        post = engine._build_one_recipe(probe, None, None, options)["post_input_flags"]
+        assert post[post.index("-c:v") + 1] == "copy", (output, post)
