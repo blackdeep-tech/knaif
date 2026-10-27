@@ -15,7 +15,7 @@ use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaChatTemplate, LlamaModel};
+use llama_cpp_2::model::{LlamaChatMessage, LlamaChatTemplate, LlamaModel};
 use llama_cpp_2::token::LlamaToken;
 use llama_cpp_2::LlamaBackendDeviceType;
 
@@ -153,11 +153,11 @@ fn backend_dirs(verbose: bool) -> Vec<std::path::PathBuf> {
         dirs.push(dir.clone());
     }
     // Dev-only fallback: the build's own `$OUT_DIR/backends`, baked in at compile time by
-    // llama-cpp-2's build.rs, so an unstaged `cargo run` still finds backends. Skipped once the
+    // llama-cpp-sys-2's build.rs, so an unstaged `cargo run` still finds backends. Skipped once the
     // exe dir has its own — otherwise a dev build loads every backend TWICE (observed).
     // Never fires for a packaged artifact: the baked path doesn't exist on a user's machine.
     if !exe_dir.as_deref().is_some_and(has_backend_libs) {
-        if let Some(dir) = llama_cpp_2::llama_backend::BACKENDS_DIR {
+        if let Some(dir) = llama_cpp_sys_2::BACKENDS_DIR {
             dirs.push(std::path::PathBuf::from(dir));
         }
     }
@@ -377,11 +377,10 @@ impl LlmBackend for LlamaCppBackend {
         }
 
         // The chat template already emits the model's start tokens (`<|im_start|>...`), so don't add
-        // a BOS on top — Qwen3 has no BOS in its trained framing.
-        let tokens = self
-            .model
-            .str_to_token(&prompt, AddBos::Never)
-            .context("tokenizing prompt")?;
+        // a BOS on top — Qwen3 has no BOS in its trained framing. Special tokens in the template
+        // are parsed as tokens, not text (`parse_special`).
+        let vocab = self.model.vocab();
+        let tokens = vocab.tokenize(prompt.as_bytes(), false, true);
 
         // Keep the keys/values of the shared start of the previous prompt; drop everything after
         // it (the rest of that prompt and what it generated). A context that cannot drop a tail
@@ -430,10 +429,10 @@ impl LlmBackend for LlamaCppBackend {
                 .map(|d| d.id())
                 .ok_or_else(|| anyhow::anyhow!("no candidate tokens"))?;
 
-            if self.model.is_eog_token(next) {
+            if vocab.is_eog(next) {
                 break;
             }
-            out_bytes.extend(self.model.token_to_piece_bytes(next, 32, false, None)?);
+            vocab.token_to_piece_into(next, &mut out_bytes, false, None);
 
             batch.clear();
             batch.add(next, n_cur, &[0], true)?;

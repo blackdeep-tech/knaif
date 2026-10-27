@@ -50,7 +50,7 @@ FROM ${CUDA_BASE}
 
 # Kept in step with installers/linux/Dockerfile — see the header. Asserted by a test.
 ARG APT_SNAPSHOT=20260727T000000Z
-ARG RUST_VERSION=1.96.0
+ARG RUST_VERSION=1.99.1
 
 ENV DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]

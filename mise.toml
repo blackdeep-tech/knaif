@@ -19,7 +19,7 @@ python = "3.14"      # top of requires-python ">=3.10,<3.15". This is what mise 
                      # 3.10 and 3.14 — rather than trusting either end untested.
 uv = "0.11.2"        # Python env + dependency manager (pinned for reproducibility)
 just = "latest"      # human-facing task runner
-rust = "1.96.0"      # provides cargo; keep in sync with rust-toolchain.toml (authoritative)
+rust = "1.99.1"      # provides cargo; keep in sync with rust-toolchain.toml (authoritative)
 cmake = "latest"     # needed if/when llama.cpp is vendored + built from source
 node = "22"          # websites (site/org, site/dev). Pinned, not "latest" — Amplify builds
                      # against this, and a floating major is not reproducible. 22 is what the

@@ -26,10 +26,10 @@ Design record: [docs/plans/2026-06-17-monorepo-dual-runtime.md](plans/2026-06-17
 
 | Area | Choice |
 |---|---|
-| Language / edition | Rust 2021, `rust-version = 1.96` |
+| Language / edition | Rust 2021, `rust-version = 1.99` |
 | CLI parsing | `clap` v4 (derive) |
 | Serialization | `serde`, `serde_yaml`, `serde_json` (**`preserve_order`** — prompt example JSON must stay in trained key order) |
-| Inference | `llama-cpp-2` / `llama-cpp-sys-2` 0.1.150 (bundles llama.cpp) |
+| Inference | `llama-cpp-2` / `llama-cpp-sys-2` 0.1.160 (bundles llama.cpp) |
 | GPU backends | CPU (static), **Vulkan** (cross-vendor), **CUDA** (NVIDIA) — compile-time cargo features |
 | Hashing | `sha2` (model checksum verification) |
 | HTTP | `ureq` v2 (blocking, rustls; model downloads — no tokio) |

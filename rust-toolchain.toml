@@ -12,5 +12,5 @@
 # and the `native` and `hooks` jobs for CI. Keep this list anyway; it is the declaration of
 # what the workspace needs, and it is correct for anyone installing via rustup.
 [toolchain]
-channel = "1.96.0"
+channel = "1.99.1"
 components = ["rustfmt", "clippy"]

@@ -46,7 +46,7 @@ ARG SHADERC_VERSION=2025.2~rc1-1lunarg22.04-1
 ARG VULKAN_SDK_VERSION=1.4.313.0~rc1-1lunarg22.04-1
 ARG SPIRV_HEADERS_VERSION=1.6.1+1.4.313.0~rc1-1lunarg22.04-1
 ARG GLSLANG_VERSION=15.3.0~rc1-1lunarg22.04-1
-ARG RUST_VERSION=1.96.0
+ARG RUST_VERSION=1.99.1
 ARG APPIMAGETOOL_VERSION=1.9.1
 ARG APPIMAGETOOL_SHA256=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
 
@@ -148,8 +148,8 @@ RUN set -eux; \
 
 # --- 4. Rust, at the version the workspace pins -----------------------------------------------
 #
-# rust-toolchain.toml pins 1.96.0, so installing anything else would just make cargo download
-# 1.96.0 on first use — baking it in keeps the toolchain in the layer instead of in every run.
+# rust-toolchain.toml pins 1.99.1, so installing anything else would just make cargo download
+# 1.99.1 on first use — baking it in keeps the toolchain in the layer instead of in every run.
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
 # `--component` takes ONE value; repeating the flag is the only way to pass several. Passing
 # `--component rustfmt clippy` makes rustup-init reject `clippy` as a stray positional.
