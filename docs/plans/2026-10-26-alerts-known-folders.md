@@ -7,9 +7,9 @@
 
 > **Status note (2026-10-26).** Built and measured on both runtimes with the shipped 4B model; a
 > prompt-only change made it emit the alert and known-folder outputs. Left for the release:
-> `eval_alert.jsonl` needs an acceptance slice in both skills' `acceptance.yaml` (numbers below;
-> documents' margin is one utterance), the snapshots are re-locked once on the generation-1
-> prompts, the known-folder lookup on macOS and Linux is exercised by the release evidence (ported,
+> the alert and known-folder rows joined each skill's `eval.jsonl` on 2026-10-28 (tag
+> `alerts_and_folders`) and their floor is written from the re-lock that first measures them
+> (numbers below; documents' margin is one utterance), on the generation-1 prompts, the known-folder lookup on macOS and Linux is exercised by the release evidence (ported,
 > measured on Windows so far), the Windows installer's app-id registration ships with the
 > release so the toast says knaif, and `docs/TOOL_SCHEMA.md` and `docs/EVAL_FRAMEWORK.md` still
 > need their sections (the core tool's YAML, the skills' `SPEC.md` rows and the eval's
@@ -44,7 +44,8 @@ Desktop, Documents, Videos, Music and Pictures named in a request mean the user'
 
 ## Bar and evidence
 
-Fixed before measuring. The new rows are in `skills/<skill>/data/eval_alert.jsonl` (ffmpeg 10 rows,
+Fixed before measuring. The new rows were in `skills/<skill>/data/eval_alert.jsonl` (in `eval.jsonl`, tag
+`alerts_and_folders`, since 2026-10-28; ffmpeg 10 rows,
 documents 6, three wordings each), graded on the alert recorded in the sink with the right outcome
 and the file delivered in the redirected folder, exact files clean.
 

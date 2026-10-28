@@ -10,9 +10,10 @@
 > Two known weak points go to the next model, not to this release's code: four ffmpeg batch shapes
 > score below 0.70 on files (the model writes "every video" as `*.mp4`, and some two-result
 > wordings), and the training rows for them ship with these features (`train_batch.jsonl`). Left for the
-> release: the `batch` acceptance slice exists in ffmpeg (0.92) and needs one in documents, the
-> snapshots are re-locked once on the generation-1 prompts (the corpus edit that lets two former
-> clarify rows plan the new tools lands with the re-lock), the release evidence runs per
+> release: the rows joined each skill's `eval.jsonl` on 2026-10-28 (tag `many_files`; ffmpeg's
+> older `batch` slice is a different tag) and their floor is written from the re-lock that first
+> measures them, on the generation-1 prompts; the two former clarify rows the new tools now do
+> (`ffmpeg_204`, `ffmpeg_208`) are fixed as plan rows (release index *Decisions*); the release evidence runs per
 > platform, and `docs/TOOL_SCHEMA.md` still needs a section on batches and output sets (the parity
 > cases and the skills' `SPEC.md` are the documentation today).
 
@@ -49,7 +50,8 @@ per-file work.
 
 ## Bar and evidence
 
-Fixed before measuring. New rows in `skills/<skill>/data/eval_batch.jsonl` (ffmpeg 34 rows,
+Fixed before measuring. New rows were in `skills/<skill>/data/eval_batch.jsonl` (in `eval.jsonl`, tag `many_files`,
+since 2026-10-28; ffmpeg 34 rows,
 documents 18, three wordings each) over every shape above and the six-row keep-or-delete table,
 graded on every output file and on the files that must be gone.
 

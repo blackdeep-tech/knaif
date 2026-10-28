@@ -6,9 +6,9 @@
 **Release:** 1.4.0
 
 > **Status note (2026-10-26).** Built and measured on both runtimes with the shipped 4B model; a
-> prompt-only change made it plan URL inputs. Left for the release: `eval_url.jsonl` needs an
-> acceptance slice in both skills' `acceptance.yaml` (the measured numbers are below), the
-> snapshots are re-locked once on the generation-1 prompts, and the release evidence runs per
+> prompt-only change made it plan URL inputs. Left for the release: the URL rows joined each skill's
+> `eval.jsonl` on 2026-10-28 (tag `url_input`, release index *Decisions*) and their floor is written
+> from the re-lock that first measures them, on the generation-1 prompts, and the release evidence runs per
 > platform with the eval's local HTTP server.
 
 **Goal:** A request may name a file by its http(s) link; it is fetched into the run scratch and
@@ -34,7 +34,8 @@ worked on like a local file, with the user's consent and never in a dry run.
 
 ## Bar and evidence
 
-Fixed before measuring. The new rows are in `skills/<skill>/data/eval_url.jsonl` (ffmpeg 14 rows,
+Fixed before measuring. The new rows were in `skills/<skill>/data/eval_url.jsonl` (in `eval.jsonl`, tag
+`url_input`, since 2026-10-28; ffmpeg 14 rows,
 documents 10, three wordings each), executed against the eval's local server, graded on the
 result file and on nothing else left behind.
 

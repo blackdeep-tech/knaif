@@ -506,7 +506,7 @@ def test_a_url_compares_whole_not_by_its_file_name():
 
 
 def test_a_corpus_other_than_eval_jsonl_can_be_compared(tmp_path):
-    """URL rows live in `eval_url.jsonl`, apart from the snapshot's population."""
+    """A corpus given with `--corpus` (a file of rows apart from the snapshot's population)."""
     corpus = tmp_path / "eval_url.jsonl"
     corpus.write_text(
         json.dumps({"id": "u1", "utterances": ["convert https://h.test/a.mov to mp4"], "tags": []})

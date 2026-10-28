@@ -2587,7 +2587,9 @@ def documents_rows() -> list[Row]:
 
     # ── clarify / reject ──
     clar = [
-        ("Do something with a file.", "Which file, and what would you like done with it?"),
+        # Was "Do something with a file.", which is also eval row documents_079 (reworded
+        # 2026-10-28; the eval row is a pinned kept row, so the train side moves).
+        ("Handle one of my files for me.", "Which file, and what would you like done with it?"),
         (
             "Fix report.pdf.",
             "What would you like done to report.pdf — compress, convert, OCR, or something else?",

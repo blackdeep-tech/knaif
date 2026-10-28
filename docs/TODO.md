@@ -459,7 +459,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   knaif stays Apache), and a separate mobile media skill on AVFoundation / Media3 that shares the
   ffmpeg skill's deterministic engine. **Plan: [plans/2026-10-03-media-runtime-and-mobile.md](plans/2026-10-03-media-runtime-and-mobile.md)**
   (Draft; first step is a Smart App Control experiment with winget's ffmpeg).
-- [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
+- [x] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — **done 2026-10-28** (owner) at the 1.4.0 corpus revision: the train side is reworded in `scripts/gen_train.py` ("Handle one of my files for me.", same clarify), `train.jsonl` regenerated (one line), the exception removed. Was: `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
 
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:
