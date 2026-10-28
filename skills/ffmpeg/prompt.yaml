@@ -458,3 +458,13 @@ examples:
         - tool: reject
           args:
             reason: "Deleting or wiping files is outside this skill's safety policy."
+
+  # The second reject every prompt shows (knaif.prompt.MAX_REJECT_EXAMPLES): files in a place
+  # outside the sandbox are refused, not asked about. Owner, 2026-10-27: the 4B answered "convert
+  # videos from the system root directory" with clarify while only the delete refusal was shown.
+  - request: "Convert the clips in the Windows system folder."
+    output:
+      plan:
+        - tool: reject
+          args:
+            reason: "Working on files outside the sandbox is outside this skill's safety policy."

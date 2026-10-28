@@ -173,6 +173,111 @@
         "part_2.pdf"
       ],
       "output_count": 2
+    },
+    {
+      "name": "page_op_after_a_step_that_writes_its_input_rotate",
+      "_why": "A page operation reading a file an earlier step of the chain writes: in a preview that file does not exist yet, so its pages cannot be counted. The preview must not fail with 'No such file' (Python counted first and did, 2026-10-07 to 2026-10-22: documents_142[1], hard2_005, hard2_006, hard2_008); the pages are checked when the step runs.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "output": "sample_small.pdf"
+            }
+          },
+          {
+            "tool": "rotate_pages",
+            "args": {
+              "input": "sample_small.pdf",
+              "degrees": 90
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample_small.pdf",
+        "sample_small-rotated.pdf"
+      ]
+    },
+    {
+      "name": "page_op_after_a_step_that_writes_its_input_reorder",
+      "_why": "A page operation reading a file an earlier step of the chain writes: in a preview that file does not exist yet, so its pages cannot be counted. The preview must not fail with 'No such file' (Python counted first and did, 2026-10-07 to 2026-10-22: documents_142[1], hard2_005, hard2_006, hard2_008); the pages are checked when the step runs.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "watermark",
+            "args": {
+              "input": "sample.pdf",
+              "text": "DRAFT",
+              "output": "sample_draft.pdf"
+            }
+          },
+          {
+            "tool": "reorder_pages",
+            "args": {
+              "input": "sample_draft.pdf",
+              "order": "2,1"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample_draft.pdf",
+        "sample_draft-reordered.pdf"
+      ]
+    },
+    {
+      "name": "page_op_after_a_step_that_writes_its_input_remove",
+      "_why": "A page operation reading a file an earlier step of the chain writes: in a preview that file does not exist yet, so its pages cannot be counted. The preview must not fail with 'No such file' (Python counted first and did, 2026-10-07 to 2026-10-22: documents_142[1], hard2_005, hard2_006, hard2_008); the pages are checked when the step runs.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "output": "sample_small.pdf"
+            }
+          },
+          {
+            "tool": "remove_pages",
+            "args": {
+              "input": "sample_small.pdf",
+              "pages": "1"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample_small.pdf",
+        "sample_small-removed.pdf"
+      ]
+    },
+    {
+      "name": "page_op_after_a_step_that_writes_its_input_split",
+      "_why": "A page operation reading a file an earlier step of the chain writes: in a preview that file does not exist yet, so its pages cannot be counted. The preview must not fail with 'No such file' (Python counted first and did, 2026-10-07 to 2026-10-22: documents_142[1], hard2_005, hard2_006, hard2_008); the pages are checked when the step runs. A split cannot know how many pieces it will make, so its preview names none.",
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "output": "sample_small.pdf"
+            }
+          },
+          {
+            "tool": "split_pdf",
+            "args": {
+              "input": "sample_small.pdf",
+              "ranges": "1"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "sample_small.pdf"
+      ],
+      "output_count": 1
     }
   ],
   "rejected_cases": [

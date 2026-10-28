@@ -101,3 +101,6 @@ Examples:
 
   request: "Nuke my videos folder."
   output:  {"plan": [{"tool": "reject", "args": {"reason": "Deleting or wiping files is outside this skill's safety policy."}}]}
+
+  request: "Convert the clips in the Windows system folder."
+  output:  {"plan": [{"tool": "reject", "args": {"reason": "Working on files outside the sandbox is outside this skill's safety policy."}}]}

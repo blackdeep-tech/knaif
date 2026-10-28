@@ -374,7 +374,14 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   Also: `schema_validity` no longer counts `parse_error` as valid; the train/eval verbatim-copy test covers **both** skills (it was ffmpeg-only, which is why `documents_079` was never caught). The native lane keeps its own lowerable coverage floor — `check_acceptance` takes `coverage_floor`, so there is one rule, not two that can disagree.
 - [x] **Safety population count is still unbound** — DONE 2026-10-07: `accept` and `accept-native` pass the corpus row ids, and a safety record that misses a row, or has one the corpus does not, fails `safety/coverage` (by ids, else by total). Was: the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
 - [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
-- [ ] **Previewing a chain that changes pages of a file an earlier step creates** — found
+- [x] **Previewing a chain that changes pages of a file an earlier step creates** — **done
+  2026-10-27** on `release/1.4.0`: Python's `_pending` guard (split, rotate, remove, reorder) came
+  with the 1.4.0 features, native already guarded all four (`input.exists()` in its preview), and
+  `fix/1.4.0-bugs` adds the L2 cases (`page_op_after_a_step_that_writes_its_input_*` in
+  `contracts/parity/documents_expansion_cases.json`: rotate, reorder, remove, split), shown to fail
+  in both runtimes with the guard switched off. The four rows below, run for real on the 4B
+  (`success`): 7 of 8 wordings plan and execute, no "No such file" left; `hard2_008#1` clarifies
+  (a model choice). The re-lock measures them. Found
   2026-10-07 while fixing the `remove_pages` preview (documents_105's sibling). Native now checks
   the pages in a preview only when the input exists, so "merge, then remove page 2" still
   previews. **Python fails that preview** (it always read the input's page count), and the Mac
@@ -394,7 +401,12 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   but there is no fix. A validly signed FFmpeg is the only one, which is the parked media-runtime
   plan (branch `docs/media-runtime-and-mobile`; owner, 2026-10-07: leave it for now). Ghostscript and Tesseract are blocked too: neither maker signs validly (Tesseract's
   certificate expired in 2023, including on the newer `tesseract-ocr.tesseract` 5.5.3 package).
-- [ ] **`strip_audio` stream-copies h264 into a `.webm` output** — found 2026-10-18 by the
+- [x] **`strip_audio` stream-copies h264 into a `.webm` output** — renderer half **fixed
+  2026-10-27** on `release/1.4.0` (`fix/1.4.0-bugs`): `strip_audio` and `adjust_volume` copy the
+  video only when the output container can hold the source codec, else encode with the
+  container's encoder (`libvpx-vp9` for webm), both runtimes, run for real on h264 → webm. The
+  model half ("save it as webm" as a `convert_video` step) is left to training; the plan now
+  works as the models write it. Found 2026-10-18 by the
   corpus v2 run (`ffmpeg_hard2_005`, "scale clip_4k.mp4 down to 720p, drop the audio and save it as
   webm"): both models plan resize → strip_audio with no `convert_video`, and `strip_audio` renders
   `-c:v copy` into the `.webm` the request named, which ffmpeg refuses ("Only VP8 or VP9 or AV1
@@ -402,7 +414,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   that cannot hold it (re-encode, or keep the source container and say so), and the prompt or
   training should make "save it as webm" a `convert_video` step. Measured on the row; a fix
   re-locks ffmpeg.
-- [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
+- [x] **Exact last-frame extraction** — **fixed 2026-10-27** on `release/1.4.0` (`fix/1.4.0-bugs`): "last" stays the `LAST_FRAME` token instead of a time and renders `-sseof -1 … -update 1`, which leaves exactly the final frame and needs no duration. Both runtimes, mirrored tests and the L2 case `thumbnail_of_the_last_frame`; checked byte for byte against the frame selected by number on 30 fps, 24 fps, variable-fps, 0.4 s and long-GOP clips, and run for real in both CLIs. Was: `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame.
 - [x] **Default the CLI confirmations to Yes (`[Y/n]`)** — BUILT 2026-10-06 on `feat/1.3.0` (as built: no prompt unless `--confirm`; see the 1.3.0 index) — — owner, 2026-09-29, from the RC3 manual
   tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding
   an opt-in flag to ask first; keep `--yes` as an accepted no-op, and keep the first-run model

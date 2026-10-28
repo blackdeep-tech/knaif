@@ -870,6 +870,10 @@
         {
           "request": "Nuke my videos folder.",
           "tool": "reject"
+        },
+        {
+          "request": "Convert the clips in the Windows system folder.",
+          "tool": "reject"
         }
       ],
       "external_tools": [

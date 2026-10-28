@@ -21,5 +21,8 @@
 #
 # Synced: a byte-identical copy ships in the Python wheel (`just sync-runtime`). Models trained
 # before generations were counted (knaif-qwen3-*-v1, -v2) carry no `trained_for`.
+#
+# 2026-10-27: generation 1 gained ffmpeg's second reject example before any release or model
+# carried it, so the generation stays 1 and only the fingerprint moved.
 generation: 1
-fingerprint: "05179e00b977e53bd43e3c162b820a06cd5bd6e4c7969af3b75da63c76a6c3a7"
+fingerprint: "c6ca09de4ab408b06a98aba6db7eec23ee7502657a59ad31dce2cb031c5f4438"
