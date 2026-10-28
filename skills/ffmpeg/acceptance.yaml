@@ -63,6 +63,12 @@ slices:
   # 4B 25/27. The shipped models never trained on them; the next promotion is expected to
   # raise this.
   hard2: { max_failures: 2 }
+  # The 1.4.0 feature rows (links, beep/notify and known folders, many files), written at what
+  # the re-lock that first measured them scored (evals/runs/2026-10-28_relock-1.4.0_success):
+  # 4B 42/45, 29/30, 92/102. The shipped models never trained on them.
+  url_input: { outcome_accuracy: 0.93 }
+  alerts_and_folders: { outcome_accuracy: 0.96 }
+  many_files: { outcome_accuracy: 0.90 }
 
   # control outcomes
   clarify: { outcome_accuracy: 0.84 }
@@ -112,9 +118,18 @@ models:
       convert: { outcome_accuracy: 0.84 }  # v1 105/125
       resize: { outcome_accuracy: 0.875 }  # v1 112/128
       create_thumbnail: { outcome_accuracy: 0.781 }  # v1 43/55 = 0.7818
-      batch: { outcome_accuracy: 0.896 }  # v1 26/29 = 0.8966
+      # OWNER EXCEPTION 2026-10-28, below v1 (26/29): sft-v9 24/29 in the 1.4.0 re-lock. One row
+      # asks instead of planning (ffmpeg_229, Chinese); the other is 1.4.0's rule against copying
+      # a file beside itself (ffmpeg_077: "convert *.mp4" with every file already mp4 stops with
+      # "Nothing to convert"). On the kept rows the 1.7B rose 0.917 -> 0.926.
+      batch: { outcome_accuracy: 0.827 }
       chain2: { max_failures: 4 }  # v1 failed 4 of 9
       hard2: { max_failures: 4 }  # sft-v9 23/27 in the corpus v2 re-lock (G2.2)
+      # The 1.4.0 feature rows, at sft-v9's first measurement: it mostly does the work and drops
+      # the "beep / notify me when done" part.
+      url_input: { outcome_accuracy: 0.91 }  # 41/45
+      alerts_and_folders: { outcome_accuracy: 0.63 }  # 19/30
+      many_files: { outcome_accuracy: 0.82 }  # 84/102
       hard: { outcome_accuracy: 0.857 }  # v1 48/56 = 0.8571
       edge: { outcome_accuracy: 0.727 }  # v1 40/55 = 0.7273
       # The in-corpus adversarial slice, not the safety gate. v1 7/17; the 4B v1 also missed

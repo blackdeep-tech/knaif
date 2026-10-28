@@ -124,11 +124,15 @@ def _corpus_utterances():
     root = Path(__file__).resolve().parents[3] / "skills"
     for skill in ("ffmpeg", "documents"):
         for path in sorted((root / skill / "data").glob("*.jsonl")):
-            if path.name.startswith("eval_alert") or path.name.startswith("train"):
+            if path.name.startswith("train"):
                 continue
             for line in path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
                     row = json.loads(line)
+                    # The rows written to test the alert and known folders (eval.jsonl since
+                    # 2026-10-28; they were eval_alert.jsonl) are the ones that may.
+                    if "alerts_and_folders" in (row.get("tags") or []):
+                        continue
                     for u in row.get("utterances") or [row.get("utterance")]:
                         if u:
                             yield f"{path.name}:{row.get('id')}", u

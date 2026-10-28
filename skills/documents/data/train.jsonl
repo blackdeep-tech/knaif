@@ -310,7 +310,7 @@
 {"utterance": "Завърти minutes.pdf на 180 градуса.", "plan": {"plan": [{"tool": "rotate_pages", "args": {"input": "minutes.pdf", "degrees": 180}}]}, "tags": ["multilingual", "bg"]}
 {"utterance": "Премахни страница 3 от paper.pdf.", "plan": {"plan": [{"tool": "remove_pages", "args": {"input": "paper.pdf", "pages": "3"}}]}, "tags": ["multilingual", "bg"]}
 {"utterance": "Намери total в ledger.pdf.", "plan": {"plan": [{"tool": "find_in_document", "args": {"input": "ledger.pdf", "query": "total"}}]}, "tags": ["multilingual", "bg"]}
-{"utterance": "Do something with a file.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which file, and what would you like done with it?"}}]}, "tags": ["clarify"]}
+{"utterance": "Handle one of my files for me.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "Which file, and what would you like done with it?"}}]}, "tags": ["clarify"]}
 {"utterance": "Fix report.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What would you like done to report.pdf — compress, convert, OCR, or something else?"}}]}, "tags": ["clarify"]}
 {"utterance": "Protect contract.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What password should I use to protect contract.pdf?"}}]}, "tags": ["clarify"]}
 {"utterance": "Convert manual.pdf.", "plan": {"plan": [{"tool": "clarify", "args": {"question": "What format should I convert manual.pdf to (pdf, txt, md, png, jpg)?"}}]}, "tags": ["clarify"]}

@@ -41,6 +41,29 @@ _VALID_TOOLS = frozenset(
 )
 
 
+def _bundle_tools() -> frozenset[str]:
+    """Every tool the skill declares (`tools.yaml`): the 1.4.0 one-into-many tools
+    (`split_video`, `extract_frames`) and any later one are known without a hand edit."""
+    from knaif.registry import load_registry
+
+    return frozenset(load_registry(Path(__file__).parents[2] / "tools.yaml"))
+
+
+def _folder_fixtures() -> frozenset[str]:
+    """A folder row's fixture (`batch/`) is a folder the fixture generator fills
+    (`FIXTURES`: `batch/beach.mov`, …; the many-files rows, eval.jsonl since 2026-10-28)."""
+    import importlib.util
+
+    path = Path(__file__).parents[2] / "eval" / "fixtures.py"
+    spec = importlib.util.spec_from_file_location("ffmpeg_eval_fixtures", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return frozenset(name.split("/")[0] + "/" for name in module.FIXTURES if "/" in name)
+
+
+_VALID_TOOLS = _VALID_TOOLS | _bundle_tools()
+
+
 @pytest.fixture(scope="module")
 def corpus():
     from knaif.evalsuite.corpus import load_corpus
@@ -76,7 +99,8 @@ def test_expected_tools_are_known(corpus):
 
 
 def test_fixtures_are_known(corpus):
-    unknown = [(r.id, r.fixture) for r in corpus if r.fixture and r.fixture not in _VALID_FIXTURES]
+    valid = _VALID_FIXTURES | _folder_fixtures()
+    unknown = [(r.id, r.fixture) for r in corpus if r.fixture and r.fixture not in valid]
     assert not unknown, f"Unknown fixture names: {unknown}"
 
 

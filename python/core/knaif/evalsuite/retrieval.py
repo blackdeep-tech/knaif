@@ -33,10 +33,13 @@ def language_slice(utterance: str) -> str:
     return "latin"
 
 
-def chain_hit(expected_tools: list[str], ranked: list[str], top_k: int) -> bool:
-    """True when every non-core tool of a chain is in the top-k (core tools are always shown)."""
-    shown = set(ranked[:top_k])
-    return all(t in shown for t in expected_tools if t not in _CORE)
+def chain_hit(expected_tools: list[str], shown: list[str], top_k: int | None = None) -> bool:
+    """True when every non-core tool of a chain is shown (core tools are always shown).
+
+    *shown* is what the prompt lists: ``retrieve_tools(utt, registry, top_k)``. Given a full
+    ranking with *top_k*, its first *top_k* entries are taken instead (the older call)."""
+    seen = set(shown if top_k is None else shown[:top_k])
+    return all(t in seen for t in expected_tools if t not in _CORE)
 
 
 def _skill_paths(skill: str) -> tuple[Path, Path]:
@@ -65,22 +68,28 @@ def evaluate_skill(skill: str, top_k: int = 5) -> dict[str, Any]:
             continue
         for utt in row.utterances:
             sl = language_slice(utt)
-            # Full ranked order (min_score=0 returns every scored tool, ranked).
+            # Full ranked order (min_score=0 returns every scored tool, ranked), and what the
+            # prompt shows: the top-k plus any tool its triggers add (`split_video` for "split …",
+            # ranked far below). A shown tool is a hit whatever its rank (2026-10-28).
             ranked = list(retrieve_tools(utt, registry, top_k=n_tools + 8))
+            shown = list(retrieve_tools(utt, registry, top_k=top_k))
             if row.expected_tools:
-                chain_ok = chain_hit(row.expected_tools, ranked, top_k)
+                chain_ok = chain_hit(row.expected_tools, shown)
                 chain_hits.append(int(chain_ok))
                 if not chain_ok:
                     chain_misses.append(
                         {
                             "id": row.id,
-                            "tools": [t for t in row.expected_tools if t not in ranked[:top_k]],
+                            "tools": [t for t in row.expected_tools if t not in shown],
                             "slice": sl,
                             "utterance": utt,
                         }
                     )
-            rank = ranked.index(expected) + 1 if expected in ranked else None
-            hit = 1 if (rank is not None and rank <= top_k) else 0
+            if expected in shown:
+                rank: int | None = shown.index(expected) + 1
+            else:
+                rank = ranked.index(expected) + 1 if expected in ranked else None
+            hit = 1 if expected in shown else 0
             hits.setdefault(sl, []).append(hit)
             rr.setdefault(sl, []).append(1.0 / rank if rank else 0.0)
             if not hit:

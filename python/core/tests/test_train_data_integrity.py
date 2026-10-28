@@ -131,21 +131,13 @@ def test_documents_rotate_names_no_pages_the_user_did_not() -> None:
 #: Overlaps that exist today and are *not* a licence to add more. Each entry is a row id
 #: with the reason it is tolerated and what would retire it.
 #:
-#: documents_079 — "Do something with a file." Found by the 2026-09-17 audit, which is also
-#: what showed this test had never covered documents at all (it was hard-coded to ffmpeg
-#: while its safety-corpus sibling below was parametrised). It is a *clarify* row: no tool,
-#: no arguments and no transformation are memorised, so it cannot inflate a capability
-#: score the way a copied transformation would. It is not removed here because both places
-#: that hold it are frozen references — `eval.jsonl` backs the committed
-#: `eval_snapshot.json`, and `train.jsonl` reproduces the shipped model's `union_chat.jsonl`
-#: byte for byte. Retire it at the next documents corpus revision, rewording the *train*
-#: side, and delete this entry.
+#: Empty since 2026-10-28: the one entry, documents_079 ("Do something with a file.", a
+#: clarify row the 2026-09-17 audit found in both files), was retired at the 1.4.0 corpus
+#: revision by rewording the *train* side (`scripts/gen_train.py`), as this note prescribed.
 #: Keyed by row id, valued by the *exact* normalised utterance and the outcome that makes
 #: it tolerable. Pinning the id alone would hand the exemption to whatever utterance that
 #: row holds next — including a transformation swapped in later under the same id.
-_KNOWN_EVAL_OVERLAPS: dict[str, dict[str, tuple[str, str]]] = {
-    "documents": {"documents_079": ("do something with a file", "clarify")},
-}
+_KNOWN_EVAL_OVERLAPS: dict[str, dict[str, tuple[str, str]]] = {}
 
 
 @pytest.mark.parametrize("skill", ["ffmpeg", "documents"])

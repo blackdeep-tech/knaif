@@ -1,6 +1,7 @@
 """Guard each feature's own training rows, `skills/<skill>/data/train_<feature>.jsonl`.
 
-A feature's rows live beside its eval file (`eval_url.jsonl` -> `train_url.jsonl`) and join
+A feature's training rows live in their own file (`train_url.jsonl`; its eval rows are in
+`eval.jsonl` under the feature's tag since 2026-10-28) and join
 the base `train.jsonl` only in the training run (`build_dataset.py --extra-jsonl`). They get
 the base file's guards, and two more that a feature needs:
 

@@ -3136,6 +3136,9 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
         except (json.JSONDecodeError, OSError):
             cache = {}
 
+    from .provisioning import fixture_content_hashes
+
+    before = fixture_content_hashes(fixture_dir)
     updated = False
     regenerated: list[str] = []
     for name, cmd_template in fixtures.items():
@@ -3179,16 +3182,21 @@ def cmd_fixtures_regen(args: argparse.Namespace) -> None:
     # provisioning used to cause: a plan writing to a fixture's name corrupted the shared
     # file for every later row, silently. With this, a score traces to the media it was
     # measured against. See T5b of docs/plans/2026-09-11-reject-clarify-taxonomy.md.
-    from .provisioning import fixture_content_hashes
-
+    #
     # Only a fixture this run actually (re)generated gets its content hash written. Blessing
     # whatever bytes happen to be on disk would defeat the point: the command hash skips an
     # unchanged fixture, so a corrupted one is skipped and then *certified* — generate, alter
     # the bytes, re-run, and the alteration becomes the trusted value. A hash for a file
     # nobody regenerated is a record of a guess.
+    #
+    # "Regenerated" includes a sibling one of this run's commands rewrote: the documents
+    # generator writes every documents fixture on each call, so regenerating one name rewrites
+    # the cached rest, and their old hashes would then be stale. Bytes that changed during this
+    # loop were written by a command it ran.
     actual = fixture_content_hashes(fixture_dir)
     content: dict[str, str] = dict(cache.get("__content__") or {})
-    for name in regenerated:
+    rewritten = [n for n in fixtures if n in actual and before.get(n) != actual[n]]
+    for name in [*regenerated, *rewritten]:
         if name in actual:
             content[name] = actual[name]
     content = {k: v for k, v in content.items() if k in actual}

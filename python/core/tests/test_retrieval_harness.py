@@ -25,6 +25,15 @@ def test_evaluate_skill_structure():
     assert isinstance(r["misses"], list)
 
 
+def test_a_tool_shown_by_its_trigger_is_a_hit():
+    """`split_video` joins the prompt by its triggers ("split", "parts", …), after the ranked
+    top-k: it ranks 14th but the model sees it. The harness measures what the prompt shows, so
+    the 1.4.0 rows that name such a tool are hits, not misses (2026-10-28)."""
+    r = evaluate_skill("ffmpeg", top_k=5)
+    missed = {(m["id"], m["utterance"]) for m in r["misses"]}
+    assert ("ffmpeg_batch_011", "split clip.mp4 into 10-second parts") not in missed
+
+
 def test_chain_rows_are_scored_on_every_tool_in_their_own_block():
     """A chain row needs every one of its tools shown. Its first tool already counts in
     `overall` (expected_tool = expected_tools[0]), so the chain score sits in its own block

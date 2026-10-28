@@ -471,8 +471,8 @@ class Row:
 
 
 def corpus_path(skill: str, corpus: Path | str | None = None) -> Path:
-    """The corpus compared: *corpus* when given (URL rows live in `eval_url.jsonl`), else the
-    skill's `eval.jsonl`."""
+    """The corpus compared: *corpus* when given (a file of rows of its own), else the skill's
+    `eval.jsonl`, which holds the URL rows too since 2026-10-28."""
     return Path(corpus) if corpus else REPO_ROOT / "skills" / skill / "data" / "eval.jsonl"
 
 
@@ -1170,8 +1170,8 @@ def main() -> int:
     ap.add_argument(
         "--corpus",
         default=None,
-        help="Corpus file to compare instead of skills/<skill>/data/eval.jsonl (e.g. the URL "
-        "rows in eval_url.jsonl).",
+        help="Corpus file to compare instead of skills/<skill>/data/eval.jsonl (e.g. a file "
+        "of rows written for one feature).",
     )
     ap.add_argument(
         "--only",
