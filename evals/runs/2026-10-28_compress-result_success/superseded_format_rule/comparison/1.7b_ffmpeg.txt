@@ -1,0 +1,6 @@
+113 row(s) in both (122 in a, 1057 in b)
+  112 / 113 same grade
+  113 / 113 same plan
+  80 / 113 same command
+  grade differs: ffmpeg_batch_001[1]  a={'outcome': 'plan', 'correct': True, 'score': 0.75}  b={'outcome': 'plan', 'correct': True, 'score': 1.0}
+  saved to evals\runs\2026-10-28_compress-result_success\comparison\1.7b_ffmpeg.json

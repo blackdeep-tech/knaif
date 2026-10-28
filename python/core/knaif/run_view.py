@@ -436,11 +436,18 @@ class RunView:
                 for out in outputs:
                     self._out(ui.render_detail(style, f"→ {out}"))
                 for out in outputs:
-                    self._out(ui.render_ok(style, out, item.get("seconds")))
+                    if item.get("kept"):
+                        self._out(ui.render_kept(style, ui.kept_what(out, True)))
+                    else:
+                        self._out(ui.render_ok(style, out, item.get("seconds")))
             else:
                 self._out(message)
                 for out in outputs:
-                    self._out(f"✓ wrote {out}")
+                    if item.get("kept"):
+                        self._out(f"⚠ {ui.kept_what(out, True)}")
+                    else:
+                        self._out(f"✓ wrote {out}")
+            self._size_change(item)
         elif kind == "text" and self.text_to_stdout:
             pass
         elif kind == "text":

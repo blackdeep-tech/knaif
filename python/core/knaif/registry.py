@@ -151,6 +151,10 @@ class ToolDef:
     # utterance — e.g. a password. The model cannot invent these; if the value
     # is not found in the utterance, the NL clarify gate downgrades to clarify.
     grounded_args: tuple[str, ...] = field(default_factory=tuple)
+    # Args only the request can state (e.g. a target size): a value the utterance does not hold
+    # is left out with a note and the plan runs without it (`drop_unstated_args`), where a
+    # grounded arg asks instead.
+    stated_args: tuple[str, ...] = field(default_factory=tuple)
     safety_category: str = "safe"
     keywords: tuple[str, ...] = field(default_factory=tuple)
     # Whole words or phrases that bring this tool into a prompt. A tool with triggers is never
@@ -244,6 +248,7 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             optional_args=tuple(cfg.get("optional_args") or []),
             any_of_args=tuple(cfg.get("any_of_args") or []),
             grounded_args=tuple(cfg.get("grounded_args") or []),
+            stated_args=tuple(cfg.get("stated_args") or []),
             safety_category=cfg.get("safety_category", "safe"),
             keywords=tuple(cfg.get("keywords") or []),
             triggers=tuple(cfg.get("triggers") or []),

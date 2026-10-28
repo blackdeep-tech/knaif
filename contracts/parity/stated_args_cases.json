@@ -1,0 +1,351 @@
+{
+  "_comment": "An arg only the request can state (a tool's `stated_args`, e.g. compress_video's target_size_mb) is left out when the request does not state it, with a note; the plan still runs (owner, 2026-10-28: the model invented target_size_mb 15 for \"make them smaller\"). A number counts as stated when the request holds it as a number, or the same size in KB or GB (both 1000 and 1024), within 1%. A digit inside a word (`clip2`) is not a number. Python `knaif.nl_clarify_gate.drop_unstated_args`, Rust `knaif_core::nl_clarify_gate::drop_unstated_args`; the registry is skills/ffmpeg/tools.yaml.",
+  "cases": [
+    {
+      "name": "an invented size is left out (the 1.4.0 manual test)",
+      "utterance": "convert all the .mov files here to mp4 and make them smaller",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 15
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "notes": [
+        "compress_video: left out target_size_mb 15: the request does not say it"
+      ]
+    },
+    {
+      "name": "a size the request states stays",
+      "utterance": "compress clip_ctr.mp4 to under 1 MB",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 1
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 1
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "kilobytes in decimal units",
+      "utterance": "compress clip_ctr.mp4 to under 500 KB",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 0.5
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 0.5
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "kilobytes in binary units",
+      "utterance": "compress clip_ctr.mp4 to under 500 KB",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 0.48828125
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 0.48828125
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "gigabytes",
+      "utterance": "compress clip.mp4 to 2GB",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 2048
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 2048
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "a decimal comma",
+      "utterance": "komprimiere clip.mp4 auf 1,5 MB",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 1.5
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 1.5
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "a size right after Chinese text",
+      "utterance": "把clip.mp4压缩到1MB以下",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 1
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 1
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "a number written as a string",
+      "utterance": "shrink clip.mp4 under 15 megabytes",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": "15"
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": "15"
+          }
+        }
+      ],
+      "notes": []
+    },
+    {
+      "name": "a destination is not a size: the email profile's 20 MB is not applied",
+      "utterance": "make clip.mp4 smaller for email",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 20
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "notes": [
+        "compress_video: left out target_size_mb 20: the request does not say it"
+      ]
+    },
+    {
+      "name": "a digit inside a file name is not a size",
+      "utterance": "compress clip2.mp4",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip2.mp4"
+            ],
+            "target_size_mb": 2
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip2.mp4"
+            ]
+          }
+        }
+      ],
+      "notes": [
+        "compress_video: left out target_size_mb 2: the request does not say it"
+      ]
+    },
+    {
+      "name": "a different size is not this one",
+      "utterance": "compress clip.mp4 to under 10 MB",
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "target_size_mb": 15
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "notes": [
+        "compress_video: left out target_size_mb 15: the request does not say it"
+      ]
+    },
+    {
+      "name": "other tools and args are untouched",
+      "utterance": "make clip.mp4 smaller",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "quality": "small_file"
+          }
+        }
+      ],
+      "expect_plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "quality": "small_file"
+          }
+        }
+      ],
+      "notes": []
+    }
+  ]
+}

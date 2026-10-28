@@ -106,6 +106,10 @@ pub struct ToolDef {
     pub any_of_args: Vec<String>,
     #[serde(default)]
     pub grounded_args: Vec<String>,
+    /// Args only the request can state (a target size): a value the utterance does not hold is
+    /// left out with a note (`nl_clarify_gate::drop_unstated_args`). Python `stated_args`.
+    #[serde(default)]
+    pub stated_args: Vec<String>,
     #[serde(default = "default_safety")]
     pub safety_category: String,
     #[serde(default)]

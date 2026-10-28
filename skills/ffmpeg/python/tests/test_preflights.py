@@ -93,6 +93,21 @@ def test_preflight_inputs_reports_globs_that_match_nothing(preflight_fn, tmp_pat
     assert "no files match" in errs[0] and "*.mkv" in errs[0], errs
 
 
+def test_preflight_inputs_accepts_a_glob_an_earlier_step_will_fill(preflight_fn, tmp_path):
+    """`convert all the .mov files here to mp4 and make them smaller` planned as `*.mov` → mp4,
+    then `*.mp4`: before the first step runs nothing matches `*.mp4`, and Python stopped with
+    "no files match '*.mp4'" where native, which expands a step's glob when it runs, did not
+    (manual test, 2026-10-28). An earlier step writing that format will fill it."""
+    errs = preflight_fn(
+        {"inputs": ["*.mp4"]}, root=tmp_path, sandbox=tmp_path, planned_extensions={"mp4"}
+    )
+    assert errs == [], errs
+    errs = preflight_fn(
+        {"inputs": ["*.mp4"]}, root=tmp_path, sandbox=tmp_path, planned_extensions={"mkv"}
+    )
+    assert errs and "no files match" in errs[0], errs
+
+
 def test_preflight_inputs_skips_var_refs(preflight_fn, tmp_path):
     """Variable references (starting with '$') are silently skipped."""
     errs = preflight_fn(
@@ -210,3 +225,30 @@ def test_execute_plan_preflight_skipped_in_dry_run(tmp_path):
     # No ValueError raised — preflight was skipped.
     # The plan_confirmer declined, so execution returns [].
     assert result == []
+
+
+_FIXTURES = SKILL_DIR.parents[1] / "sandbox" / "fixtures" / "ffmpeg"
+
+
+@pytest.mark.skipif(not (_FIXTURES / "clip.mov").exists(), reason="needs generated fixtures")
+@pytest.mark.skipif(__import__("shutil").which("ffmpeg") is None, reason="needs ffmpeg on PATH")
+def test_a_glob_chain_runs_as_native_does(tmp_path):
+    """The plan behind the manual test's clarify, end to end: `*.mov` → mp4, then `*.mp4`."""
+    import shutil
+
+    shutil.copy2(_FIXTURES / "clip.mov", tmp_path / "clip.mov")
+    agent = CommandAgent.from_skill(SKILL_DIR, sandbox=tmp_path)
+    plan = {
+        "plan": [
+            {"tool": "convert_video", "args": {"inputs": ["*.mov"], "container": "mp4"}},
+            {"tool": "compress_video", "args": {"inputs": ["*.mp4"]}},
+        ]
+    }
+    results = agent.execute_plan(
+        plan,
+        utterance="convert all the .mov files here to mp4 and make them smaller",
+        dry_run=False,
+        confirmed=True,
+    )
+    assert results[0]["tool"] != "clarify", results[0]
+    assert (tmp_path / "clip_compressed.mp4").is_file()

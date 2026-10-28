@@ -247,7 +247,8 @@ two places:
 - **Before expansion** (`execute_plan`, after stem resolution) — `nl_clarify_gate()`
   clarifies when a required file input is under-specified and injection cannot resolve
   it, or when a tool's declared `grounded_args` (e.g. a password) hold a value the
-  model invented.
+  model invented. Then `drop_unstated_args()` leaves out each `stated_args` value (a target
+  size) the request does not state, with a note in the plan, and the plan runs without it.
 
 #### The arg-shape gates
 

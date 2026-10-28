@@ -12,6 +12,7 @@ host-supplied file listing; allow only when exactly one match.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Collection, Mapping
 from pathlib import Path, PurePosixPath
@@ -481,6 +482,72 @@ def _is_value_grounded(value: Any, utterance: str) -> bool:
     if not isinstance(value, str) or not value.strip():
         return False
     return value.strip().lower() in utterance.lower()
+
+
+# A number standing on its own (not the `2` of `clip2`), with the unit right after it, if any.
+_STATED_NUMBER = re.compile(r"(?<![A-Za-z0-9_.,])([0-9]+(?:[.,][0-9]+)?)\s*([a-zA-Z]*)")
+
+
+def _stated_values(utterance: str) -> list[float]:
+    """Every number the request states, and the same size in MB when its unit is KB or GB
+    (decimal and binary both: "500 KB" is 0.5 or 0.488 MB depending on who converts)."""
+    values: list[float] = []
+    for number, unit in _STATED_NUMBER.findall(utterance):
+        n = float(number.replace(",", "."))
+        values.append(n)
+        u = unit.lower()
+        if u.startswith("k"):
+            values += [n / 1000, n / 1024]
+        elif u.startswith("g"):
+            values += [n * 1000, n * 1024]
+    return values
+
+
+def _is_stated(value: Any, utterance: str) -> bool:
+    """Does the request state *value*: the same number, within 1%? A value that is not a number
+    is never stated (a stated arg is a quantity)."""
+    if isinstance(value, bool):
+        return False
+    try:
+        want = float(value)
+    except (TypeError, ValueError):
+        return False
+    return any(abs(got - want) <= 0.01 * max(abs(want), 1e-9) for got in _stated_values(utterance))
+
+
+def drop_unstated_args(
+    intent_plan: list[dict[str, Any]],
+    utterance: str,
+    registry: dict[str, ToolDef] | None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Leave out each ``stated_args`` value the request does not state; return the plan and a
+    note per value left out.
+
+    Owner, 2026-10-28: the model wrote ``target_size_mb: 15`` for "make them smaller". A size is
+    the user's to give, but unlike a password (``grounded_args``) a missing one is no reason to
+    ask: the plan runs without it, and the note says what was left out. Returns a new plan; the
+    model's plan is not mutated. Rust mirror: ``knaif_core::nl_clarify_gate::drop_unstated_args``.
+    """
+    if registry is None:
+        return intent_plan, []
+    out: list[dict[str, Any]] = []
+    notes: list[str] = []
+    for step in intent_plan:
+        tool = step.get("tool", "")
+        tool_def = registry.get(tool)
+        args = step.get("args")
+        if tool_def is None or not tool_def.stated_args or not isinstance(args, dict):
+            out.append(step)
+            continue
+        kept = dict(args)
+        for arg in tool_def.stated_args:
+            if arg in kept and not _is_stated(kept[arg], utterance):
+                value = kept.pop(arg)
+                notes.append(
+                    f"{tool}: left out {arg} {json.dumps(value)}: the request does not say it"
+                )
+        out.append({**step, "args": kept} if kept != args else step)
+    return out, notes
 
 
 def restore_grounded_args(

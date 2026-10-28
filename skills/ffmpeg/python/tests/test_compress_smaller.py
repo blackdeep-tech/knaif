@@ -209,3 +209,23 @@ def test_a_chain_intermediate_that_cannot_shrink_is_delivered_as_it_was(tmp_path
     delivered = tmp_path / "tiny_compressed.mp4"
     assert delivered.stat().st_size == size["before"], "the intermediate's own bytes"
     assert sorted(p.name for p in tmp_path.iterdir()) == ["tiny.mov", "tiny_compressed.mp4"]
+
+
+@needs_ffmpeg
+def test_an_intermediate_of_another_format_delivers_the_encode(tmp_path: Path) -> None:
+    """ffmpeg_batch_001 on the 1.7B (2026-10-28 eval): `*.mov` → `converted.mkv` → compress to
+    mp4. Writing nothing lost the conversion that was asked for; an `.mkv` cannot be renamed
+    `.mp4`, so the compressed file in the asked format is delivered and reported not smaller."""
+    _starved(tmp_path / "tiny.mov")
+    plan = [
+        {
+            "tool": "convert_video",
+            "args": {"inputs": ["tiny.mov"], "container": "mkv", "output": "tiny.mkv"},
+        },
+        {"tool": "compress_video", "args": {"inputs": ["tiny.mkv"]}},
+    ]
+    outs = _run(tmp_path, "convert tiny.mov and make it smaller", plan)
+    size = outs[-1]["size"]
+    assert size["kept"] is None
+    assert size["after"] >= size["before"]
+    assert (tmp_path / "tiny_compressed.mp4").stat().st_size == size["after"]

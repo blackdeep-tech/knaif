@@ -154,8 +154,17 @@ _WRITE_SUMMARIES = {
 }
 
 
+#: The step of an intent's expansion that does its write, shown as the intent it is.
+_WRITE_STEP_OF = {"run_compress": "compress_pdf", "run_ocr": "ocr_document"}
+
+#: Expansion steps the view leaves out: the inspect that feeds the write binds a `$` output, and
+#: `verify_output` re-reports the file the write already named.
+_REPORTED_BY_THEIR_WRITE = {"verify_output"}
+
+
 def write_summary(tool: Any, args: dict[str, Any], result: dict[str, Any]) -> str:
     """What a write does, as native's documents runtime names it."""
+    tool = _WRITE_STEP_OF.get(str(tool), tool)
     if tool == "merge_pdfs":
         return f"merge {len(result.get('inputs') or args.get('inputs') or [])} file(s)"
     if tool in ("split_pdf", "split_pdf_every"):
@@ -239,9 +248,22 @@ class DocumentsSkill(Skill):
     def format_results(
         self, results: list[dict[str, Any]], *, dry_run: bool
     ) -> list[dict[str, str]]:
-        items: list[dict[str, str]] = []
+        items: list[dict[str, Any]] = []
         for item in results:
             result = item.get("result", {})
+            if item.get("tool") in _REPORTED_BY_THEIR_WRITE:
+                warning = {"kind": "info", "message": str(result.get("warning"))}
+                if result.get("warning") and warning not in items:
+                    items.append(warning)
+                continue
+            bound = item.get("output")
+            if (
+                isinstance(bound, str)
+                and bound.startswith("$")
+                and "error" not in result
+                and not _written(result)
+            ):
+                continue  # an expansion's inner read, fed to the step after it
             answer = _read_answer(item.get("tool"), result)
             if "error" in result:
                 items.append({"kind": "error", "message": str(result["error"])})
@@ -257,14 +279,18 @@ class DocumentsSkill(Skill):
             elif not dry_run and _written(result):
                 # What it does, then each file it wrote, as native shows a write;
                 # extract_text's preview follows its file.
-                items.append(
-                    {
-                        "kind": "wrote",
-                        "message": write_summary(item.get("tool"), item.get("args") or {}, result),
-                        "outputs": _written(result),
-                        "seconds": float(item.get("duration_ms") or 0) / 1000,
-                    }
-                )
+                wrote: dict[str, Any] = {
+                    "kind": "wrote",
+                    "message": write_summary(item.get("tool"), item.get("args") or {}, result),
+                    "outputs": _written(result),
+                    "seconds": float(item.get("duration_ms") or 0) / 1000,
+                }
+                if "attempt_size" in result:
+                    # A compress: what it saved, or that it kept the original (as ffmpeg's).
+                    wrote["before"] = result["original_size"]
+                    wrote["after"] = result["attempt_size"]
+                    wrote["kept"] = bool(result.get("kept_original"))
+                items.append(wrote)
                 if answer is not None:
                     items.append({"kind": "text", "message": answer})
             elif answer is not None:

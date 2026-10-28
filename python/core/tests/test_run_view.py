@@ -140,3 +140,25 @@ def test_a_compress_that_delivered_its_input_counts_one_file(tmp_path: Path, cap
         "  not smaller (154.0 KB → 169.6 KB)",
     ]
     assert view._written == 1
+
+
+def test_a_compressed_write_says_what_it_saved_or_that_it_kept_the_original(
+    tmp_path: Path, capsys
+) -> None:
+    """documents' `compress_pdf` (a `wrote` item), worded as ffmpeg's compress."""
+    out = str(tmp_path / "sample-compressed.pdf")
+    view = RunView("documents", ui.Style(color=False), base=tmp_path)
+    saved = {"kind": "wrote", "message": "compress (ghostscript)", "outputs": [out]}
+    view.item({**saved, "before": 10000, "after": 7000}, dry_run=False)
+    view.item({**saved, "before": 2227, "after": 3952, "kept": True}, dry_run=False)
+    assert capsys.readouterr().out.splitlines() == [
+        " │   compress (ghostscript)",
+        " │   → sample-compressed.pdf",
+        " │   └─ ✓ sample-compressed.pdf",
+        " │      30% smaller (9.8 KB → 6.8 KB)",
+        " │   compress (ghostscript)",
+        " │   → sample-compressed.pdf",
+        " │   └─ ⚠ sample-compressed.pdf: couldn't make it smaller — kept it as it was",
+        " │      not smaller (2.2 KB → 3.9 KB)",
+    ]
+    assert view._written == 2

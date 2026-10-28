@@ -451,6 +451,8 @@ my_tool:
 | `required_args` | no | Flat argument names that must appear in `args`. |
 | `optional_args` | no | Flat argument names accepted when present. |
 | `defaults` | no | `{arg: value}` filled in before validation when the model omits the arg. Explicit values are never overwritten. Use it so the model never has to invent or clarify an obvious value — chiefly output filenames (`concat_video` defaults `output: combined.mp4`). Declare a default only where it is genuinely unambiguous; a missing required arg *without* one still fails, rather than silently inventing a value. An arg with a default belongs in `optional_args`. |
+| `grounded_args` | no | Args whose value the user must have typed (a password). A value the request does not contain is invented: the plan becomes a `clarify` asking for it. |
+| `stated_args` | no | Args only the request can state, a quantity such as `compress_video`'s `target_size_mb`. A value the request does not state is left out and the plan runs without it, with a note in the plan (`left out target_size_mb 15: the request does not say it`). A number counts as stated when the request holds it, or the same size in KB or GB, within 1%. Both runtimes; `contracts/parity/stated_args_cases.json`. |
 | `safety_category` | no | `safe` or `destructive`; destructive tools require `dry_run=True` or `confirmed=True`. Defaults to `safe`. |
 | `readonly` | no | Marks side-effect-free tools for optimizer pruning. Defaults to `false`. |
 | `internal` | no | Hides workflow-only tools from the model prompt. Defaults to `false`. |

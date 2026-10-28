@@ -87,8 +87,10 @@ not smaller is not a compression, so its encode is not delivered:
   `⚠ couldn't make clip.mov smaller — left it as it was`;
 - the input is a chain intermediate (`convert ... to mp4 and make it smaller`), which is what was
   asked for: it is delivered unchanged under the compress's name (fs `stage_copy`), and the step
-  says `⚠ clip_compressed.mp4: couldn't make it smaller — kept it as it was`. Same format only;
-  an `.mkv` intermediate is not renamed to `.mp4`, so nothing is written then;
+  says `⚠ clip_compressed.mp4: couldn't make it smaller — kept it as it was`. Same format only:
+  an `.mkv` intermediate is not renamed `.mp4`, and writing nothing would lose the conversion
+  that was asked for (ffmpeg_batch_001, 2026-10-28), so the compressed file in the asked format
+  is delivered with `not smaller (…)` under it;
 - an encode that feeds a later step (written straight into the run scratch) is kept and only
   reported, since the next step needs a file.
 

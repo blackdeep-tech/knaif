@@ -177,6 +177,23 @@ pub fn read_input_absent(
     Ok((!input.exists()).then_some(input))
 }
 
+/// What a compress did to its file's size, for the result line (`30% smaller (…)`, or the
+/// original kept). Python's `RunCompressStep` result carries the same three numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SizeReport {
+    pub before: u64,
+    /// The size the compressed result came to, even when the original was kept instead.
+    pub after: u64,
+    pub kept: bool,
+}
+
+static SIZE_REPORT: std::sync::Mutex<Option<SizeReport>> = std::sync::Mutex::new(None);
+
+/// Take what the last `compress_pdf` commit recorded (see [`SizeReport`]).
+pub fn take_size_report() -> Option<SizeReport> {
+    SIZE_REPORT.lock().ok().and_then(|mut r| r.take())
+}
+
 /// Commit a destructive write step: perform the op and write the file(s). Returns the paths written.
 /// `bundle` is the skill bundle dir (only `compress_pdf` reads it).
 pub fn commit(
@@ -337,16 +354,23 @@ pub fn commit_in(
             let (profile, gs) = compress_setup(bundle, &quality)?;
             let out = derive_output(&p, &input, out_arg(args, &p, "output")?, "-compressed.pdf");
             p.check(&out)?;
-            // Never a larger file: see `compress_no_larger`.
+            // Never a larger file: see `compress_no_larger`. What it did is the result line.
             write_with(&p, &out, |target| {
-                crate::compress::compress_no_larger(
+                let done = crate::compress::compress_no_larger(
                     &input,
                     target,
                     &quality,
                     &profile,
                     gs.as_deref(),
-                )
-                .map(|_| ())
+                )?;
+                if let Ok(mut report) = SIZE_REPORT.lock() {
+                    *report = Some(SizeReport {
+                        before: done.before,
+                        after: done.attempt,
+                        kept: done.kept,
+                    });
+                }
+                Ok(())
             })?;
             Ok(vec![out])
         }

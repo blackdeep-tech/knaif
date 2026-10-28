@@ -1579,7 +1579,13 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         let registry = knaif_core::load_skill_registry(&bundle)?;
         batch::leaves(&steps, &registry, &base, scratch.path(), &kinds, &set_files)
     };
-    let (preview_steps, notes) = batch::preview(&steps, lifted.as_ref(), &leaves);
+    let (preview_steps, mut notes) = batch::preview(&steps, lifted.as_ref(), &leaves);
+    // What the gate left out comes first, as in Python.
+    let stated = STATED_NOTES
+        .lock()
+        .map(|mut all| std::mem::take(&mut *all))
+        .unwrap_or_default();
+    notes.splice(0..0, stated);
     if let Some(style) = ui::view() {
         // A control step ends the plan by itself, so there is no plan to summarize.
         if !steps.iter().any(is_control_step) {
@@ -2598,8 +2604,10 @@ struct Shrunk {
 /// A compress that is not smaller is not a compression (manual test, 2026-10-28: `clip.mov` came
 /// out 10% bigger), so its staged encode is not committed (owner: "sorry, I couldn't make it
 /// smaller - leaving it the same"). A chain intermediate of the output's format is delivered
-/// unchanged instead (`stage_copy`); the user's own file is left as it was. An encode written
-/// straight into the scratch (it feeds a later step, no `staged`) is kept and only reported.
+/// unchanged instead (`stage_copy`); the user's own file is left as it was. An intermediate of
+/// another format (an `.mkv` is not renamed `.mp4`, and writing nothing lost the conversion asked
+/// for: ffmpeg_batch_001, 2026-10-28) delivers its encode, as does an encode written straight into
+/// the scratch (it feeds a later step, no `staged`); both are reported not smaller.
 fn shrunk(
     source: &Path,
     staged: Option<&Path>,
@@ -2612,12 +2620,12 @@ fn shrunk(
     let mut kept = None;
     if after >= before && staged.is_some() {
         let ext = |p: &Path| p.extension().map(|e| e.to_ascii_lowercase());
-        if knaif_toolkit_fs::within(source, Some(work)) && ext(source) == ext(output) {
+        if !knaif_toolkit_fs::within(source, Some(work)) {
+            kept = Some(Kept::Nothing);
+        } else if ext(source) == ext(output) {
             let copy = knaif_toolkit_fs::stage_copy(work, source, output)?;
             knaif_toolkit_fs::commit_output(&copy, output, sandbox, work)?;
             kept = Some(Kept::Input);
-        } else {
-            kept = Some(Kept::Nothing);
         }
     }
     Ok(Shrunk {
@@ -2894,13 +2902,21 @@ fn run_documents_step(
             let written = commit_in(tool, step_args, base, sandbox, bundle, work_dir)?;
             ui::note_written(written.len());
             ui::note_written_paths(&written);
+            // A compress says what it saved, or that it kept the original (as ffmpeg's does).
+            let size = knaif_skill_documents::run::take_size_report();
+            let kept = size.is_some_and(|s| s.kept);
             for w in &written {
-                match ui::view() {
-                    Some(style) => println!(
+                match (ui::view(), kept) {
+                    (Some(style), true) => println!(
+                        "{}",
+                        ui::render_kept(&style, &ui::kept_what(&shown(w), true))
+                    ),
+                    (Some(style), false) => println!(
                         "{}",
                         ui::render_ok(&style, &shown(w), Some(started.elapsed()))
                     ),
-                    None => println!("✓ wrote {}", shown(w)),
+                    (None, true) => println!("⚠ {}", ui::kept_what(&shown(w), true)),
+                    (None, false) => println!("✓ wrote {}", shown(w)),
                 }
                 // The saved text's preview, never the whole text; the same lines
                 // as Python (`text_preview`, contracts/parity/text_preview_cases.json).
@@ -2912,6 +2928,13 @@ fn run_documents_step(
                             None => println!("{line}"),
                         }
                     }
+                }
+            }
+            if let Some(size) = size {
+                let change = ui::size_change(size.before, size.after);
+                match ui::view() {
+                    Some(style) => println!("{}", ui::render_under(&style, &change)),
+                    None => println!("  {change}"),
                 }
             }
             Ok(StepOutcome::Continue)
@@ -3503,7 +3526,18 @@ impl PlanSession {
         let known_files = listed_filenames(sandbox.unwrap_or(base));
         let gated = knaif_core::nl_clarify_gate(planned, &shown, &self.registry, &known_files);
         let gated = self.ask_for_count(gated, &shown, sandbox.unwrap_or(base));
-        Ok(restore_grounded_args(gated, utterance, &self.registry))
+        let mut restored = restore_grounded_args(gated, utterance, &self.registry);
+        // A size the request does not state is left out, and the plan says so (Python
+        // `drop_unstated_args` in `execute_plan`).
+        if let Some(steps) = restored.get("plan").cloned() {
+            let (kept, notes) =
+                knaif_core::nl_clarify_gate::drop_unstated_args(&steps, utterance, &self.registry);
+            restored["plan"] = kept;
+            if let Ok(mut all) = STATED_NOTES.lock() {
+                *all = notes;
+            }
+        }
+        Ok(restored)
     }
 
     /// A count of files ("2 of the videos") must match what the plan touches,
@@ -3538,6 +3572,9 @@ impl PlanSession {
 ///
 /// Non-recursive and files-only, matching what stem resolution globs. An unreadable directory
 /// yields an empty set, which restores the strict substring rule rather than failing the plan.
+/// What `plan_for_run` left out of the plan (`drop_unstated_args`), for the plan's notes.
+static STATED_NOTES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
 fn listed_filenames(dir: &Path) -> std::collections::HashSet<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return std::collections::HashSet::new();
@@ -4460,7 +4497,10 @@ mod tests {
     }
 
     #[test]
-    fn an_intermediate_of_another_format_is_not_renamed() {
+    fn an_intermediate_of_another_format_delivers_the_encode() {
+        // ffmpeg_batch_001 on the 1.7B (2026-10-28 eval): `*.mov` → `converted.mkv` → compress to
+        // mp4. Writing nothing lost the conversion that was asked for; an `.mkv` cannot be
+        // renamed `.mp4`, so the compressed file in the asked format is delivered, not smaller.
         let (root, sb, work) = shrink_dirs("format");
         let input = work.join("clip.mkv");
         std::fs::write(&input, vec![0u8; 100]).unwrap();
@@ -4468,8 +4508,7 @@ mod tests {
         let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
         std::fs::write(&staged, vec![0u8; 120]).unwrap();
         let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
-        assert_eq!(got.kept, Some(Kept::Nothing));
-        assert!(!out.exists());
+        assert_eq!((got.before, got.after, got.kept), (100, 120, None));
         let _ = std::fs::remove_dir_all(root);
     }
 

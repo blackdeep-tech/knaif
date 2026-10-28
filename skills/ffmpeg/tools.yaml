@@ -74,6 +74,8 @@ compress_video:
   keywords: [compress, smaller, shrink, under, tiny, size, filesize, bitrate, kbps, kilobits, comprimir, komprimieren, verkleinern, compresser, réduire, сжать, squeeze, компресирай, намали, размер, 压缩, 减小, 大小, 文件, kleiner, сожми]
   required_args: [inputs]
   optional_args: [target, target_size_mb, quality, crf, output, preview]
+  # A size is the user's to give: one the request does not state is left out (2026-10-28).
+  stated_args: [target_size_mb]
   safety_category: destructive
   arg_schemas:
     quality: *quality_schema

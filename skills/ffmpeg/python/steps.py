@@ -139,10 +139,11 @@ def _shrunk(source: str, staged: str | None, output: str, ctx: HandlerContext) -
 
     * ``"nothing"``: the input is the user's own file; it stays as it was and nothing is written.
     * ``"input"``: the input is a chain intermediate (`convert ... and make it smaller`), which
-      is what was asked for; it is delivered unchanged under the output's name. Same format
-      only: an `.mkv` intermediate is not renamed to `.mp4`.
-    * ``None``: smaller, or an encode that feeds a later step (written straight into the
-      scratch, no staged file), which is kept and only reported.
+      is what was asked for; it is delivered unchanged under the output's name.
+    * ``None``: smaller; or an intermediate of another format (an `.mkv` is not renamed `.mp4`,
+      and writing nothing would lose the conversion asked for: ffmpeg_batch_001, 2026-10-28),
+      whose encode is delivered; or an encode that feeds a later step (written straight into
+      the scratch, no staged file). The last two are reported not smaller.
     """
     before = Path(source).stat().st_size
     after = Path(staged or output).stat().st_size
@@ -152,12 +153,12 @@ def _shrunk(source: str, staged: str | None, output: str, ctx: HandlerContext) -
         in_scratch = work_dir is not None and Path(source).resolve().is_relative_to(
             Path(work_dir).resolve()
         )
-        if in_scratch and Path(source).suffix.lower() == Path(output).suffix.lower():
+        if not in_scratch:
+            kept = "nothing"
+        elif Path(source).suffix.lower() == Path(output).suffix.lower():
             copy = ctx.call_tool("stage_copy", {"source": source, "path": output})["staged"]
             ctx.call_tool("commit_output", {"staged": copy, "path": output})
             kept = "input"
-        else:
-            kept = "nothing"
     return {"before": before, "after": after, "kept": kept}
 
 

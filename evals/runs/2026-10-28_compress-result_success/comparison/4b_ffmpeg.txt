@@ -1,0 +1,5 @@
+113 row(s) in both (122 in a, 1057 in b)
+  113 / 113 same grade
+  113 / 113 same plan
+  70 / 113 same command
+  saved to evals\runs\2026-10-28_compress-result_success\comparison\4b_ffmpeg.json
