@@ -47,6 +47,22 @@ pub fn stage_output(work_dir: &Path, path: &Path) -> anyhow::Result<PathBuf> {
     unreachable!("an unbounded range always yields a free folder")
 }
 
+/// A staged copy of `source`, a file in `work_dir`, that will become `path` (as [`stage_output`]).
+///
+/// How a step delivers a chain intermediate unchanged (a compress that could not make it
+/// smaller). A copy, not a move: a later step may still read the source. Port of `StageCopy`.
+pub fn stage_copy(work_dir: &Path, source: &Path, path: &Path) -> anyhow::Result<PathBuf> {
+    if !within(source, Some(work_dir)) {
+        anyhow::bail!(
+            "stage_copy: the source must be in the run scratch: {}",
+            source.display()
+        );
+    }
+    let staged = stage_output(work_dir, path)?;
+    std::fs::copy(source, &staged)?;
+    Ok(staged)
+}
+
 /// Check a staged file (it exists and is not empty), then move it to `path`. Returns its size.
 ///
 /// `path` must be inside `sandbox` (when there is one) and never inside `work_dir`: a final

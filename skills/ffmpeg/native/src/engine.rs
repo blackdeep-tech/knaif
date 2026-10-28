@@ -408,6 +408,9 @@ pub struct Recipe {
     /// recipe rather than re-probed in `build_flags`, so the cap is computed from the same
     /// probe every other decision in the recipe was made from. Port of `source_duration`.
     pub source_duration: Option<f64>,
+    /// The audio bitrate a size cap budgets when the track is copied (no `-b:a` to read). Port
+    /// of `audio_budget`.
+    pub audio_budget: Option<String>,
     /// Human-readable operation summary (drives the plan preview); not used by `build_flags`.
     pub operations: Vec<String>,
     /// An operation that keeps its video (`strip_audio`, `adjust_volume`) encodes it with
@@ -732,7 +735,11 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             if let Some(kbit) = size_cap_kbit(
                 target,
                 recipe.source_duration,
-                recipe.audio.bitrate.as_ref(),
+                recipe
+                    .audio
+                    .bitrate
+                    .as_ref()
+                    .or(recipe.audio_budget.as_ref()),
             )? {
                 post.extend([
                     "-maxrate".to_string(),
@@ -831,6 +838,9 @@ pub struct Probe {
     pub container: Option<String>,
     pub video_codec: Option<String>,
     pub audio_codec: Option<String>,
+    /// The first audio stream's bit rate in bit/s; `None` when ffprobe does not say (mkv often
+    /// leaves it off), never 0, which would read as a tiny track.
+    pub audio_bitrate: Option<u64>,
     pub has_audio: bool,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -915,6 +925,7 @@ pub fn dummy_probe(file: &Path, vocab: &Vocab) -> Probe {
             container: Some(suffix),
             video_codec: Some("h264".to_string()),
             audio_codec: Some("aac".to_string()),
+            audio_bitrate: None,
             has_audio: true,
             width: Some(1920),
             height: Some(1080),
@@ -980,12 +991,19 @@ pub fn summarise_probe(file: &Path, doc: &serde_json::Value) -> Probe {
     // Prefer avg_frame_rate, fall back to r_frame_rate (both are `"num/den"` strings).
     let rate = |key: &str| v_stream.and_then(|s| s.get(key)).and_then(|r| r.as_str());
     let fps = parse_fps(rate("avg_frame_rate")).or_else(|| parse_fps(rate("r_frame_rate")));
+    // ffprobe reports `bit_rate` as a JSON string ("69339"); tolerate a bare number too.
+    let audio_bitrate = a_stream.and_then(|s| s.get("bit_rate")).and_then(|b| {
+        b.as_str()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .or_else(|| b.as_u64())
+    });
 
     Probe {
         file: file.to_string_lossy().into_owned(),
         container,
         video_codec: codec(v_stream),
         audio_codec: codec(a_stream),
+        audio_bitrate,
         has_audio: a_stream.is_some(),
         width: dim(v_stream, "width"),
         height: dim(v_stream, "height"),
@@ -1650,6 +1668,28 @@ pub fn build_one_recipe(
         }
     }
 
+    // A compress never raises the audio above what the source has: a 69k AAC track re-encoded at
+    // the profile's 96k made `clip.mov` 10% bigger (manual test, 2026-10-28). A track at or under
+    // the profile is copied when it is already the codec the output wants, else encoded at its own
+    // bitrate. The cap still budgets the profile's bitrate for a copied track. Port of the block
+    // in `_build_one_recipe`.
+    let mut audio_budget = None;
+    if let (true, Some(src_bps), Some(profile)) = (
+        mode == "compress" && probe.has_audio && !copy_audio,
+        probe.audio_bitrate.filter(|b| *b > 0),
+        audio_bitrate.clone(),
+    ) {
+        let profile_bps = parse_bitrate_bps(Some(&profile));
+        if src_bps as f64 <= profile_bps {
+            if probe.audio_codec.as_deref() == Some(audio_codec.as_str()) {
+                copy_audio = true;
+                audio_budget = Some(profile);
+            } else {
+                audio_bitrate = Some(format!("{}k", src_bps / 1000));
+            }
+        }
+    }
+
     let mut recipe = Recipe {
         default_name,
         mode: mode.clone(),
@@ -1753,6 +1793,7 @@ pub fn build_one_recipe(
             recipe.target_size_mb = options.target_size_mb;
             if recipe.target_size_mb.is_some() {
                 recipe.source_duration = probe.duration;
+                recipe.audio_budget = audio_budget;
             }
         }
         "reverse" => {
@@ -2252,6 +2293,7 @@ mod tests {
             container: Some("mp4".into()),
             video_codec: Some("h264".into()),
             audio_codec: Some("aac".into()),
+            audio_bitrate: None,
             has_audio: true,
             width: Some(1920),
             height: Some(1080),
@@ -2286,6 +2328,108 @@ mod tests {
         assert!(r.operations.iter().any(|o| o == "enable_faststart"));
     }
 
+    /// `clip.mov` from the 2026-10-28 manual test: 69k AAC under a 96k profile. Mirrors
+    /// `skills/ffmpeg/python/tests/test_compress_smaller.py`.
+    fn small_audio_probe(codec: Option<&str>, bitrate: Option<u64>) -> Probe {
+        Probe {
+            file: "clip.mp4".into(),
+            container: Some("mp4".into()),
+            video_codec: Some("h264".into()),
+            audio_codec: codec.map(String::from),
+            audio_bitrate: bitrate,
+            has_audio: codec.is_some(),
+            width: Some(1280),
+            height: Some(720),
+            duration: Some(8.0),
+            fps: Some(25.0),
+        }
+    }
+
+    fn audio_flags_of(probe: &Probe, mode: &str, container: Option<&str>) -> Vec<String> {
+        let v = bundle_vocab();
+        let q = QualityProfile {
+            video_crf: 28,
+            encoder_preset: "slow".into(),
+            audio_bitrate: Some("96k".into()),
+            ..quality("small_file")
+        };
+        let opts = Options {
+            mode: Some(mode.into()),
+            container: container.map(String::from),
+            ..Default::default()
+        };
+        let r = build_one_recipe(probe, None, Some(&q), &opts, &v, None).unwrap();
+        let (_, post) = build_flags(&r, &v).unwrap();
+        let at = post.iter().position(|f| f == "-c:a").unwrap();
+        post[at..].to_vec()
+    }
+
+    #[test]
+    fn summarise_probe_reads_the_audio_bitrate() {
+        let doc = serde_json::json!({
+            "streams": [{"codec_type": "audio", "codec_name": "aac", "bit_rate": "69339"}],
+            "format": {"format_name": "mov,mp4,m4a"}
+        });
+        assert_eq!(
+            summarise_probe(Path::new("clip.mov"), &doc).audio_bitrate,
+            Some(69339)
+        );
+        let none = serde_json::json!({"streams": [{"codec_type": "audio", "codec_name": "opus"}]});
+        assert_eq!(
+            summarise_probe(Path::new("clip.mkv"), &none).audio_bitrate,
+            None
+        );
+    }
+
+    #[test]
+    fn compress_never_raises_the_audio() {
+        let flags = |c, b, m, k| audio_flags_of(&small_audio_probe(c, b), m, k);
+        assert_eq!(
+            flags(Some("aac"), Some(69339), "compress", None),
+            ["-c:a", "copy", "-movflags", "+faststart"]
+        );
+        assert_eq!(
+            flags(Some("aac"), Some(192_000), "compress", None)[..4],
+            ["-c:a", "aac", "-b:a", "96k"]
+        );
+        assert_eq!(
+            flags(Some("mp3"), Some(64000), "compress", None)[..4],
+            ["-c:a", "aac", "-b:a", "64k"]
+        );
+        assert_eq!(
+            flags(Some("aac"), None, "compress", None)[..4],
+            ["-c:a", "aac", "-b:a", "96k"]
+        );
+        assert_eq!(
+            flags(Some("aac"), Some(69339), "convert", Some("mkv"))[..4],
+            ["-c:a", "aac", "-b:a", "96k"]
+        );
+    }
+
+    #[test]
+    fn a_copied_track_is_still_budgeted_in_a_size_cap() {
+        let v = bundle_vocab();
+        let q = QualityProfile {
+            video_crf: 28,
+            encoder_preset: "slow".into(),
+            audio_bitrate: Some("96k".into()),
+            ..quality("small_file")
+        };
+        let opts = Options {
+            mode: Some("compress".into()),
+            target_size_mb: Some(0.5),
+            ..Default::default()
+        };
+        let probe = Probe {
+            duration: Some(10.0),
+            ..small_audio_probe(Some("aac"), Some(69339))
+        };
+        let r = build_one_recipe(&probe, None, Some(&q), &opts, &v, None).unwrap();
+        let (_, post) = build_flags(&r, &v).unwrap();
+        let at = post.iter().position(|f| f == "-maxrate").unwrap();
+        assert_eq!(post[at + 1], "302k");
+    }
+
     /// A probe as `summarise_probe` stores it: the first entry of ffprobe's `format_name`.
     fn probe_of(file: &str, format_name: &str, video: bool) -> Probe {
         Probe {
@@ -2293,6 +2437,7 @@ mod tests {
             container: format_name.split(',').next().map(String::from),
             video_codec: video.then(|| "h264".into()),
             audio_codec: Some("aac".into()),
+            audio_bitrate: None,
             has_audio: true,
             width: video.then_some(1280),
             height: video.then_some(720),

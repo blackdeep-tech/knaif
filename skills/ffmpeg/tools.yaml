@@ -366,7 +366,8 @@ render_batch_commands:
   internal: true
 
 run_batch:
-  effects: [exec:ffmpeg, exec:ffprobe, fs.write]
+  # fs.read: a compress that could not shrink a chain intermediate delivers a copy of it.
+  effects: [exec:ffmpeg, exec:ffprobe, fs.read, fs.write]
   description: "Execute the rendered batch FFmpeg commands one by one."
   required_args: [commands]
   safety_category: safe

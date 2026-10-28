@@ -77,6 +77,32 @@ clarify
 reject
 ```
 
+### Smaller, or left as it was
+
+A compress is checked against its input, and the result says what it did (owner, 2026-10-28):
+`✓ clip_compressed.mp4` with `30% smaller (154.0 KB → 107.8 KB)` under it. A compress that is
+not smaller is not a compression, so its encode is not delivered:
+
+- the input is the user's own file: nothing is written, and the step says
+  `⚠ couldn't make clip.mov smaller — left it as it was`;
+- the input is a chain intermediate (`convert ... to mp4 and make it smaller`), which is what was
+  asked for: it is delivered unchanged under the compress's name (fs `stage_copy`), and the step
+  says `⚠ clip_compressed.mp4: couldn't make it smaller — kept it as it was`. Same format only;
+  an `.mkv` intermediate is not renamed to `.mp4`, so nothing is written then;
+- an encode that feeds a later step (written straight into the run scratch) is kept and only
+  reported, since the next step needs a file.
+
+Not smaller is not a failure: the run exits 0. Both runtimes print the same lines
+(`contracts/parity/ui_render_cases.json`: `size_change`, `kept`, `kept_what`).
+
+The audio never goes up either. Found in the 1.4.0 manual test: `clip.mov` (720p, 80 kbit/s
+video, 69 kbit/s AAC) came out 10% bigger because its audio was re-encoded at the quality
+profile's 96k. A source track at or under the profile's bitrate is now copied when it is already
+the codec the output wants (`-c:a copy`), else encoded at its own bitrate; a track over it, or
+one whose bitrate ffprobe does not report (often mkv), is encoded at the profile's as before.
+Only `compress_video` does this: a convert or a platform target keeps the profile's audio. A
+copied track is still budgeted at the profile's bitrate in a size cap below.
+
 ### Size targets
 
 `compress_video`'s `target_size_mb` is a **ceiling, not a target**. It is rendered as x264

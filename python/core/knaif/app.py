@@ -166,6 +166,9 @@ def _echo_item(item: dict[str, Any], indent: str) -> int:
         click.echo(indent + click.style("$", fg="bright_black") + " " + message)
     elif kind == "output":
         click.echo(indent + click.style(f"✓ {message}", fg="green"))
+    elif kind == "kept":
+        what = ui.kept_what(message, bool(item.get("written")))
+        click.echo(indent + click.style(f"⚠ {what}", fg="yellow"))
     elif kind == "text":
         for line in message.splitlines() or [""]:
             click.echo(indent + line)

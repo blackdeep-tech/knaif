@@ -154,6 +154,11 @@ def _summarise_probe(file: Path, probe: dict[str, Any]) -> dict[str, Any]:
     fps: float | None = None
     if v_stream:
         fps = _parse_fps(v_stream.get("avg_frame_rate")) or _parse_fps(v_stream.get("r_frame_rate"))
+    # Unknown (mkv often leaves it off the stream) is None, never 0: 0 would read as tiny.
+    try:
+        audio_bitrate: int | None = int(a_stream["bit_rate"]) if a_stream else None
+    except (KeyError, TypeError, ValueError):
+        audio_bitrate = None
     return {
         "file": str(file),
         "container": fmt.get("format_name", "").split(",")[0],
@@ -164,6 +169,7 @@ def _summarise_probe(file: Path, probe: dict[str, Any]) -> dict[str, Any]:
         "fps": fps,
         "video_codec": v_stream.get("codec_name") if v_stream else None,
         "audio_codec": a_stream.get("codec_name") if a_stream else None,
+        "audio_bitrate": audio_bitrate,
         "has_audio": a_stream is not None,
     }
 
@@ -190,6 +196,7 @@ def _dummy_probe(file: Path) -> dict[str, Any]:
             "fps": None,
             "video_codec": None,
             "audio_codec": _AUDIO_EXTS[suffix],
+            "audio_bitrate": None,
             "has_audio": True,
         }
     return {
@@ -202,6 +209,7 @@ def _dummy_probe(file: Path) -> dict[str, Any]:
         "fps": 30.0,
         "video_codec": "h264",
         "audio_codec": "aac",
+        "audio_bitrate": None,
         "has_audio": True,
     }
 
@@ -1152,6 +1160,26 @@ def _build_one_recipe(
         if audio_codec in ("flac", "pcm_s16le", "alac"):
             audio_bitrate = None
 
+    # A compress never raises the audio above what the source has: a 69k AAC track re-encoded
+    # at the profile's 96k made `clip.mov` 10% bigger (manual test, 2026-10-28). A track at or
+    # under the profile is copied when it is already the codec the output wants, else encoded
+    # at its own bitrate. The cap still budgets the profile's bitrate for a copied track.
+    audio_budget = None
+    src_bps = probe.get("audio_bitrate")
+    if (
+        mode == "compress"
+        and probe.get("has_audio")
+        and not copy_audio
+        and src_bps
+        and audio_bitrate
+        and src_bps <= _parse_bitrate_bps(audio_bitrate)
+    ):
+        if probe.get("audio_codec") == audio_codec:
+            copy_audio = True
+            audio_budget = audio_bitrate
+        else:
+            audio_bitrate = f"{src_bps // 1000}k"
+
     recipe: dict[str, Any] = {
         DEFAULT_NAME: default_name,
         "mode": mode,
@@ -1220,6 +1248,8 @@ def _build_one_recipe(
         recipe.pop("audio", None)
     if mode == "compress" and options.get("target_size_mb") is not None:
         recipe["target_size_mb"] = options["target_size_mb"]
+        if audio_budget:
+            recipe["audio_budget"] = audio_budget
         # The duration is what turns a size into a bitrate, and `_build_flags` sees only the
         # recipe. Carried here rather than re-probed there, so the cap is computed from the
         # same probe every other decision in this recipe was made from.
@@ -1535,7 +1565,7 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             kbit = _size_cap_kbit(
                 recipe["target_size_mb"],
                 recipe.get("source_duration"),
-                (recipe.get("audio") or {}).get("bitrate"),
+                (recipe.get("audio") or {}).get("bitrate") or recipe.get("audio_budget"),
             )
             if kbit is not None:
                 post += [

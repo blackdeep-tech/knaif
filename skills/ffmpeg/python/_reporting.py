@@ -238,6 +238,27 @@ def ffmpeg_failure(returncode: Any, stderr: str) -> str:
     return f"{msg}: {diag}" if diag else msg
 
 
+def result_line(
+    c: dict[str, Any], size: dict[str, Any] | None, seconds: float | None
+) -> dict[str, Any]:
+    """What one command's end shows: ``output`` (with what a compress saved), or ``kept`` for
+    a compress that could not make its file smaller (`steps._shrunk`)."""
+    if size and size["kept"]:
+        return {
+            "kind": "kept",
+            "message": str(c.get("output") if size["kept"] == "input" else c.get("input")),
+            "written": size["kept"] == "input",
+            "before": size["before"],
+            "after": size["after"],
+        }
+    item: dict[str, Any] = {"kind": "output", "message": str(c.get("output"))}
+    if seconds is not None:
+        item["seconds"] = seconds
+    if size:
+        item["before"], item["after"] = size["before"], size["after"]
+    return item
+
+
 def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dict[str, str]]:
     """Convert a list of execution results into structured items for the CLI.
 
@@ -322,10 +343,7 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
                 produced += 1
                 if shown:
                     continue
-                item = {"kind": "output", "message": str(out["output"])}
-                if out.get("seconds") is not None:
-                    item["seconds"] = out["seconds"]
-                items.append(item)
+                items.append(result_line(out, out.get("size"), out.get("seconds")))
         if not produced and not any(i["kind"] == "error" for i in items):
             items.append({"kind": "info", "message": "(no output files produced)"})
 

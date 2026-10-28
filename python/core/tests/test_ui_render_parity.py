@@ -72,6 +72,14 @@ def _render(fn: str, style: ui.Style, a: dict[str, Any]) -> str:
         return ui.fmt_bytes(a["n"])
     if fn == "files_written":
         return ui.files_written(a["n"])
+    if fn == "size_change":
+        return ui.size_change(a["before"], a["after"])
+    if fn == "under":
+        return ui.render_under(style, a["text"])
+    if fn == "kept":
+        return ui.render_kept(style, a["what"])
+    if fn == "kept_what":
+        return ui.kept_what(a["name"], a["written"])
     raise AssertionError(f"no renderer {fn}")
 
 

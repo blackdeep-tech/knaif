@@ -24,6 +24,16 @@ stage_output:
   safety_category: safe
   internal: true
 
+stage_copy:
+  effects: [fs.read, fs.write]
+  description: >
+    A staged copy of `source`, a file in the run scratch, that will become `path`: the same file
+    name, in a folder of its own, as stage_output. Hand it to commit_output. The source is left in
+    place, since a later step may still read it. Returns {staged}.
+  required_args: [source, path]
+  safety_category: safe
+  internal: true
+
 commit_output:
   effects: [fs.write]
   description: >

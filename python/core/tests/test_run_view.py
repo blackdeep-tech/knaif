@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from knaif import ui
-from knaif.run_view import QuietPlanning, choose_style, step_detail
+from knaif.run_view import QuietPlanning, RunView, choose_style, step_detail
 
 
 def test_planning_keeps_llama_off_the_tree_and_still_spins(capfd) -> None:
@@ -100,3 +100,43 @@ def test_a_path_outside_the_working_folder_is_printed_with_slashes(tmp_path: Pat
     assert shown(str(out), work) == out.as_posix()
     argv = ["ffmpeg", "-i", "clip.mp4", str(out)]
     assert shown_argv(argv, work) == f"ffmpeg -i clip.mp4 {out.as_posix()}"
+
+
+# ── what a compress did (manual test, 2026-10-28) ─────────────────────────────────────────────
+
+_GREW = {"before": 157680, "after": 173676}
+
+
+def test_a_compress_result_says_what_it_saved(tmp_path: Path, capsys) -> None:
+    out = str(tmp_path / "clip_compressed.mp4")
+    item = {"kind": "output", "message": out, "before": 157680, "after": 110376}
+    RunView("ffmpeg", ui.Style(color=False), base=tmp_path).item(item, dry_run=False)
+    RunView("ffmpeg", None, base=tmp_path).item(item, dry_run=False)
+    assert capsys.readouterr().out.splitlines() == [
+        " │   └─ ✓ clip_compressed.mp4",
+        " │      30% smaller (154.0 KB → 107.8 KB)",
+        "✓ clip_compressed.mp4",
+        "  30% smaller (154.0 KB → 107.8 KB)",
+    ]
+
+
+def test_a_compress_that_wrote_nothing_says_so_and_counts_nothing(tmp_path: Path, capsys) -> None:
+    view = RunView("ffmpeg", ui.Style(color=False), base=tmp_path)
+    item = {"kind": "kept", "message": str(tmp_path / "clip.mov"), "written": False, **_GREW}
+    assert view.item(item, dry_run=False) == 0, "not a failure"
+    assert capsys.readouterr().out.splitlines() == [
+        " │   └─ ⚠ couldn't make clip.mov smaller — left it as it was",
+        " │      not smaller (154.0 KB → 169.6 KB)",
+    ]
+    assert view._written == 0
+
+
+def test_a_compress_that_delivered_its_input_counts_one_file(tmp_path: Path, capsys) -> None:
+    view = RunView("ffmpeg", None, base=tmp_path)
+    out = str(tmp_path / "clip_compressed.mp4")
+    view.item({"kind": "kept", "message": out, "written": True, **_GREW}, dry_run=False)
+    assert capsys.readouterr().out.splitlines() == [
+        "⚠ clip_compressed.mp4: couldn't make it smaller — kept it as it was",
+        "  not smaller (154.0 KB → 169.6 KB)",
+    ]
+    assert view._written == 1

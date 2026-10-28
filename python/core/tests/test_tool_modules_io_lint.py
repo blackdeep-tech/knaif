@@ -51,6 +51,7 @@ _DOC = "skills/documents/python/"
 _FSW = "toolkits/fs/python/write.py"
 ALLOWED: dict[tuple[str, str, str], str] = {
     (_FSW, "StageOutput.handle", ".mkdir"): _FS,
+    (_FSW, "StageCopy.handle", "shutil.copyfile"): _FS,
     (_FSW, "CommitOutput.handle", ".unlink"): _FS,
     (_FSW, "CommitOutput.handle", ".mkdir"): _FS,
     (_FSW, "CommitOutput.handle", "shutil.move"): _FS,

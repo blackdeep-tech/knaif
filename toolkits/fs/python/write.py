@@ -70,6 +70,26 @@ class StageOutput(Handler):
         raise AssertionError("unreachable")
 
 
+class StageCopy(Handler):
+    """A staged copy of *source*, a file in the run scratch, that will become *path*.
+
+    How a step delivers a chain intermediate unchanged (a compress that could not make it
+    smaller). A copy, not a move: a later step may still read the source.
+    """
+
+    name = "stage_copy"
+
+    def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
+        work = _require_work_dir(ctx, self.name)
+        source = _resolve(str(args["source"]), ctx)
+        if not _inside(source, work):
+            raise ValueError(f"stage_copy: the source must be in the run scratch: {source}")
+        staged = StageOutput().handle({"path": args["path"]}, ctx)["staged"]
+        if not (ctx.dry_run or ctx.skip_execution):
+            shutil.copyfile(source, staged)
+        return {"staged": staged}
+
+
 class CommitOutput(Handler):
     """Check a staged file (exists, not empty) and move it to its final *path*."""
 
