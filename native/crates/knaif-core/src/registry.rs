@@ -78,7 +78,14 @@ impl Default for ArgSchema {
 #[serde(untagged)]
 pub enum Produces {
     Kind(String),
-    Arg { arg: String },
+    Arg {
+        arg: String,
+    },
+    /// A tool that always writes one format, whatever it reads (`compress_video`: mp4). Read by
+    /// the result set only. Python `{"format": ...}`.
+    Format {
+        format: String,
+    },
 }
 
 /// One tool's definition (mirrors Python `ToolDef`). `name` comes from the YAML map key.

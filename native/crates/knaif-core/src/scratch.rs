@@ -276,7 +276,8 @@ fn written_kind(
                 return Some(kind.clone());
             }
         }
-        None => {}
+        // A fixed format is read by the result set only; the keep rule decides as before.
+        Some(Produces::Format { .. }) | None => {}
     }
     let out = args.and_then(|a| a.get("output")).and_then(Value::as_str)?;
     let ext = extension_of(out);
@@ -304,7 +305,7 @@ fn written_extension(step: &Value, produces: &HashMap<String, Produces>) -> Opti
             .as_str()
             .map(|v| v.trim().trim_start_matches('.').to_lowercase())
             .filter(|v| !v.is_empty()),
-        Produces::Kind(_) => None,
+        Produces::Kind(_) | Produces::Format { .. } => None,
     }
 }
 

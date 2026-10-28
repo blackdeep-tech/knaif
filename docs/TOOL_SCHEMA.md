@@ -861,7 +861,10 @@ Intermediate files belong to knaif, not to the user. Every run that executes get
   Otherwise a later step refines it, so it moves: "convert to mp4, then speed it up" leaves only
   the sped-up mp4. Kinds are the skill's `file_kinds`; what a reader writes is its tool's
   `produces:` in `tools.yaml`, a kind or `{arg: <name>}` when the kind follows an argument naming
-  an extension, else its explicit `output`'s kind. The declaration wins over the extension the
+  an extension, else its explicit `output`'s kind (a `{format: <extension>}` declaration, for a
+  tool that always writes one format, only names what the plan leaves: `compress_video` declares
+  `{format: mp4}` so a compressed `.mov` "leaves 1 mp4"; the keep rule ignores it). The
+  declaration wins over the extension the
   model wrote: `extract_audio` writing `clip_audio.mp4` still writes audio, so a wrong extension
   cannot delete a second result:
 

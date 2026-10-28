@@ -76,6 +76,9 @@ compress_video:
   optional_args: [target, target_size_mb, quality, crf, output, preview]
   # A size is the user's to give: one the request does not state is left out (2026-10-28).
   stated_args: [target_size_mb]
+  # What the plan says it leaves ("leaves 1 mp4", not the input's .mov). The archive target
+  # writes mkv, which this does not follow; read by the result set only.
+  produces: {format: mp4}
   safety_category: destructive
   arg_schemas:
     quality: *quality_schema

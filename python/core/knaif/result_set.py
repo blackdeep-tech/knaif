@@ -9,9 +9,9 @@ A step's files:
 
 * its explicit ``output``: one per input file it runs over (one for a join); a name only when it
   runs over one file and the output is no pattern;
-* else what its tool's ``produces:`` names: an ``{arg}`` value is an extension, a kind is shown
-  as a kind;
-* else each input's own extension (``compress clip.mov`` leaves a ``.mov``).
+* else what its tool's ``produces:`` names: an ``{arg}`` value is an extension, a ``{format}``
+  is a fixed one (``compress_video`` writes mp4 whatever it reads), a kind is shown as a kind;
+* else each input's own extension (``trim clip.mov`` leaves a ``.mov``).
 
 Outputs in the run scratch, and steps of readonly or control tools, leave nothing. Up to three
 files, all named, are listed by name; otherwise counted by type, first seen first. A named file
@@ -139,6 +139,9 @@ def result_set(
             results.extend(
                 Result(tool, name, ext, file_kinds.get(ext or ""), note) for _ in range(n)
             )
+        elif isinstance(declared, Mapping) and declared.get("format"):
+            fixed = str(declared["format"])
+            results.extend(Result(tool, None, fixed, file_kinds.get(fixed)) for _ in range(n))
         elif declared_ext:
             results.extend(
                 Result(tool, None, declared_ext, file_kinds.get(declared_ext)) for _ in range(n)
