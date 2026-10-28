@@ -65,6 +65,12 @@ slices:
   # 4B 8/16, 1.7B 9/16, so one budget holds for both. Half the misses are the known chain-preview
   # bug (docs/TODO.md); the next promotion is expected to raise this.
   hard2: { max_failures: 8 }
+  # The 1.4.0 feature rows (links, beep/notify and known folders, many files), written at what
+  # the re-lock that first measured them scored (evals/runs/2026-10-28_relock-1.4.0_success):
+  # 4B 32/33, 17/18, 53/54. The shipped models never trained on them.
+  url_input: { max_failures: 1 }
+  alerts_and_folders: { max_failures: 1 }
+  many_files: { max_failures: 1 }
 
   # control outcomes
   clarify: { max_failures: 4 }
@@ -86,3 +92,17 @@ models:
   knaif-qwen3-1.7b-v2:
     aggregate:
       avg_knaif_score: 0.969  # v1 0.96908
+      # OWNER EXCEPTION 2026-10-28 (1.4.0 re-lock, evals/runs/2026-10-28_relock-1.4.0_success):
+      # sft-v9 252/277 = 0.9097 with the 1.4.0 feature rows counted; on the kept rows it rose
+      # 0.926 -> 0.943. The miss is the new rows, where it drops the "notify me" part.
+      outcome_accuracy: 0.909
+    slices:
+      # OWNER EXCEPTION 2026-10-28, same run. extract: documents_004 now asks instead of planning
+      # (documents_003 already missed). clarify: the kept rows miss the same 3 as on 2026-10-18;
+      # the other 3 are 1.4.0 rows that expect a question (documents_url_009, documents_batch_001).
+      extract: { max_failures: 2 }
+      clarify: { max_failures: 6 }
+      # The 1.4.0 feature rows, at sft-v9's first measurement.
+      url_input: { max_failures: 2 }  # 31/33
+      alerts_and_folders: { max_failures: 8 }  # 10/18
+      many_files: { max_failures: 6 }  # 48/54
