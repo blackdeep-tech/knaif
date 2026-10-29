@@ -78,7 +78,14 @@ impl Default for ArgSchema {
 #[serde(untagged)]
 pub enum Produces {
     Kind(String),
-    Arg { arg: String },
+    Arg {
+        arg: String,
+    },
+    /// A tool that always writes one format, whatever it reads (`compress_video`: mp4). Read by
+    /// the result set only. Python `{"format": ...}`.
+    Format {
+        format: String,
+    },
 }
 
 /// One tool's definition (mirrors Python `ToolDef`). `name` comes from the YAML map key.
@@ -106,6 +113,10 @@ pub struct ToolDef {
     pub any_of_args: Vec<String>,
     #[serde(default)]
     pub grounded_args: Vec<String>,
+    /// Args only the request can state (a target size): a value the utterance does not hold is
+    /// left out with a note (`nl_clarify_gate::drop_unstated_args`). Python `stated_args`.
+    #[serde(default)]
+    pub stated_args: Vec<String>,
     #[serde(default = "default_safety")]
     pub safety_category: String,
     #[serde(default)]

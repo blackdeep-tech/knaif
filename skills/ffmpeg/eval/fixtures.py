@@ -49,6 +49,24 @@ FIXTURES: dict[str, str] = {
         " -c:v libx264 -crf 23 -c:a aac -shortest"
         " {output}"
     ),
+    # Already squeezed past what `compress_video` encodes to (CRF 51 video, 32k audio): a
+    # compress can only make it bigger, so the right result is the folder as it was, or, after a
+    # convert, the converted file unchanged (rows tagged compress_result, 2026-10-28). Each in a
+    # folder of its own: beside clip.mov, a second .mov made "downscale mov" (ffmpeg_227) ambiguous.
+    "tiny_clip/clip_tiny.mp4": (
+        "ffmpeg -y"
+        " -f lavfi -i testsrc=duration=2:size=320x240:rate=10"
+        " -f lavfi -i sine=frequency=1000:duration=2"
+        " -c:v libx264 -crf 51 -c:a aac -b:a 32k -shortest"
+        " {output}"
+    ),
+    "tiny_mov/clip_tiny.mov": (
+        "ffmpeg -y"
+        " -f lavfi -i testsrc=duration=2:size=320x240:rate=10"
+        " -f lavfi -i sine=frequency=1000:duration=2"
+        " -c:v libx264 -crf 51 -c:a aac -b:a 32k -shortest"
+        " {output}"
+    ),
     # Second 1080p/30fps clip for concat tests that require matching stream parameters.
     "clip2.mp4": (
         "ffmpeg -y"
@@ -58,7 +76,7 @@ FIXTURES: dict[str, str] = {
         " {output}"
     ),
     "audio.mp3": (
-        "ffmpeg -y -f lavfi -i sine=frequency=440:duration=10" " -c:a libmp3lame -q:a 2 {output}"
+        "ffmpeg -y -f lavfi -i sine=frequency=440:duration=10 -c:a libmp3lame -q:a 2 {output}"
     ),
     # A long clip for one-file-into-many rows: 10-second parts, a frame every 5 s, and
     # screenshots at 0:05, 0:30 and 1:10 all need more than the 10 s of clip.mp4.

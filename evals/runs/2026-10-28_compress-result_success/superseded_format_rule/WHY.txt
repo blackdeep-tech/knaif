@@ -1,0 +1,1 @@
+Measured the first rule for a chain intermediate of another format (write nothing). The 1.7B's ffmpeg_batch_001[1] (*.mov -> converted.mkv -> compress) lost one file's conversion (0.75, count 2 != 3); the rule now delivers the encode. Kept for the record, not used.

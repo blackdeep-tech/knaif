@@ -143,13 +143,15 @@ def _preflight_inputs(
     root: Path,
     sandbox: Path | None = None,
     planned_output_names: set[str] | None = None,
+    planned_extensions: set[str] | None = None,
     work_dir: Path | None = None,
     **kwargs: Any,
 ) -> list[str]:
     """Return error strings for any input paths that do not exist.
 
     A file in this run's scratch (*work_dir*: a downloaded URL input) is the run's own, not a
-    place outside the sandbox.
+    place outside the sandbox. A pattern of a format an earlier step writes
+    (*planned_extensions*) is not checked: those files do not exist until that step runs.
     """
     raw = args.get("inputs") or args.get("input") or args.get("paths")
     if not raw:
@@ -165,7 +167,13 @@ def _preflight_inputs(
     # only a request whose every input is a pattern matching nothing has nothing to work on.
     patterns = [p for p in paths if isinstance(p, str) and not p.startswith("$") and _is_glob(p)]
     if patterns:
-        matched = any(_glob_matches(p, base) for p in patterns)
+        # `*.mov` → mp4, then `*.mp4`: the second step's files are the first step's results.
+        # Native expands a step's pattern when that step runs, so it never refused this.
+        planned = {e.lower() for e in planned_extensions or ()}
+        matched = any(
+            _glob_matches(p, base) or Path(p).suffix.lstrip(".").lower() in planned
+            for p in patterns
+        )
         if not matched and len(patterns) == len(paths):
             location = "sandbox" if sandbox is not None else "working directory"
             listed = ", ".join(repr(p) for p in patterns)
@@ -236,6 +244,27 @@ def ffmpeg_failure(returncode: Any, stderr: str) -> str:
         None,
     )
     return f"{msg}: {diag}" if diag else msg
+
+
+def result_line(
+    c: dict[str, Any], size: dict[str, Any] | None, seconds: float | None
+) -> dict[str, Any]:
+    """What one command's end shows: ``output`` (with what a compress saved), or ``kept`` for
+    a compress that could not make its file smaller (`steps._shrunk`)."""
+    if size and size["kept"]:
+        return {
+            "kind": "kept",
+            "message": str(c.get("output") if size["kept"] == "input" else c.get("input")),
+            "written": size["kept"] == "input",
+            "before": size["before"],
+            "after": size["after"],
+        }
+    item: dict[str, Any] = {"kind": "output", "message": str(c.get("output"))}
+    if seconds is not None:
+        item["seconds"] = seconds
+    if size:
+        item["before"], item["after"] = size["before"], size["after"]
+    return item
 
 
 def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dict[str, str]]:
@@ -322,10 +351,7 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
                 produced += 1
                 if shown:
                     continue
-                item = {"kind": "output", "message": str(out["output"])}
-                if out.get("seconds") is not None:
-                    item["seconds"] = out["seconds"]
-                items.append(item)
+                items.append(result_line(out, out.get("size"), out.get("seconds")))
         if not produced and not any(i["kind"] == "error" for i in items):
             items.append({"kind": "info", "message": "(no output files produced)"})
 

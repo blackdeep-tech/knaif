@@ -562,6 +562,102 @@
         "n": 3
       },
       "expected": "3 files written"
+    },
+    {
+      "name": "a compress that saved space",
+      "fn": "size_change",
+      "color": false,
+      "args": {
+        "before": 157680,
+        "after": 110376
+      },
+      "expected": "30% smaller (154.0 KB → 107.8 KB)"
+    },
+    {
+      "name": "a compress that did not",
+      "fn": "size_change",
+      "color": false,
+      "args": {
+        "before": 157680,
+        "after": 173676
+      },
+      "expected": "not smaller (154.0 KB → 169.6 KB)"
+    },
+    {
+      "name": "a saving under one percent",
+      "fn": "size_change",
+      "color": false,
+      "args": {
+        "before": 100000,
+        "after": 99800
+      },
+      "expected": "under 1% smaller (97.7 KB → 97.5 KB)"
+    },
+    {
+      "name": "a half percent rounds up, the same on both runtimes",
+      "fn": "size_change",
+      "color": false,
+      "args": {
+        "before": 1000,
+        "after": 875
+      },
+      "expected": "13% smaller (1000 B → 875 B)"
+    },
+    {
+      "name": "a line under a result",
+      "fn": "under",
+      "color": false,
+      "args": {
+        "text": "30% smaller (154.0 KB → 107.8 KB)"
+      },
+      "expected": " │      30% smaller (154.0 KB → 107.8 KB)"
+    },
+    {
+      "name": "a line under a result in color",
+      "fn": "under",
+      "color": true,
+      "args": {
+        "text": "30% smaller"
+      },
+      "expected": " \u001b[90m│\u001b[0m      30% smaller"
+    },
+    {
+      "name": "a file left as it was",
+      "fn": "kept",
+      "color": false,
+      "args": {
+        "what": "couldn't make clip.mov smaller — left it as it was"
+      },
+      "expected": " │   └─ ⚠ couldn't make clip.mov smaller — left it as it was"
+    },
+    {
+      "name": "a file left as it was, in color",
+      "fn": "kept",
+      "color": true,
+      "args": {
+        "what": "clip.mov"
+      },
+      "expected": " \u001b[90m│\u001b[0m   \u001b[90m└─\u001b[0m \u001b[33m⚠\u001b[0m clip.mov"
+    },
+    {
+      "name": "a compress that wrote nothing",
+      "fn": "kept_what",
+      "color": false,
+      "args": {
+        "name": "clip.mov",
+        "written": false
+      },
+      "expected": "couldn't make clip.mov smaller — left it as it was"
+    },
+    {
+      "name": "a compress that delivered its input",
+      "fn": "kept_what",
+      "color": false,
+      "args": {
+        "name": "clip_compressed.mp4",
+        "written": true
+      },
+      "expected": "clip_compressed.mp4: couldn't make it smaller — kept it as it was"
     }
   ]
 }

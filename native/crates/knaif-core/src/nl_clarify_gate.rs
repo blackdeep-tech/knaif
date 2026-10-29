@@ -274,6 +274,89 @@ fn strings(value: &Value) -> Vec<&str> {
     }
 }
 
+/// Every number the request states, and the same size in MB when its unit is KB or GB (decimal
+/// and binary both). Python `_stated_values`: a number standing on its own (not the `2` of
+/// `clip2`), checked here by hand since `regex` has no look-behind.
+fn stated_values(utterance: &str) -> Vec<f64> {
+    static NUMBER: OnceLock<Regex> = OnceLock::new();
+    let re = NUMBER.get_or_init(|| Regex::new(r"([0-9]+(?:[.,][0-9]+)?)\s*([a-zA-Z]*)").unwrap());
+    let mut values = Vec::new();
+    for caps in re.captures_iter(utterance) {
+        let whole = caps.get(0).unwrap();
+        let before = utterance[..whole.start()].chars().next_back();
+        if before.is_some_and(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ',')) {
+            continue;
+        }
+        let Ok(n) = caps[1].replace(',', ".").parse::<f64>() else {
+            continue;
+        };
+        values.push(n);
+        let unit = caps[2].to_ascii_lowercase();
+        if unit.starts_with('k') {
+            values.extend([n / 1000.0, n / 1024.0]);
+        } else if unit.starts_with('g') {
+            values.extend([n * 1000.0, n * 1024.0]);
+        }
+    }
+    values
+}
+
+/// Python `_is_stated`: the request states `value` as a number, within 1%.
+fn is_stated(value: &Value, utterance: &str) -> bool {
+    let want = match value {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    };
+    let Some(want) = want else {
+        return false;
+    };
+    stated_values(utterance)
+        .iter()
+        .any(|got| (got - want).abs() <= 0.01 * want.abs().max(1e-9))
+}
+
+/// Leave out each `stated_args` value the request does not state; the plan, and a note per value
+/// left out. Python `drop_unstated_args` (owner, 2026-10-28: the model wrote `target_size_mb: 15`
+/// for "make them smaller"). Unlike a grounded arg, a missing size is no reason to ask.
+pub fn drop_unstated_args(
+    plan: &Value,
+    utterance: &str,
+    registry: &Registry,
+) -> (Value, Vec<String>) {
+    let mut notes = Vec::new();
+    let Some(steps) = plan.as_array() else {
+        return (plan.clone(), notes);
+    };
+    let mut out = Vec::with_capacity(steps.len());
+    for step in steps {
+        let mut step = step.clone();
+        let tool = step
+            .get("tool")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if let (Some(def), Some(args)) = (
+            registry.get(&tool),
+            step.get_mut("args").and_then(Value::as_object_mut),
+        ) {
+            for arg in &def.stated_args {
+                let Some(value) = args.get(arg) else {
+                    continue;
+                };
+                if !is_stated(value, utterance) {
+                    let value = args.remove(arg).unwrap();
+                    notes.push(format!(
+                        "{tool}: left out {arg} {value}: the request does not say it"
+                    ));
+                }
+            }
+        }
+        out.push(step);
+    }
+    (Value::Array(out), notes)
+}
+
 /// Python `_is_value_grounded`: a non-empty string that appears in the utterance.
 fn is_value_grounded(value: &Value, utterance: &str) -> bool {
     let Some(s) = value.as_str() else {

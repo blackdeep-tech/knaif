@@ -1,9 +1,9 @@
 {
  "skill": "ffmpeg",
  "corpus": "eval.jsonl",
- "corpus_sha256": "86bdc7f38bdccb00d698aa10272e6234f08b16aad49cd431ac4cb6238cc3769e",
+ "corpus_sha256": "8fdc38460a2fc115b94884b9cb388e113504603240f023da72a1cba56fc2c0d3",
  "method": "D1: in corpus order, the first row of each (expected_tool, expected_outcome, tag set) stratum, plus every row tagged chain2/chain3/edge/hard2/safety; utterance 0 of each",
- "count": 232,
+ "count": 234,
  "rows": [
   ["ffmpeg_001", 0],
   ["ffmpeg_003", 0],
@@ -236,6 +236,8 @@
   ["ffmpeg_batch_015", 0],
   ["ffmpeg_batch_016", 0],
   ["ffmpeg_batch_017", 0],
-  ["ffmpeg_batch_018", 0]
+  ["ffmpeg_batch_018", 0],
+  ["ffmpeg_size_001", 0],
+  ["ffmpeg_size_003", 0]
  ]
 }

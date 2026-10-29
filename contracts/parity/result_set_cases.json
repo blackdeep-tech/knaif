@@ -1,9 +1,9 @@
 {
-  "_comment": "The result set (owner, 2026-10-15 and 2026-10-20): after linking, the per-file lift and scratch routing, core computes what a plan will leave, and every preview ends with it. A step's files: its explicit output (one per input file it runs over, or one for a join; a name only when it runs over one file and the output is no pattern), else what its tool's `produces:` names (an {arg} value is an extension, a kind is shown as a kind), else each input's own extension. Outputs in the run scratch (`scratch`) and steps of readonly or control tools leave nothing. Up to 3 files, all named: by name; otherwise counts by type in first-seen order. A named file whose extension disagrees with its tool's declaration is flagged. Nothing left: an empty line (no preview line). `same_for` is the batch preview's line after the first file's steps (owner: first file in full, then the rest). Python `knaif.result_set`, Rust `knaif_core::result_set`.",
+  "_comment": "The result set (owner, 2026-10-15 and 2026-10-20): after linking, the per-file lift and scratch routing, core computes what a plan will leave, and every preview ends with it. A step's files: its explicit output (one per input file it runs over, or one for a join; a name only when it runs over one file and the output is no pattern), else what its tool's `produces:` names (an {arg} value is an extension, a {format} a fixed one, a kind is shown as a kind), else each input's own extension. Outputs in the run scratch (`scratch`) and steps of readonly or control tools leave nothing. Up to 3 files, all named: by name; otherwise counts by type in first-seen order. A named file whose extension disagrees with its tool's declaration is flagged. Nothing left: an empty line (no preview line). `same_for` is the batch preview's line after the first file's steps (owner: first file in full, then the rest). Python `knaif.result_set`, Rust `knaif_core::result_set`.",
   "tables": {
     "ffmpeg": {
       "file_kinds": {"mp4": "video", "mov": "video", "mkv": "video", "gif": "video", "mp3": "audio", "wav": "audio", "jpg": "image", "png": "image"},
-      "produces": {"convert_video": {"arg": "container"}, "extract_audio": "audio", "create_thumbnail": "image"},
+      "produces": {"convert_video": {"arg": "container"}, "compress_video": {"format": "mp4"}, "extract_audio": "audio", "create_thumbnail": "image"},
       "readonly": [],
       "joining": ["concat_video"]
     },
@@ -104,7 +104,7 @@
       "tables": "ffmpeg",
       "expand": {"*.mov": ["a.mov", "b.mov"]},
       "plan": [
-        {"tool": "compress_video", "args": {"inputs": ["*.mov"]}},
+        {"tool": "trim_video", "args": {"inputs": ["*.mov"], "end": "00:00:05"}},
         {"tool": "extract_audio", "args": {"inputs": ["a.mov"], "output": "a_audio.mp4"}},
         {"tool": "create_thumbnail", "args": {"inputs": ["a.mov"], "output": "a.jpg"}}
       ],
@@ -115,9 +115,18 @@
       "tables": "ffmpeg",
       "expand": {"*": ["beach.mov", "city.mov", "garden.mkv"]},
       "plan": [
-        {"tool": "compress_video", "args": {"inputs": ["*"]}}
+        {"tool": "trim_video", "args": {"inputs": ["*"], "end": "00:00:05"}}
       ],
       "line": "leaves 2 mov and 1 mkv"
+    },
+    {
+      "name": "a_compress_leaves_the_format_it_writes_not_its_inputs",
+      "tables": "ffmpeg",
+      "expand": {"*": ["beach.mov", "city.mov", "garden.mkv"]},
+      "plan": [
+        {"tool": "compress_video", "args": {"inputs": ["*"]}}
+      ],
+      "line": "leaves 3 mp4"
     },
     {
       "name": "an_output_pattern_over_a_glob_is_counted",

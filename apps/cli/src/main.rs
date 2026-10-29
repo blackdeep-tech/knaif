@@ -1579,7 +1579,13 @@ fn cmd_run(args: RunArgs) -> anyhow::Result<()> {
         let registry = knaif_core::load_skill_registry(&bundle)?;
         batch::leaves(&steps, &registry, &base, scratch.path(), &kinds, &set_files)
     };
-    let (preview_steps, notes) = batch::preview(&steps, lifted.as_ref(), &leaves);
+    let (preview_steps, mut notes) = batch::preview(&steps, lifted.as_ref(), &leaves);
+    // What the gate left out comes first, as in Python.
+    let stated = STATED_NOTES
+        .lock()
+        .map(|mut all| std::mem::take(&mut *all))
+        .unwrap_or_default();
+    notes.splice(0..0, stated);
     if let Some(style) = ui::view() {
         // A control step ends the plan by itself, so there is no plan to summarize.
         if !steps.iter().any(is_control_step) {
@@ -2469,17 +2475,49 @@ fn run_ffmpeg_step(
             // Exit 0 is not evidence of output: a trim past the end writes an empty container.
             let written = staged.clone().unwrap_or_else(|| PathBuf::from(&output));
             knaif_skill_ffmpeg::exec::require_streams(&written)?;
-            if let (Some(staged), Some(work)) = (&staged, ctx.work_dir) {
-                knaif_toolkit_fs::commit_output(staged, Path::new(&output), sandbox, work)?;
+            // A compress is checked against its input (`shrunk`).
+            let size = match (tool == "compress_video", ctx.work_dir) {
+                (true, Some(work)) if !output.is_empty() => Some(shrunk(
+                    &input_of(cmd),
+                    staged.as_deref(),
+                    Path::new(&output),
+                    sandbox,
+                    work,
+                )?),
+                _ => None,
+            };
+            let kept = size.as_ref().and_then(|s| s.kept);
+            if kept.is_none() {
+                if let (Some(staged), Some(work)) = (&staged, ctx.work_dir) {
+                    knaif_toolkit_fs::commit_output(staged, Path::new(&output), sandbox, work)?;
+                }
             }
-            ui::note_written(1);
-            ui::note_written_paths(&[PathBuf::from(&output)]);
+            if kept != Some(Kept::Nothing) {
+                ui::note_written(1);
+                ui::note_written_paths(&[PathBuf::from(&output)]);
+            }
             batch::tally_record(&input_of(cmd), None, ctx.base, ctx.work_dir);
-            match ui::view() {
-                Some(style) => {
+            let change = size.as_ref().map(|s| ui::size_change(s.before, s.after));
+            let what = kept.map(|k| match k {
+                Kept::Input => ui::kept_what(&shown, true),
+                Kept::Nothing => ui::kept_what(
+                    &display_path(&input_of(cmd).to_string_lossy(), ctx.work_dir),
+                    false,
+                ),
+            });
+            match (ui::view(), what) {
+                (Some(style), Some(what)) => println!("{}", ui::render_kept(&style, &what)),
+                (Some(style), None) => {
                     println!("{}", ui::render_ok(&style, &shown, Some(started.elapsed())))
                 }
-                None => println!("✓ {shown}"),
+                (None, Some(what)) => println!("⚠ {what}"),
+                (None, None) => println!("✓ {shown}"),
+            }
+            if let Some(change) = change {
+                match ui::view() {
+                    Some(style) => println!("{}", ui::render_under(&style, &change)),
+                    None => println!("  {change}"),
+                }
             }
         } else if let Some(style) = ui::view() {
             failures += 1;
@@ -2541,6 +2579,60 @@ fn run_ffmpeg_step(
         anyhow::bail!("{failures} of {} command(s) failed", commands.len());
     }
     Ok(StepOutcome::Continue)
+}
+
+/// What a compress that was not smaller left instead of its encode. Port of `steps._shrunk`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kept {
+    /// The input is the user's own file: it stays as it was, and nothing is written.
+    Nothing,
+    /// The input is a chain intermediate, which is what was asked for: it is delivered unchanged
+    /// under the output's name.
+    Input,
+}
+
+/// A compress's sizes, and what was kept when it was not smaller.
+#[derive(Debug)]
+struct Shrunk {
+    before: u64,
+    after: u64,
+    kept: Option<Kept>,
+}
+
+/// Was a compress smaller than its input? Port of `steps._shrunk`.
+///
+/// A compress that is not smaller is not a compression (manual test, 2026-10-28: `clip.mov` came
+/// out 10% bigger), so its staged encode is not committed (owner: "sorry, I couldn't make it
+/// smaller - leaving it the same"). A chain intermediate of the output's format is delivered
+/// unchanged instead (`stage_copy`); the user's own file is left as it was. An intermediate of
+/// another format (an `.mkv` is not renamed `.mp4`, and writing nothing lost the conversion asked
+/// for: ffmpeg_batch_001, 2026-10-28) delivers its encode, as does an encode written straight into
+/// the scratch (it feeds a later step, no `staged`); both are reported not smaller.
+fn shrunk(
+    source: &Path,
+    staged: Option<&Path>,
+    output: &Path,
+    sandbox: Option<&Path>,
+    work: &Path,
+) -> anyhow::Result<Shrunk> {
+    let before = std::fs::metadata(source)?.len();
+    let after = std::fs::metadata(staged.unwrap_or(output))?.len();
+    let mut kept = None;
+    if after >= before && staged.is_some() {
+        let ext = |p: &Path| p.extension().map(|e| e.to_ascii_lowercase());
+        if !knaif_toolkit_fs::within(source, Some(work)) {
+            kept = Some(Kept::Nothing);
+        } else if ext(source) == ext(output) {
+            let copy = knaif_toolkit_fs::stage_copy(work, source, output)?;
+            knaif_toolkit_fs::commit_output(&copy, output, sandbox, work)?;
+            kept = Some(Kept::Input);
+        }
+    }
+    Ok(Shrunk {
+        before,
+        after,
+        kept,
+    })
 }
 
 /// Is `path` inside this run's scratch folder?
@@ -2810,13 +2902,21 @@ fn run_documents_step(
             let written = commit_in(tool, step_args, base, sandbox, bundle, work_dir)?;
             ui::note_written(written.len());
             ui::note_written_paths(&written);
+            // A compress says what it saved, or that it kept the original (as ffmpeg's does).
+            let size = knaif_skill_documents::run::take_size_report();
+            let kept = size.is_some_and(|s| s.kept);
             for w in &written {
-                match ui::view() {
-                    Some(style) => println!(
+                match (ui::view(), kept) {
+                    (Some(style), true) => println!(
+                        "{}",
+                        ui::render_kept(&style, &ui::kept_what(&shown(w), true))
+                    ),
+                    (Some(style), false) => println!(
                         "{}",
                         ui::render_ok(&style, &shown(w), Some(started.elapsed()))
                     ),
-                    None => println!("✓ wrote {}", shown(w)),
+                    (None, true) => println!("⚠ {}", ui::kept_what(&shown(w), true)),
+                    (None, false) => println!("✓ wrote {}", shown(w)),
                 }
                 // The saved text's preview, never the whole text; the same lines
                 // as Python (`text_preview`, contracts/parity/text_preview_cases.json).
@@ -2828,6 +2928,13 @@ fn run_documents_step(
                             None => println!("{line}"),
                         }
                     }
+                }
+            }
+            if let Some(size) = size {
+                let change = ui::size_change(size.before, size.after);
+                match ui::view() {
+                    Some(style) => println!("{}", ui::render_under(&style, &change)),
+                    None => println!("  {change}"),
                 }
             }
             Ok(StepOutcome::Continue)
@@ -3419,7 +3526,18 @@ impl PlanSession {
         let known_files = listed_filenames(sandbox.unwrap_or(base));
         let gated = knaif_core::nl_clarify_gate(planned, &shown, &self.registry, &known_files);
         let gated = self.ask_for_count(gated, &shown, sandbox.unwrap_or(base));
-        Ok(restore_grounded_args(gated, utterance, &self.registry))
+        let mut restored = restore_grounded_args(gated, utterance, &self.registry);
+        // A size the request does not state is left out, and the plan says so (Python
+        // `drop_unstated_args` in `execute_plan`).
+        if let Some(steps) = restored.get("plan").cloned() {
+            let (kept, notes) =
+                knaif_core::nl_clarify_gate::drop_unstated_args(&steps, utterance, &self.registry);
+            restored["plan"] = kept;
+            if let Ok(mut all) = STATED_NOTES.lock() {
+                *all = notes;
+            }
+        }
+        Ok(restored)
     }
 
     /// A count of files ("2 of the videos") must match what the plan touches,
@@ -3454,6 +3572,9 @@ impl PlanSession {
 ///
 /// Non-recursive and files-only, matching what stem resolution globs. An unreadable directory
 /// yields an empty set, which restores the strict substring rule rather than failing the plan.
+/// What `plan_for_run` left out of the plan (`drop_unstated_args`), for the plan's notes.
+static STATED_NOTES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
 fn listed_filenames(dir: &Path) -> std::collections::HashSet<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return std::collections::HashSet::new();
@@ -4317,6 +4438,91 @@ fn resolve_plan_stems(payload: serde_json::Value, sandbox: &Path) -> serde_json:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A folder with a user side and a run scratch, and a file of `n` bytes in each place asked.
+    fn shrink_dirs(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!("knaif_shrunk_{tag}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (sb, work) = (root.join("sb"), root.join("work"));
+        std::fs::create_dir_all(&sb).unwrap();
+        std::fs::create_dir_all(&work).unwrap();
+        (root, sb, work)
+    }
+
+    /// Port of the `_shrunk` cases in `skills/ffmpeg/python/tests/test_compress_smaller.py`.
+    #[test]
+    fn a_smaller_compress_is_committed_as_usual() {
+        let (root, sb, work) = shrink_dirs("smaller");
+        let input = sb.join("clip.mp4");
+        std::fs::write(&input, vec![0u8; 100]).unwrap();
+        let out = sb.join("clip_compressed.mp4");
+        let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
+        std::fs::write(&staged, vec![0u8; 70]).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        assert_eq!((got.before, got.after, got.kept), (100, 70, None));
+        assert!(
+            !out.exists(),
+            "committing a smaller result is the caller's, as before"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_bigger_compress_of_the_users_file_writes_nothing() {
+        let (root, sb, work) = shrink_dirs("users");
+        let input = sb.join("clip.mov");
+        std::fs::write(&input, vec![0u8; 100]).unwrap();
+        let out = sb.join("clip_compressed.mp4");
+        let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
+        std::fs::write(&staged, vec![0u8; 110]).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        assert_eq!(got.kept, Some(Kept::Nothing));
+        assert!(!out.exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_bigger_compress_of_a_chain_intermediate_delivers_it_unchanged() {
+        let (root, sb, work) = shrink_dirs("chain");
+        let input = work.join("clip.mp4");
+        std::fs::write(&input, vec![7u8; 100]).unwrap();
+        let out = sb.join("clip_compressed.mp4");
+        let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
+        std::fs::write(&staged, vec![0u8; 100]).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        assert_eq!(got.kept, Some(Kept::Input), "equal is not smaller");
+        assert_eq!(std::fs::read(&out).unwrap(), vec![7u8; 100]);
+        assert!(input.exists(), "a copy: a later step may still read it");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn an_intermediate_of_another_format_delivers_the_encode() {
+        // ffmpeg_batch_001 on the 1.7B (2026-10-28 eval): `*.mov` → `converted.mkv` → compress to
+        // mp4. Writing nothing lost the conversion that was asked for; an `.mkv` cannot be
+        // renamed `.mp4`, so the compressed file in the asked format is delivered, not smaller.
+        let (root, sb, work) = shrink_dirs("format");
+        let input = work.join("clip.mkv");
+        std::fs::write(&input, vec![0u8; 100]).unwrap();
+        let out = sb.join("clip_compressed.mp4");
+        let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
+        std::fs::write(&staged, vec![0u8; 120]).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        assert_eq!((got.before, got.after, got.kept), (100, 120, None));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn an_encode_that_feeds_a_later_step_is_kept_and_reported() {
+        let (root, sb, work) = shrink_dirs("feeds");
+        let input = sb.join("clip.mp4");
+        std::fs::write(&input, vec![0u8; 100]).unwrap();
+        let out = work.join("clip_compressed.mp4");
+        std::fs::write(&out, vec![0u8; 120]).unwrap();
+        let got = shrunk(&input, None, &out, Some(&sb), &work).unwrap();
+        assert_eq!((got.before, got.after, got.kept), (100, 120, None));
+        let _ = std::fs::remove_dir_all(root);
+    }
     use std::cell::RefCell;
     use std::collections::VecDeque;
 

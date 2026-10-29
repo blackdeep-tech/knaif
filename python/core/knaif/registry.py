@@ -151,6 +151,10 @@ class ToolDef:
     # utterance — e.g. a password. The model cannot invent these; if the value
     # is not found in the utterance, the NL clarify gate downgrades to clarify.
     grounded_args: tuple[str, ...] = field(default_factory=tuple)
+    # Args only the request can state (e.g. a target size): a value the utterance does not hold
+    # is left out with a note and the plan runs without it (`drop_unstated_args`), where a
+    # grounded arg asks instead.
+    stated_args: tuple[str, ...] = field(default_factory=tuple)
     safety_category: str = "safe"
     keywords: tuple[str, ...] = field(default_factory=tuple)
     # Whole words or phrases that bring this tool into a prompt. A tool with triggers is never
@@ -163,8 +167,9 @@ class ToolDef:
     joins_inputs: bool = False
     # The kind of file the tool writes when a step names no output (tools.yaml `produces:`): a
     # kind from the skill's `file_kinds`, or {"arg": <name>} when the kind follows an argument
-    # that names an extension. None: the same kind as its input. Read by chain routing's keep
-    # rule (an intermediate every reader turns into another kind is a second result).
+    # that names an extension, or {"format": <extension>} for a tool that always writes one
+    # (read by the result set only). None: the same kind as its input. Read by chain routing's
+    # keep rule (an intermediate every reader turns into another kind is a second result).
     produces: str | dict[str, str] | None = None
     # The tool's output is a NEW thing made from its input (a piece, a page range, a join), not
     # the input improved (tools.yaml `derives: true`). Read by the keep rule: an intermediate
@@ -192,14 +197,20 @@ class ToolDef:
 
 
 def _parse_produces(name: str, value: Any) -> str | dict[str, str] | None:
-    """A tool's `produces:`: a kind name, or `{arg: <name>}`; anything else is a load error."""
+    """A tool's `produces:`: a kind name, `{arg: <name>}`, or `{format: <extension>}` for a tool
+    that always writes one format (`compress_video`: mp4); anything else is a load error."""
     if value is None:
         return None
     if isinstance(value, str) and value:
         return value
     if isinstance(value, dict) and set(value) == {"arg"} and isinstance(value["arg"], str):
         return {"arg": value["arg"]}
-    raise ValueError(f"tool {name!r}: produces must be a kind or {{arg: <name>}}, got {value!r}")
+    if isinstance(value, dict) and set(value) == {"format"} and isinstance(value["format"], str):
+        return {"format": value["format"].lower().lstrip(".")}
+    raise ValueError(
+        f"tool {name!r}: produces must be a kind, {{arg: <name>}} or {{format: <extension>}}, "
+        f"got {value!r}"
+    )
 
 
 def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
@@ -244,6 +255,7 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             optional_args=tuple(cfg.get("optional_args") or []),
             any_of_args=tuple(cfg.get("any_of_args") or []),
             grounded_args=tuple(cfg.get("grounded_args") or []),
+            stated_args=tuple(cfg.get("stated_args") or []),
             safety_category=cfg.get("safety_category", "safe"),
             keywords=tuple(cfg.get("keywords") or []),
             triggers=tuple(cfg.get("triggers") or []),

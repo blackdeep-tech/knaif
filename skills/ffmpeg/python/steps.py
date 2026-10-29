@@ -30,7 +30,7 @@ from ._engine import (
     disambiguate_outputs,
 )
 from ._pieces import plan_pieces
-from ._reporting import ffmpeg_failure
+from ._reporting import ffmpeg_failure, result_line
 
 
 def require_streams(output: str | Path | None, ctx: HandlerContext) -> None:
@@ -83,7 +83,13 @@ def _show(ctx: Any, item: dict[str, Any]) -> bool:
     return bool(show(item)) if show is not None else False
 
 
-def run_and_commit(command: list[str], output: str | None, ctx: HandlerContext) -> dict[str, Any]:
+def run_and_commit(
+    command: list[str],
+    output: str | None,
+    ctx: HandlerContext,
+    *,
+    shrink_from: str | None = None,
+) -> dict[str, Any]:
     """Run one ffmpeg command so that only a verified output reaches the user's folder.
 
     The command is rendered with the final path as its last argument (what a dry run shows and
@@ -95,6 +101,8 @@ def run_and_commit(command: list[str], output: str | None, ctx: HandlerContext) 
     An output that is itself in the scratch (a routed chain intermediate) is written directly:
     it is already out of the user's view. So is any output when there is no scratch (a bare
     caller), which keeps the old direct write.
+
+    *shrink_from* is a compress's input: the result must be smaller than it (`_shrunk`).
     """
     staged: str | None = None
     work_dir = getattr(ctx, "work_dir", None)
@@ -113,9 +121,45 @@ def run_and_commit(command: list[str], output: str | None, ctx: HandlerContext) 
     res = _deps.run_ffmpeg(command, ctx)
     if res["returncode"] == 0:
         require_streams(staged or output, ctx)
+        if shrink_from and output:
+            res["size"] = _shrunk(shrink_from, staged, output, ctx)
+            if res["size"]["kept"] is not None:
+                return res
         if staged:
             ctx.call_tool("commit_output", {"staged": staged, "path": output})
     return res
+
+
+def _shrunk(source: str, staged: str | None, output: str, ctx: HandlerContext) -> dict[str, Any]:
+    """Was a compress smaller than its input? ``{before, after, kept}``.
+
+    A compress that is not smaller is not a compression (manual test, 2026-10-28: `clip.mov`
+    came out 10% bigger), so its encode is not delivered (owner: "sorry, I couldn't make it
+    smaller - leaving it the same"). ``kept`` says what happened instead:
+
+    * ``"nothing"``: the input is the user's own file; it stays as it was and nothing is written.
+    * ``"input"``: the input is a chain intermediate (`convert ... and make it smaller`), which
+      is what was asked for; it is delivered unchanged under the output's name.
+    * ``None``: smaller; or an intermediate of another format (an `.mkv` is not renamed `.mp4`,
+      and writing nothing would lose the conversion asked for: ffmpeg_batch_001, 2026-10-28),
+      whose encode is delivered; or an encode that feeds a later step (written straight into
+      the scratch, no staged file). The last two are reported not smaller.
+    """
+    before = Path(source).stat().st_size
+    after = Path(staged or output).stat().st_size
+    kept: str | None = None
+    if after >= before and staged:
+        work_dir = getattr(ctx, "work_dir", None)
+        in_scratch = work_dir is not None and Path(source).resolve().is_relative_to(
+            Path(work_dir).resolve()
+        )
+        if not in_scratch:
+            kept = "nothing"
+        elif Path(source).suffix.lower() == Path(output).suffix.lower():
+            copy = ctx.call_tool("stage_copy", {"source": source, "path": output})["staged"]
+            ctx.call_tool("commit_output", {"staged": copy, "path": output})
+            kept = "input"
+    return {"before": before, "after": after, "kept": kept}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -210,7 +254,7 @@ def _piece_recipes(
         pieces = plan_pieces(
             options["tool"], options["args"], float(probe.get("duration") or 0.0), probe.get("fps")
         )
-        for out, piece in (pieces.items if pieces else []):
+        for out, piece in pieces.items if pieces else []:
             piece = dict(piece)
             path = Path(out)
             piece["output_path"] = str(path if path.is_absolute() else base / path)
@@ -472,7 +516,13 @@ class RenderBatchCommandsStep(Handler):
         else:
             recipes = recipes_arg
         commands = [
-            {"input": r["input"], "output": r["output"], "command": _render_command(r)}
+            {
+                "input": r["input"],
+                "output": r["output"],
+                "command": _render_command(r),
+                # A compress is checked against its input (`_shrunk`).
+                "shrink": r.get("mode") == "compress",
+            }
             for r in recipes
         ]
         return {"count": len(commands), "commands": commands}
@@ -512,7 +562,9 @@ class RunBatchStep(Handler):
             shown = _show(ctx, {"kind": "command", "message": " ".join(command), "argv": command})
             started = time.perf_counter()
             try:
-                res = run_and_commit(c["command"], out, ctx)
+                # Only a compress is checked against its input (`_shrunk`).
+                shrink = {"shrink_from": c.get("input")} if c.get("shrink") else {}
+                res = run_and_commit(c["command"], out, ctx, **shrink)
                 failure = (
                     None
                     if res["returncode"] == 0
@@ -526,8 +578,9 @@ class RunBatchStep(Handler):
                 res = {"returncode": 1, "stderr": str(exc)}
                 failure = str(exc)
             seconds = time.perf_counter() - started
+            size = res.get("size")
             if shown and failure is None and out:
-                _show(ctx, {"kind": "output", "message": str(out), "seconds": seconds})
+                _show(ctx, result_line(c, size, seconds))
             outputs.append(
                 {
                     "mode": "execute",
@@ -540,6 +593,7 @@ class RunBatchStep(Handler):
                     "seconds": seconds,
                     # Already shown as it happened: the report leaves its lines out.
                     "shown": shown,
+                    "size": size,
                 }
             )
             _finished(ctx, str(c.get("input") or out or ""), failure)

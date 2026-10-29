@@ -18,6 +18,7 @@ from toolkits.fs.python.write import (
     CommitOutput,
     EnsureParent,
     PlanOutputPath,
+    StageCopy,
     StageOutput,
     UserSidePath,
 )
@@ -61,6 +62,31 @@ def test_a_dry_run_stage_creates_nothing(tmp_path: Path) -> None:
     staged = StageOutput().handle({"path": "out.mp4"}, ctx)["staged"]
     assert Path(staged).name == "out.mp4"
     assert not ctx.work_dir.exists()
+
+
+# ── stage_copy ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_a_staged_copy_of_a_scratch_file_commits_like_any_staged_file(tmp_path: Path) -> None:
+    """A chain intermediate a compress could not shrink is delivered as it was (2026-10-28)."""
+    ctx = _ctx(tmp_path)
+    source = ctx.work_dir / "clip.mp4"
+    source.write_bytes(b"frames")
+    staged = Path(
+        StageCopy().handle({"source": str(source), "path": "clip_compressed.mp4"}, ctx)["staged"]
+    )
+    assert ctx.work_dir in staged.parents
+    assert staged.name == "clip_compressed.mp4"
+    assert staged.read_bytes() == b"frames"
+    assert source.read_bytes() == b"frames", "a copy: another step may still read the source"
+
+
+def test_a_staged_copy_only_copies_from_the_scratch(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    users = ctx.sandbox / "clip.mp4"
+    users.write_bytes(b"frames")
+    with pytest.raises(ValueError, match="run scratch"):
+        StageCopy().handle({"source": str(users), "path": "out.mp4"}, ctx)
 
 
 # ── commit_output ──────────────────────────────────────────────────────────────────────────

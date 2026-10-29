@@ -27,6 +27,7 @@ from .handler_api import HandlerContext
 from .nl_clarify_gate import (
     _named_by_stem,
     count_question,
+    drop_unstated_args,
     nl_clarify_gate,
     required_args_clarify,
     restore_grounded_args,
@@ -919,6 +920,7 @@ class CommandAgent:
                         }
                     ]
         intent_plan = clean_intents
+        stated_notes: list[str] = []
 
         # NL clarify gate: check that every file-bearing input was concretely
         # named (or stem-referenced) in the utterance.  Runs after stem
@@ -953,6 +955,10 @@ class CommandAgent:
                 ]
             # `raw_utterance` is set whenever `utterance` is (same branch above).
             intent_plan = restore_grounded_args(intent_plan, raw_utterance or "", self.registry)
+            # A size the request does not state is left out, and the plan says so.
+            intent_plan, stated_notes = drop_unstated_args(
+                intent_plan, raw_utterance or "", self.registry
+            )
 
         # URL inputs: downloaded into the run scratch (or, in a dry run, named there), so every
         # later stage sees a local file and never a URL. Before routing, collision naming and
@@ -1071,6 +1077,9 @@ class CommandAgent:
 
             # Files that earlier intents will produce — don't fail preflight for them.
             planned_output_names: set[str] = set()
+            # And the formats they write: a later step's pattern (`*.mp4`) matches their files.
+            planned_extensions: set[str] = set()
+            produces = self.route_kinds()[1]
             preflight_errors: list[str] = []
             for k, (orig_intent, block) in enumerate(intent_blocks):
                 for step in block:
@@ -1082,6 +1091,7 @@ class CommandAgent:
                         "root": self.root,
                         "sandbox": self.sandbox,
                         "planned_output_names": planned_output_names,
+                        "planned_extensions": planned_extensions,
                         "work_dir": scratch.path,
                     }
                     try:
@@ -1117,6 +1127,9 @@ class CommandAgent:
                 output_arg = orig_intent.get("args", {}).get("output")
                 if isinstance(output_arg, str) and not output_arg.startswith("$"):
                     planned_output_names.add(Path(output_arg).name)
+                written = _written_extension(orig_intent, produces)
+                if written:
+                    planned_extensions.add(written)
                 # A step writing many files from one: every file it will write (knaif.batch_chain).
                 planned_output_names.update(Path(f).name for f in planned_steps.get(k, []))
             if preflight_errors:
@@ -1178,7 +1191,7 @@ class CommandAgent:
         if self.plan_ready is not None and not any(
             s.get("tool") in _TERMINAL_TOOLS for s in intent_plan
         ):
-            notes: list[str] = []
+            notes: list[str] = list(stated_notes)
             preview = list(intent_plan)
             if batch is not None:
                 preview = [

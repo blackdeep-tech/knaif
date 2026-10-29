@@ -186,6 +186,15 @@ pub fn result_set(
                 kind: kind_of(d),
                 note: None,
             }));
+        } else if let Some(Produces::Format { format }) = declared {
+            let fixed = format.trim_start_matches('.').to_lowercase();
+            results.extend((0..n).map(|_| ResultFile {
+                tool: tool.into(),
+                name: None,
+                ext: Some(fixed.clone()),
+                kind: kind_of(&fixed),
+                note: None,
+            }));
         } else if let Some(Produces::Kind(k)) = declared {
             results.extend((0..n).map(|_| ResultFile {
                 tool: tool.into(),

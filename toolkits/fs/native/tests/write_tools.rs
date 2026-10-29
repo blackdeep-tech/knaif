@@ -5,7 +5,8 @@
 use std::path::{Path, PathBuf};
 
 use knaif_toolkit_fs::{
-    commit_output, ensure_parent, free_output_path, stage_output, user_side_path, FreeName,
+    commit_output, ensure_parent, free_output_path, stage_copy, stage_output, user_side_path,
+    FreeName,
 };
 
 fn dirs(name: &str) -> (PathBuf, PathBuf, PathBuf) {
@@ -35,6 +36,31 @@ fn two_stages_of_one_name_never_share_a_path() {
     let a = stage_output(&work, &sb.join("a/x.mp4")).unwrap();
     let b = stage_output(&work, &sb.join("b/x.mp4")).unwrap();
     assert_ne!(a, b);
+    let _ = std::fs::remove_dir_all(root);
+}
+
+// ── stage_copy ──────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn a_staged_copy_of_a_scratch_file_commits_like_any_staged_file() {
+    let (root, sb, work) = dirs("stagecopy");
+    let source = work.join("clip.mp4");
+    std::fs::write(&source, b"frames").unwrap();
+    let staged = stage_copy(&work, &source, &sb.join("clip_compressed.mp4")).unwrap();
+    assert!(staged.starts_with(&work));
+    assert_eq!(staged.file_name().unwrap(), "clip_compressed.mp4");
+    assert_eq!(std::fs::read(&staged).unwrap(), b"frames");
+    assert_eq!(std::fs::read(&source).unwrap(), b"frames");
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn a_staged_copy_only_copies_from_the_scratch() {
+    let (root, sb, work) = dirs("stagecopy2");
+    let users = sb.join("clip.mp4");
+    std::fs::write(&users, b"frames").unwrap();
+    let err = stage_copy(&work, &users, &sb.join("out.mp4")).unwrap_err();
+    assert!(err.to_string().contains("run scratch"), "{err}");
     let _ = std::fs::remove_dir_all(root);
 }
 

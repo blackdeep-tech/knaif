@@ -233,7 +233,8 @@ def test_a_tool_declares_the_kind_it_writes() -> None:
     ffmpeg = load_registry(Path("skills/ffmpeg/tools.yaml"))
     assert ffmpeg["extract_audio"].produces == "audio"
     assert ffmpeg["create_thumbnail"].produces == "image"
-    assert ffmpeg["compress_video"].produces is None  # same kind as its input
+    # Same kind as its input; the fixed format only names what the plan leaves ("1 mp4").
+    assert ffmpeg["compress_video"].produces == {"format": "mp4"}
     documents = load_registry(Path("skills/documents/tools.yaml"))
     assert documents["extract_text"].produces == "text"
     assert documents["convert_document"].produces == {"arg": "to_format"}

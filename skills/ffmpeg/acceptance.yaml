@@ -69,6 +69,10 @@ slices:
   url_input: { outcome_accuracy: 0.93 }
   alerts_and_folders: { outcome_accuracy: 0.96 }
   many_files: { outcome_accuracy: 0.90 }
+  # "Make it smaller" checks its result (a compress that cannot shrink leaves things as they were),
+  # written at the re-lock that first measured it (evals/runs/2026-10-29_relock-compress-result_success):
+  # 4B 8/9, 1.7B 9/9. 9 utterances, so a row budget.
+  compress_result: { max_failures: 1 }
 
   # control outcomes
   clarify: { outcome_accuracy: 0.84 }

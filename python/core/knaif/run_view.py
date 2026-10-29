@@ -80,7 +80,10 @@ def _fd_is_terminal(fd: int) -> bool:
         ]
         kernel32.GetFileInformationByHandleEx.restype = wintypes.BOOL
         if not kernel32.GetFileInformationByHandleEx(
-            handle, 2, ctypes.byref(info), ctypes.sizeof(info)  # 2: FileNameInfo
+            handle,
+            2,
+            ctypes.byref(info),
+            ctypes.sizeof(info),  # 2: FileNameInfo
         ):
             return False
         return _msys_pty_name(info.name[: info.length // 2])
@@ -416,6 +419,14 @@ class RunView:
                 self._out(ui.render_ok(style, shown(message, self.base), item.get("seconds")))
             else:
                 self._out(f"✓ {shown(message, self.base)}")
+            self._size_change(item)
+        elif kind == "kept":
+            # A compress that could not make its file smaller: not a success, not a failure.
+            written = bool(item.get("written"))
+            self._written += written
+            what = ui.kept_what(shown(message, self.base), written)
+            self._out(ui.render_kept(style, what) if style is not None else f"⚠ {what}")
+            self._size_change(item)
         elif kind == "wrote":
             # A skill's write: what it did, then each file (native's documents step).
             outputs = [shown(str(o), self.base) for o in item.get("outputs") or []]
@@ -425,11 +436,18 @@ class RunView:
                 for out in outputs:
                     self._out(ui.render_detail(style, f"→ {out}"))
                 for out in outputs:
-                    self._out(ui.render_ok(style, out, item.get("seconds")))
+                    if item.get("kept"):
+                        self._out(ui.render_kept(style, ui.kept_what(out, True)))
+                    else:
+                        self._out(ui.render_ok(style, out, item.get("seconds")))
             else:
                 self._out(message)
                 for out in outputs:
-                    self._out(f"✓ wrote {out}")
+                    if item.get("kept"):
+                        self._out(f"⚠ {ui.kept_what(out, True)}")
+                    else:
+                        self._out(f"✓ wrote {out}")
+            self._size_change(item)
         elif kind == "text" and self.text_to_stdout:
             pass
         elif kind == "text":
@@ -449,6 +467,13 @@ class RunView:
         else:
             self._out(display(message), err=True)
         return 0
+
+    def _size_change(self, item: Mapping[str, Any]) -> None:
+        """What a compress did to the size, under its result (``before``/``after`` in bytes)."""
+        if item.get("before") is None or item.get("after") is None:
+            return
+        text = ui.size_change(int(item["before"]), int(item["after"]))
+        self._out(ui.render_under(self.style, text) if self.style is not None else f"  {text}")
 
     def exists(self, path: str) -> None:
         """``⚠ <file> already exists`` under the step that would replace it, before the question

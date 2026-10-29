@@ -1,0 +1,1 @@
+4B ran 16:58:49 before the stated_args gate (agent.py 17:01, nl_clarify_gate.py 17:02); 1.7B started 17:02:52 with it. Kept for the record, not used.

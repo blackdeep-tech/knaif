@@ -1,0 +1,16 @@
+ M apps/cli/src/main.rs
+ M python/core/knaif/agent.py
+ M python/core/knaif/run_view.py
+ M python/core/tests/test_run_view.py
+ M skills/documents/native/src/compress.rs
+ M skills/documents/native/src/run.rs
+ M skills/documents/python/handlers.py
+ M skills/documents/python/steps.py
+ M skills/ffmpeg/data/eval.jsonl
+ M skills/ffmpeg/eval/fixtures.py
+ M skills/ffmpeg/eval/verifiers.py
+ M skills/ffmpeg/python/_reporting.py
+ M skills/ffmpeg/python/tests/test_eval_data.py
+ M skills/ffmpeg/python/tests/test_eval_fixtures.py
+ M skills/ffmpeg/python/tests/test_eval_verifiers_success.py
+ M skills/ffmpeg/python/tests/test_preflights.py

@@ -170,6 +170,28 @@ def render_fail(style: Style, what: str, cause: str | None) -> str:
     return out
 
 
+def render_under(style: Style, text: str) -> str:
+    """A line under a step's result, at its cause's depth: what a compress saved."""
+    return f" {style.paint(Tone.DIM, '│')}      {text}"
+
+
+def render_kept(style: Style, what: str) -> str:
+    """A step's result that left a file as it was rather than writing one: not a success, not a
+    failure (a compress that could not make a file smaller)."""
+    return (
+        f" {style.paint(Tone.DIM, '│')}   {style.paint(Tone.DIM, '└─')} "
+        f"{style.paint(Tone.WARN, '⚠')} {what}"
+    )
+
+
+def kept_what(name: str, written: bool) -> str:
+    """What ``render_kept`` says for a compress that could not make *name* smaller: nothing was
+    written, or (*written*) its input was delivered unchanged under that name."""
+    if written:
+        return f"{name}: couldn't make it smaller — kept it as it was"
+    return f"couldn't make {name} smaller — left it as it was"
+
+
 def render_closing(style: Style, kind: str, message: str, total: float | None) -> str:
     """How a run that stopped at a question (``clarify``), a refusal (``reject``) or with
     nothing to do (``nothing``) ends."""
@@ -303,6 +325,16 @@ def fmt_bytes(n: int) -> str:
     if n < kb * kb * kb:
         return f"{n / (kb * kb):.1f} MB"
     return f"{n / (kb * kb * kb):.1f} GB"
+
+
+def size_change(before: int, after: int) -> str:
+    """What a compress did to a file's size: ``30% smaller (154.0 KB → 107.8 KB)``, or ``not
+    smaller (…)``. The percentage rounds half up in integers, so both runtimes print the same."""
+    sizes = f"{fmt_bytes(before)} → {fmt_bytes(after)}"
+    if after >= before or before == 0:
+        return f"not smaller ({sizes})"
+    pct = (200 * (before - after) + before) // (2 * before)
+    return f"under 1% smaller ({sizes})" if pct == 0 else f"{pct}% smaller ({sizes})"
 
 
 def files_written(n: int) -> str:

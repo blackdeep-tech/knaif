@@ -207,6 +207,32 @@ pub fn render_fail(style: &Style, what: &str, cause: Option<&str>) -> String {
     out
 }
 
+/// A line under a step's result, at its cause's depth: what a compress saved.
+pub fn render_under(style: &Style, text: &str) -> String {
+    format!(" {}      {text}", style.paint(Tone::Dim, "│"))
+}
+
+/// A step's result that left a file as it was rather than writing one: not a success, not a
+/// failure (a compress that could not make a file smaller).
+pub fn render_kept(style: &Style, what: &str) -> String {
+    format!(
+        " {}   {} {} {what}",
+        style.paint(Tone::Dim, "│"),
+        style.paint(Tone::Dim, "└─"),
+        style.paint(Tone::Warn, "⚠"),
+    )
+}
+
+/// What [`render_kept`] says for a compress that could not make `name` smaller: nothing was
+/// written, or (`written`) its input was delivered unchanged under that name.
+pub fn kept_what(name: &str, written: bool) -> String {
+    if written {
+        format!("{name}: couldn't make it smaller — kept it as it was")
+    } else {
+        format!("couldn't make {name} smaller — left it as it was")
+    }
+}
+
 /// How a run that stopped at a question or a refusal ends.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Closing {
@@ -492,6 +518,20 @@ pub fn fmt_bytes(n: u64) -> String {
         format!("{:.1} MB", f / (KB * KB))
     } else {
         format!("{:.1} GB", f / (KB * KB * KB))
+    }
+}
+
+/// What a compress did to a file's size: `30% smaller (154.0 KB → 107.8 KB)`, or `not smaller
+/// (…)`. The percentage rounds half up in integers, so both runtimes print the same number.
+pub fn size_change(before: u64, after: u64) -> String {
+    let sizes = format!("{} → {}", fmt_bytes(before), fmt_bytes(after));
+    if after >= before || before == 0 {
+        return format!("not smaller ({sizes})");
+    }
+    let saved = before - after;
+    match (200 * saved + before) / (2 * before) {
+        0 => format!("under 1% smaller ({sizes})"),
+        pct => format!("{pct}% smaller ({sizes})"),
     }
 }
 
@@ -1072,6 +1112,12 @@ mod tests {
             ),
             "fmt_bytes" => fmt_bytes(a["n"].as_u64().unwrap()),
             "files_written" => files_written(n("n")),
+            "size_change" => {
+                size_change(a["before"].as_u64().unwrap(), a["after"].as_u64().unwrap())
+            }
+            "under" => render_under(style, &s("text")),
+            "kept" => render_kept(style, &s("what")),
+            "kept_what" => kept_what(&s("name"), a["written"].as_bool().unwrap()),
             other => panic!("no renderer {other}"),
         }
     }

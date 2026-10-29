@@ -32,6 +32,9 @@ def test_all_expected_fixtures_present():
         "clips/clip1.mp4",
         "clips/clip2.mp4",
         "clips/clip10.mp4",
+        # Squeezed past what a compress encodes to: the compress_result rows (2026-10-28).
+        "tiny_clip/clip_tiny.mp4",
+        "tiny_mov/clip_tiny.mov",
     }
     assert expected == set(FIXTURES.keys())
 

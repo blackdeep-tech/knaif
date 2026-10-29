@@ -611,6 +611,8 @@ class RunCompressStep(Handler):
             else:
                 _lossless_compress(input_path, target)
             new_size = target.stat().st_size if target.exists() else 0
+            # What the attempt came to, for the result line (`not smaller (2.2 KB → 3.9 KB)`).
+            attempt_size = new_size
             kept_original = bool(original_size) and new_size >= original_size
             if kept_original:
                 # Not smaller is not a compression: every method grew the fixtures
@@ -630,6 +632,7 @@ class RunCompressStep(Handler):
             "method": method,
             "text_preserved": text_preserved,
             "kept_original": kept_original,
+            "attempt_size": attempt_size,
         }
         if use_raster:
             result["warning"] = "Raster compression removes selectable text and vector content."
