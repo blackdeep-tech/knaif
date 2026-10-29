@@ -170,6 +170,51 @@ pub struct ToolDef {
     pub arg_schemas: BTreeMap<String, ArgSchema>,
     #[serde(default)]
     pub arg_aliases: BTreeMap<String, String>,
+    /// Args the prompt does not list, accepted with one value: what the tool does anyway
+    /// (`compress_video`'s `container: mp4`), and only when no `unless` arg is in the step
+    /// ([`satisfied_in`]). Any other value is an unsupported arg. Mirrors Python
+    /// `ToolDef.satisfied_args`. Read by hand in [`load_registry_str`] so a malformed value names
+    /// the field.
+    #[serde(skip)]
+    pub satisfied_args: BTreeMap<String, SatisfiedArg>,
+}
+
+/// One `satisfied_args:` entry: the value the tool already gives, lowercased without a leading
+/// dot, and the args whose presence means it may not (`compress_video`'s `target`: archive writes
+/// mkv). Mirrors Python `SatisfiedArg`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SatisfiedArg {
+    #[serde(deserialize_with = "satisfied_value")]
+    pub value: String,
+    #[serde(default)]
+    pub unless: Vec<String>,
+}
+
+/// The `satisfied_args` `args` holds acceptably: the declared value (`normalize_plan` has already
+/// given it that spelling), with none of the entry's `unless` args beside it. Python
+/// `satisfied_in`.
+pub fn satisfied_in<'a>(
+    tool: &'a ToolDef,
+    args: &serde_json::Map<String, serde_json::Value>,
+) -> impl Iterator<Item = &'a str> + 'a {
+    let accepted: Vec<&'a str> = tool
+        .satisfied_args
+        .iter()
+        .filter(|(name, sat)| {
+            args.get(name.as_str()).and_then(serde_json::Value::as_str) == Some(sat.value.as_str())
+                && !sat.unless.iter().any(|u| args.contains_key(u))
+        })
+        .map(|(name, _)| name.as_str())
+        .collect();
+    accepted.into_iter()
+}
+
+fn satisfied_value<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(String::deserialize(d)?
+        .to_lowercase()
+        .trim_start_matches('.')
+        .to_string())
 }
 
 /// A `name → ToolDef` registry.
@@ -258,6 +303,13 @@ pub fn load_registry_str(text: &str) -> anyhow::Result<Registry> {
             .map_err(|e| anyhow::anyhow!("parsing tool {name:?}: {e}"))?;
         tool.name = name.to_string();
         tool.effects = crate::effects::parse_effects(name, cfg_map.get(Value::from("effects")))?;
+        if let Some(sat) = cfg_map.get(Value::from("satisfied_args")) {
+            tool.satisfied_args = serde_yaml::from_value(sat.clone()).map_err(|e| {
+                anyhow::anyhow!(
+                    "tool {name:?}: satisfied_args must be {{arg: {{value: <str>, unless: [<arg>]}}}}: {e}"
+                )
+            })?;
+        }
         tool.order = idx; // preserve tools.yaml order for the prompt (see ToolDef::order)
         registry.insert(name.to_string(), tool);
     }
@@ -370,6 +422,32 @@ my_tool:
     fn grounded_args_parsed() {
         let r = reg("foo:\n  description: d\n  required_args: [input, password]\n  grounded_args: [password]\n");
         assert_eq!(r["foo"].grounded_args, ["password"]);
+    }
+
+    #[test]
+    fn satisfied_args_parsed() {
+        let r = reg("foo:\n  description: d\n  required_args: [inputs]\n  satisfied_args:\n    container: {value: .MP4, unless: [target]}\n    codec: {value: h264}\n");
+        let s = &r["foo"].satisfied_args;
+        assert_eq!(s["container"].value, "mp4");
+        assert_eq!(s["container"].unless, ["target"]);
+        assert!(s["codec"].unless.is_empty());
+    }
+
+    #[test]
+    fn satisfied_args_must_name_a_value() {
+        for decl in [
+            "{container: mp4}",
+            "{container: {value: 4}}",
+            "{container: {value: mp4, unless: target}}",
+            "{container: {value: mp4, when: [target]}}",
+        ] {
+            let err = load_registry_str(&format!(
+                "foo:\n  description: d\n  satisfied_args: {decl}\n"
+            ))
+            .unwrap_err()
+            .to_string();
+            assert!(err.contains("satisfied_args"), "{decl}: {err}");
+        }
     }
 
     #[test]

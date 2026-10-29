@@ -1,0 +1,5 @@
+163 row(s) in both (163 in a, 1066 in b)
+  163 / 163 same grade
+  163 / 163 same plan
+  163 / 163 same command
+  saved to evals\runs\2026-10-29_satisfied-container_success\comparison\1.7b_ffmpeg.json

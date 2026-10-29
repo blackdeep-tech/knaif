@@ -194,6 +194,60 @@ class ToolDef:
     # Sibling-key aliases: model arg key → this tool's canonical key
     # (e.g. split_pdf {pages: ranges}). Applied in normalize_plan before validation.
     arg_aliases: dict[str, str] = field(default_factory=dict)
+    # Args the prompt does not list, accepted with one value: what the tool does anyway
+    # (compress_video's `container: mp4`), and only when no `unless` arg is in the step
+    # (`satisfied_in`). Any other value is an unsupported arg.
+    satisfied_args: dict[str, SatisfiedArg] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SatisfiedArg:
+    """One `satisfied_args:` entry: the value the tool already gives, lowercased without a leading
+    dot, and the args whose presence means it may not (compress_video's `target`: archive writes
+    mkv)."""
+
+    value: str
+    unless: tuple[str, ...] = ()
+
+
+def satisfied_in(tool_def: ToolDef, args: dict[str, Any]) -> set[str]:
+    """The `satisfied_args` *args* holds acceptably: the declared value (normalize_plan has
+    already given it that spelling), with none of the entry's `unless` args beside it."""
+    return {
+        name
+        for name, sat in tool_def.satisfied_args.items()
+        if args.get(name) == sat.value and not any(u in args for u in sat.unless)
+    }
+
+
+def _parse_satisfied_args(name: str, value: Any) -> dict[str, SatisfiedArg]:
+    """A tool's `satisfied_args:`, `{arg: {value: <str>, unless: [<arg>, ...]}}`; anything else is
+    a load error."""
+    if value is None:
+        return {}
+
+    def well_formed(arg: Any, spec: Any) -> bool:
+        if not isinstance(arg, str) or not isinstance(spec, dict):
+            return False
+        unless = spec.get("unless", [])
+        return (
+            set(spec) <= {"value", "unless"}
+            and isinstance(spec.get("value"), str)
+            and isinstance(unless, list)
+            and all(isinstance(u, str) for u in unless)
+        )
+
+    if not isinstance(value, dict) or not all(well_formed(a, s) for a, s in value.items()):
+        raise ValueError(
+            f"tool {name!r}: satisfied_args must be {{arg: {{value: <str>, unless: [<arg>]}}}}, "
+            f"got {value!r}"
+        )
+    return {
+        arg: SatisfiedArg(
+            value=spec["value"].lower().lstrip("."), unless=tuple(spec.get("unless", []))
+        )
+        for arg, spec in value.items()
+    }
 
 
 def _parse_produces(name: str, value: Any) -> str | dict[str, str] | None:
@@ -271,6 +325,7 @@ def load_registry(yaml_path: Path | str) -> dict[str, ToolDef]:
             defaults=dict(cfg.get("defaults") or {}),
             arg_schemas=arg_schemas,
             arg_aliases=dict(cfg.get("arg_aliases") or {}),
+            satisfied_args=_parse_satisfied_args(name, cfg.get("satisfied_args")),
         )
 
     # Keywords MAY be shared across tools — natural language isn't exclusive

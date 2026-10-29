@@ -105,3 +105,21 @@ def test_size_003_a_converted_clip_that_cannot_shrink(tmp_path: Path) -> None:
 
     _old_compress(tmp_path / "clip_tiny.mov", tmp_path / "clip_tiny_compressed.mp4")
     assert grade_folder(row, tmp_path, fixture, _check(tmp_path)).score < 1.0
+
+
+def test_size_003_one_compress_that_names_the_format(tmp_path: Path) -> None:
+    """The 4B's plan for "convert clip_tiny.mov to mp4 and make it smaller" (2026-10-29): one
+    compress with `container: mp4`. The mp4 was asked for, so the clip that cannot shrink still
+    comes out as one; without the container, the same compress leaves the folder as it was."""
+    row = _row("ffmpeg_size_003")
+    fixture = FIXTURES / "tiny_mov"
+    shutil.copytree(fixture, tmp_path, dirs_exist_ok=True)
+    plan = [{"tool": "compress_video", "args": {"inputs": ["clip_tiny.mov"], "container": "mp4"}}]
+    _run(tmp_path, row, plan)
+    graded = grade_folder(row, tmp_path, fixture, _check(tmp_path))
+    assert graded.score == 1.0, graded
+
+    plain = tmp_path / "plain"
+    shutil.copytree(fixture, plain)
+    _run(plain, row, [{"tool": "compress_video", "args": {"inputs": ["clip_tiny.mov"]}}])
+    assert not list(plain.glob("clip_tiny_compressed*"))

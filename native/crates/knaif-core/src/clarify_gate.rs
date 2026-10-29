@@ -239,6 +239,7 @@ pub fn unsupported_args_clarify(payload: &Value, registry: &Registry) -> Option<
             .iter()
             .chain(def.optional_args.iter())
             .map(String::as_str)
+            .chain(crate::registry::satisfied_in(def, args))
             .collect();
         let extra: Vec<&str> = args
             .keys()

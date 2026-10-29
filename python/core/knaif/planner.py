@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .registry import ArgSchema, ToolDef
+from .registry import ArgSchema, ToolDef, satisfied_in
 
 _TERMINAL_SUMMARY_TOOLS = frozenset({"done", "clarify", "reject"})
 
@@ -352,6 +352,13 @@ def normalize_plan(
             if src_key in args and dst_key not in args:
                 args[dst_key] = args.pop(src_key)
 
+        # Pass 3b — satisfied args take their declared spelling (".MP4" → "mp4"), so validation
+        # and the tool see one form (`satisfied_in`).
+        for arg_name, sat in tool_def.satisfied_args.items():
+            value = args.get(arg_name)
+            if isinstance(value, str) and value.strip().lower().lstrip(".") == sat.value:
+                args[arg_name] = sat.value
+
         # Pass 4 — scalar type coercion: a string/enum-typed arg arriving as a
         # number (e.g. pages=2 → "2"). Integer/number-typed args are left alone.
         for arg_name, value in list(args.items()):
@@ -503,7 +510,9 @@ def validate_step(
             f"Tool {tool_name!r} is internal and cannot be proposed directly; "
             "it is only reachable through an intent's expansion."
         )
-    allowed = set(tool_def.required_args) | set(tool_def.optional_args)
+    allowed = (
+        set(tool_def.required_args) | set(tool_def.optional_args) | satisfied_in(tool_def, args)
+    )
     if tool_def.batch_output:
         allowed.add("output")  # where a batch saves it; not listed in the prompt
 

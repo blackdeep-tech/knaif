@@ -91,6 +91,39 @@ def test_grounded_args_default_empty(registry):
         assert tool_def.grounded_args == ()
 
 
+def test_satisfied_args_parsed(tmp_path):
+    y = tmp_path / "t.yaml"
+    y.write_text(
+        "foo:\n"
+        "  description: d\n"
+        "  required_args: [inputs]\n"
+        "  satisfied_args:\n"
+        "    container: {value: .MP4, unless: [target]}\n"
+        "    codec: {value: h264}\n",
+        encoding="utf-8",
+    )
+    reg = load_registry(y)
+    assert reg["foo"].satisfied_args["container"].value == "mp4"
+    assert reg["foo"].satisfied_args["container"].unless == ("target",)
+    assert reg["foo"].satisfied_args["codec"].unless == ()
+
+
+@pytest.mark.parametrize(
+    "decl",
+    [
+        "{container: mp4}",
+        "{container: {value: 4}}",
+        "{container: {value: mp4, unless: target}}",
+        "{container: {value: mp4, when: [target]}}",
+    ],
+)
+def test_satisfied_args_must_name_a_value(tmp_path, decl):
+    y = tmp_path / "t.yaml"
+    y.write_text(f"foo:\n  description: d\n  satisfied_args: {decl}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="satisfied_args"):
+        load_registry(y)
+
+
 def test_missing_yaml_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_registry(tmp_path / "nonexistent.yaml")

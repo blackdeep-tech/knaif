@@ -89,6 +89,7 @@ def run_and_commit(
     ctx: HandlerContext,
     *,
     shrink_from: str | None = None,
+    copy_command: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run one ffmpeg command so that only a verified output reaches the user's folder.
 
@@ -103,6 +104,7 @@ def run_and_commit(
     caller), which keeps the old direct write.
 
     *shrink_from* is a compress's input: the result must be smaller than it (`_shrunk`).
+    *copy_command* is the conversion a compress that is not smaller delivers instead (`_shrunk`).
     """
     staged: str | None = None
     work_dir = getattr(ctx, "work_dir", None)
@@ -122,7 +124,7 @@ def run_and_commit(
     if res["returncode"] == 0:
         require_streams(staged or output, ctx)
         if shrink_from and output:
-            res["size"] = _shrunk(shrink_from, staged, output, ctx)
+            res["size"] = _shrunk(shrink_from, staged, output, ctx, copy_command=copy_command)
             if res["size"]["kept"] is not None:
                 return res
         if staged:
@@ -130,7 +132,14 @@ def run_and_commit(
     return res
 
 
-def _shrunk(source: str, staged: str | None, output: str, ctx: HandlerContext) -> dict[str, Any]:
+def _shrunk(
+    source: str,
+    staged: str | None,
+    output: str,
+    ctx: HandlerContext,
+    *,
+    copy_command: list[str] | None = None,
+) -> dict[str, Any]:
     """Was a compress smaller than its input? ``{before, after, kept}``.
 
     A compress that is not smaller is not a compression (manual test, 2026-10-28: `clip.mov`
@@ -139,7 +148,11 @@ def _shrunk(source: str, staged: str | None, output: str, ctx: HandlerContext) -
 
     * ``"nothing"``: the input is the user's own file; it stays as it was and nothing is written.
     * ``"input"``: the input is a chain intermediate (`convert ... and make it smaller`), which
-      is what was asked for; it is delivered unchanged under the output's name.
+      is what was asked for; it is delivered unchanged under the output's name. Or the user's
+      own file of another format when the request named the format ("convert clip.mov to mp4
+      and make it smaller", owner 2026-10-29): *copy_command*, the stream copy convert_video
+      would have written, is delivered under the output's name. If that copy fails, the encode
+      is delivered instead (``None``).
     * ``None``: smaller; or an intermediate of another format (an `.mkv` is not renamed `.mp4`,
       and writing nothing would lose the conversion asked for: ffmpeg_batch_001, 2026-10-28),
       whose encode is delivered; or an encode that feeds a later step (written straight into
@@ -153,13 +166,31 @@ def _shrunk(source: str, staged: str | None, output: str, ctx: HandlerContext) -
         in_scratch = work_dir is not None and Path(source).resolve().is_relative_to(
             Path(work_dir).resolve()
         )
+        other_format = Path(source).suffix.lower() != Path(output).suffix.lower()
         if not in_scratch:
-            kept = "nothing"
-        elif Path(source).suffix.lower() == Path(output).suffix.lower():
+            if not (copy_command and other_format):
+                kept = "nothing"
+            elif _deliver_copy(copy_command, output, ctx):
+                kept = "input"
+        elif not other_format:
             copy = ctx.call_tool("stage_copy", {"source": source, "path": output})["staged"]
             ctx.call_tool("commit_output", {"staged": copy, "path": output})
             kept = "input"
     return {"before": before, "after": after, "kept": kept}
+
+
+def _deliver_copy(command: list[str], output: str, ctx: HandlerContext) -> bool:
+    """Run *command* (a conversion ending in *output*) into a staged path and commit it, or
+    leave the folder as it was and say False when ffmpeg fails or writes no streams."""
+    staged = ctx.call_tool("stage_output", {"path": output})["staged"]
+    if _deps.run_ffmpeg([*command[:-1], staged], ctx)["returncode"] != 0:
+        return False
+    try:
+        require_streams(staged, ctx)
+    except ValueError:
+        return False
+    ctx.call_tool("commit_output", {"staged": staged, "path": output})
+    return True
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -274,6 +305,31 @@ def _piece_recipes(
     return {"count": len(recipes), "recipes": recipes}
 
 
+def _add_copy_commands(
+    recipes: list[dict[str, Any]], probes: list[dict[str, Any]], ctx: HandlerContext
+) -> None:
+    """Give each compress recipe the command `convert_video` would run for its input and output:
+    a stream copy into the output's format. "Convert clip.mov to mp4 and make it smaller" asked
+    for that conversion, so a compress that is not smaller delivers it instead (`_shrunk`;
+    owner, 2026-10-29). The engine decides the flags, so a source the container cannot take
+    as it is gets what convert would give it."""
+    by_file = {str(p["file"]): p for p in probes}
+    for r in recipes:
+        probe = by_file.get(str(r["input"]))
+        if probe is None:
+            continue
+        copy = _build_one_recipe(
+            probe,
+            None,
+            None,
+            {"mode": "convert", "container": Path(r["output"]).suffix.lstrip("."), "remux": True},
+            sandbox=ctx.sandbox,
+            work_dir=getattr(ctx, "work_dir", None),
+            home=ctx.sandbox if ctx.sandbox is not None else getattr(ctx, "root", None),
+        )
+        r["copy_command"] = _render_command({**copy, "output": r["output"]})
+
+
 class BuildRecipesStep(Handler):
     name = "build_recipes"
 
@@ -352,6 +408,8 @@ class BuildRecipesStep(Handler):
         # Only the batch knows whether two inputs land on one output path, and every command
         # carries -y, so an unresolved clash is a silent overwrite rather than an error.
         recipes = disambiguate_outputs(recipes)
+        if options.get("format_asked"):
+            _add_copy_commands(recipes, probes, ctx)
         out = {"count": len(recipes), "recipes": recipes}
         if already:
             # Shown when the step runs for real; a dry run (the rehearsal too) leaves it to the
@@ -523,6 +581,7 @@ class RenderBatchCommandsStep(Handler):
                 # A compress is checked against its input (`_shrunk`).
                 "shrink": r.get("mode") == "compress",
             }
+            | ({"copy_command": r["copy_command"]} if r.get("copy_command") else {})
             for r in recipes
         ]
         return {"count": len(commands), "commands": commands}
@@ -563,7 +622,11 @@ class RunBatchStep(Handler):
             started = time.perf_counter()
             try:
                 # Only a compress is checked against its input (`_shrunk`).
-                shrink = {"shrink_from": c.get("input")} if c.get("shrink") else {}
+                shrink = (
+                    {"shrink_from": c.get("input"), "copy_command": c.get("copy_command")}
+                    if c.get("shrink")
+                    else {}
+                )
                 res = run_and_commit(c["command"], out, ctx, **shrink)
                 failure = (
                     None
