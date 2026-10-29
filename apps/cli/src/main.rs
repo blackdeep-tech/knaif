@@ -2475,15 +2475,26 @@ fn run_ffmpeg_step(
             // Exit 0 is not evidence of output: a trim past the end writes an empty container.
             let written = staged.clone().unwrap_or_else(|| PathBuf::from(&output));
             knaif_skill_ffmpeg::exec::require_streams(&written)?;
-            // A compress is checked against its input (`shrunk`).
+            // A compress is checked against its input (`shrunk`). One that names its format
+            // ("convert clip.mov to mp4 and make it smaller") carries the conversion it delivers
+            // instead of an encode that is not smaller (owner, 2026-10-29).
             let size = match (tool == "compress_video", ctx.work_dir) {
-                (true, Some(work)) if !output.is_empty() => Some(shrunk(
-                    &input_of(cmd),
-                    staged.as_deref(),
-                    Path::new(&output),
-                    sandbox,
-                    work,
-                )?),
+                (true, Some(work)) if !output.is_empty() => {
+                    let copy = match step_args.contains_key("container") {
+                        true => {
+                            copy_command(&input_of(cmd), &output, &data, sandbox, scratch.as_ref())?
+                        }
+                        false => None,
+                    };
+                    Some(shrunk(
+                        &input_of(cmd),
+                        staged.as_deref(),
+                        Path::new(&output),
+                        sandbox,
+                        work,
+                        copy.as_deref(),
+                    )?)
+                }
                 _ => None,
             };
             let kept = size.as_ref().and_then(|s| s.kept);
@@ -2587,7 +2598,8 @@ enum Kept {
     /// The input is the user's own file: it stays as it was, and nothing is written.
     Nothing,
     /// The input is a chain intermediate, which is what was asked for: it is delivered unchanged
-    /// under the output's name.
+    /// under the output's name. Or the user's own file of another format when the request named
+    /// the format: the stream copy `convert_video` would write is delivered under that name.
     Input,
 }
 
@@ -2607,13 +2619,16 @@ struct Shrunk {
 /// unchanged instead (`stage_copy`); the user's own file is left as it was. An intermediate of
 /// another format (an `.mkv` is not renamed `.mp4`, and writing nothing lost the conversion asked
 /// for: ffmpeg_batch_001, 2026-10-28) delivers its encode, as does an encode written straight into
-/// the scratch (it feeds a later step, no `staged`); both are reported not smaller.
+/// the scratch (it feeds a later step, no `staged`); both are reported not smaller. The user's own
+/// file of another format, when the request named the format (`copy`, owner 2026-10-29), gets the
+/// stream copy `convert_video` would write; if that copy fails, the encode is delivered.
 fn shrunk(
     source: &Path,
     staged: Option<&Path>,
     output: &Path,
     sandbox: Option<&Path>,
     work: &Path,
+    copy: Option<&[String]>,
 ) -> anyhow::Result<Shrunk> {
     let before = std::fs::metadata(source)?.len();
     let after = std::fs::metadata(staged.unwrap_or(output))?.len();
@@ -2621,7 +2636,11 @@ fn shrunk(
     if after >= before && staged.is_some() {
         let ext = |p: &Path| p.extension().map(|e| e.to_ascii_lowercase());
         if !knaif_toolkit_fs::within(source, Some(work)) {
-            kept = Some(Kept::Nothing);
+            match copy.filter(|_| ext(source) != ext(output)) {
+                None => kept = Some(Kept::Nothing),
+                Some(c) if deliver_copy(c, output, sandbox, work)? => kept = Some(Kept::Input),
+                Some(_) => {}
+            }
         } else if ext(source) == ext(output) {
             let copy = knaif_toolkit_fs::stage_copy(work, source, output)?;
             knaif_toolkit_fs::commit_output(&copy, output, sandbox, work)?;
@@ -2633,6 +2652,62 @@ fn shrunk(
         after,
         kept,
     })
+}
+
+/// The command `convert_video` would run for `source` into `output`'s format: a stream copy, the
+/// conversion a compress that is not smaller delivers instead. Port of `steps._add_copy_commands`.
+fn copy_command(
+    source: &Path,
+    output: &str,
+    data: &knaif_skill_ffmpeg::FfmpegData,
+    sandbox: Option<&Path>,
+    scratch: Option<&knaif_skill_ffmpeg::run::ScratchCtx>,
+) -> anyhow::Result<Option<Vec<String>>> {
+    let format = Path::new(output)
+        .extension()
+        .map(|e| e.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let args = serde_json::json!({"inputs": [source.to_string_lossy()], "container": format});
+    let expansion = knaif_skill_ffmpeg::run::expand_in(
+        "convert_video",
+        args.as_object().expect("an object"),
+        data,
+        sandbox,
+        knaif_skill_ffmpeg::run::ProbeMode::Execute,
+        scratch,
+    )?;
+    knaif_skill_ffmpeg::run::take_notes(); // the conversion's own notes are not this step's
+    Ok(match expansion {
+        knaif_skill_ffmpeg::run::Expansion::Commands(mut cmds) if cmds.len() == 1 => {
+            let mut cmd = cmds.remove(0);
+            *cmd.last_mut().expect("an output") = output.to_string();
+            Some(cmd)
+        }
+        _ => None,
+    })
+}
+
+/// Run `cmd` (a conversion ending in `output`) into a staged path and commit it, or leave the
+/// folder as it was and say false when ffmpeg fails or writes no streams. Port of
+/// `steps._deliver_copy`.
+fn deliver_copy(
+    cmd: &[String],
+    output: &Path,
+    sandbox: Option<&Path>,
+    work: &Path,
+) -> anyhow::Result<bool> {
+    let staged = knaif_toolkit_fs::stage_output(work, output)?;
+    let mut argv = cmd.to_vec();
+    *argv.last_mut().expect("an output") = staged.to_string_lossy().to_string();
+    if !knaif_skill_ffmpeg::exec::run_ffmpeg(&argv)?
+        .status
+        .success()
+        || knaif_skill_ffmpeg::exec::require_streams(&staged).is_err()
+    {
+        return Ok(false);
+    }
+    knaif_toolkit_fs::commit_output(&staged, output, sandbox, work)?;
+    Ok(true)
 }
 
 /// Is `path` inside this run's scratch folder?
@@ -4458,7 +4533,7 @@ mod tests {
         let out = sb.join("clip_compressed.mp4");
         let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
         std::fs::write(&staged, vec![0u8; 70]).unwrap();
-        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work, None).unwrap();
         assert_eq!((got.before, got.after, got.kept), (100, 70, None));
         assert!(
             !out.exists(),
@@ -4475,7 +4550,7 @@ mod tests {
         let out = sb.join("clip_compressed.mp4");
         let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
         std::fs::write(&staged, vec![0u8; 110]).unwrap();
-        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work, None).unwrap();
         assert_eq!(got.kept, Some(Kept::Nothing));
         assert!(!out.exists());
         let _ = std::fs::remove_dir_all(root);
@@ -4489,7 +4564,7 @@ mod tests {
         let out = sb.join("clip_compressed.mp4");
         let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
         std::fs::write(&staged, vec![0u8; 100]).unwrap();
-        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work, None).unwrap();
         assert_eq!(got.kept, Some(Kept::Input), "equal is not smaller");
         assert_eq!(std::fs::read(&out).unwrap(), vec![7u8; 100]);
         assert!(input.exists(), "a copy: a later step may still read it");
@@ -4507,8 +4582,70 @@ mod tests {
         let out = sb.join("clip_compressed.mp4");
         let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
         std::fs::write(&staged, vec![0u8; 120]).unwrap();
-        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work).unwrap();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work, None).unwrap();
         assert_eq!((got.before, got.after, got.kept), (100, 120, None));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn ffmpeg_available() -> bool {
+        std::process::Command::new("ffmpeg")
+            .arg("-version")
+            .output()
+            .is_ok_and(|o| o.status.success())
+    }
+
+    /// "Convert clip.mov to mp4 and make it smaller" (owner, 2026-10-29): the user's own file of
+    /// another format, when the request named the format, gets the conversion instead of nothing.
+    /// Port of `test_size_003_one_compress_that_names_the_format`.
+    #[test]
+    fn a_bigger_compress_that_names_its_format_delivers_the_conversion() {
+        if !ffmpeg_available() {
+            eprintln!("SKIPPED: ffmpeg is not on PATH");
+            return;
+        }
+        let (root, sb, work) = shrink_dirs("copy");
+        let input = sb.join("clip.mov");
+        std::fs::write(&input, vec![0u8; 100]).unwrap();
+        let out = sb.join("clip_compressed.mp4");
+        let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
+        std::fs::write(&staged, vec![0u8; 120]).unwrap();
+        let copy: Vec<String> = ["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=d=0.2:s=32x32"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain([out.to_string_lossy().to_string()])
+            .collect();
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work, Some(&copy)).unwrap();
+        assert_eq!(got.kept, Some(Kept::Input));
+        assert!(
+            out.is_file(),
+            "the conversion is delivered under the output's name"
+        );
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// A conversion that fails leaves the encode to the caller, so the mp4 asked for still comes.
+    #[test]
+    fn a_conversion_that_fails_delivers_the_encode() {
+        if !ffmpeg_available() {
+            eprintln!("SKIPPED: ffmpeg is not on PATH");
+            return;
+        }
+        let (root, sb, work) = shrink_dirs("copyfail");
+        let input = sb.join("clip.mov");
+        std::fs::write(&input, vec![0u8; 100]).unwrap();
+        let out = sb.join("clip_compressed.mp4");
+        let staged = knaif_toolkit_fs::stage_output(&work, &out).unwrap();
+        std::fs::write(&staged, vec![0u8; 120]).unwrap();
+        let copy: Vec<String> = vec![
+            "ffmpeg".into(),
+            "-y".into(),
+            "-i".into(),
+            sb.join("missing.mov").to_string_lossy().to_string(),
+            out.to_string_lossy().to_string(),
+        ];
+        let got = shrunk(&input, Some(&staged), &out, Some(&sb), &work, Some(&copy)).unwrap();
+        assert_eq!(got.kept, None);
+        assert!(!out.exists(), "committing the encode is the caller's");
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -4519,7 +4656,7 @@ mod tests {
         std::fs::write(&input, vec![0u8; 100]).unwrap();
         let out = work.join("clip_compressed.mp4");
         std::fs::write(&out, vec![0u8; 120]).unwrap();
-        let got = shrunk(&input, None, &out, Some(&sb), &work).unwrap();
+        let got = shrunk(&input, None, &out, Some(&sb), &work, None).unwrap();
         assert_eq!((got.before, got.after, got.kept), (100, 120, None));
         let _ = std::fs::remove_dir_all(root);
     }

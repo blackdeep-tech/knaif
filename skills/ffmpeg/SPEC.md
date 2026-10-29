@@ -291,6 +291,15 @@ When the request names no container:
 | **Delivery** — `compress_video`, `prepare_for_platform` | `mp4`, or the platform profile's container |
 | `convert_video` | the requested container, or the `output` extension |
 
+*"Convert clip.mov to mp4 and make it smaller"* can be one compress: `compress_video` accepts
+`container: mp4`, which the prompt does not list (`satisfied_args`, owner 2026-10-29). It means the
+mp4 was asked for, so when the compress is not smaller than a source of another format, the
+conversion is delivered instead of nothing: the stream copy `convert_video` would write, under the
+compress's output name, reported as kept. If that copy fails, the encode is delivered. Without the
+container, a compress that is not smaller still leaves the folder as it was. Any other container on
+`compress_video`, or an mp4 beside a `target` (archive writes mkv), answers that it is not
+supported, so a compress never hands back another format than the one asked for.
+
 An edit changes a file, not its format: before 2026-09-23 every edit defaulted to `mp4`, so
 *"convert clip.mp4 to mkv, then crop it"* came back as an mp4. The extension is used, not
 ffprobe's format name — `.mkv` and `.webm` both probe as `matroska,webm`, and taking that name

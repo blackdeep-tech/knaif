@@ -29,7 +29,7 @@ from .input_refs import (
 )
 from .planner import _PATH_ARG_KEYS, _is_stem_candidate
 from .prompt import restore_grounded_spelling
-from .registry import ToolDef
+from .registry import ToolDef, satisfied_in
 
 #: A plain stem: one ASCII word. Native `PLAIN_STEM`.
 _PLAIN_STEM_RE = re.compile(r"^[a-z]+$", re.IGNORECASE)
@@ -667,7 +667,9 @@ def unsupported_args_clarify(
         args = step.get("args")
         if not isinstance(args, dict):
             continue
-        allowed = set(tool_def.required_args) | set(tool_def.optional_args)
+        allowed = (
+            set(tool_def.required_args) | set(tool_def.optional_args) | satisfied_in(tool_def, args)
+        )
         extra = [k for k in args if k not in allowed]
         if extra:
             verb = tool.replace("_", " ")

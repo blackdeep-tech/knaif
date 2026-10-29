@@ -175,8 +175,8 @@ the skill's own tool instead; see
 
 ## Plan Normalization
 
-`normalize_plan()` runs between parsing and validation and makes two schema-driven
-corrections to what the model emitted:
+`normalize_plan()` runs between parsing and validation and makes schema-driven
+corrections to what the model emitted, among them:
 
 1. **`$var` output promotion** — an `args["output"]` holding a `$identifier` moves to the
    step-level `output` field. Tools that legitimately declare `output` as an arg always
@@ -186,9 +186,15 @@ corrections to what the model emitted:
    of them and the model supplied the other, the value is unwrapped or wrapped to match.
    A multi-element `inputs` given to a scalar-`input` tool is left alone for validation
    to reject, because that is a genuine error rather than a spelling difference.
+3. **Satisfied args** — an arg the prompt does not list, holding the value a `satisfied_args`
+   entry says the tool gives anyway (`compress_video`'s `container: mp4`), takes the declared
+   spelling. Validation and the unsupported-args gate accept it unless the step also carries
+   one of the entry's `unless` args, and it reaches the tool, which honours it: a compress that
+   names its format delivers that format even when it is not smaller. Any other value is still
+   an unsupported arg.
 
-Both passes are driven entirely by the tool schema — no tool is named, so core stays
-skill-agnostic — and neither ever merges or overwrites a value the model supplied.
+These passes are driven entirely by the tool schema — no tool is named, so core stays
+skill-agnostic — and none ever merges or overwrites a value the model supplied.
 
 The governing principle is **honor the value, don't strip it**. When a model emits a
 reasonable argument the schema rejects, the fix is to make the argument work (thread it

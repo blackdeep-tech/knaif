@@ -346,6 +346,7 @@ pub fn validate_step_with(
         .chain(tool.optional_args.iter())
         .map(String::as_str)
         .collect();
+    allowed.extend(crate::registry::satisfied_in(tool, args));
     if tool.batch_output.is_some() {
         allowed.insert("output"); // where a batch saves it; not listed in the prompt
     }
@@ -627,7 +628,8 @@ pub fn optimize_plan(plan: &[Value], registry: &Registry) -> Vec<Value> {
 
 /// Normalize a raw model payload in place before validation. Mirrors Python `normalize_plan`:
 /// promote `args.output = $id` to the step-level `output`; then (registry-driven) reconcile
-/// `input`/`inputs`, apply `arg_aliases`, coerce scalar types, and coerce enum values.
+/// `input`/`inputs`, apply `arg_aliases`, spell `satisfied_args` one way, coerce scalar types, and
+/// coerce enum values.
 pub fn normalize_plan(payload: &mut Value, registry: Option<&Registry>) {
     let Some(plan) = payload.get_mut("plan").and_then(Value::as_array_mut) else {
         return;
@@ -717,6 +719,18 @@ pub fn normalize_plan(payload: &mut Value, registry: Option<&Registry>) {
                 if let Some(v) = args.remove(src) {
                     args.insert(dst.clone(), v);
                 }
+            }
+        }
+
+        // Pass 3b — satisfied args take their declared spelling (".MP4" → "mp4"), so validation
+        // and the tool see one form (`registry::satisfied_in`).
+        for (name, sat) in &tool.satisfied_args {
+            let matches = args
+                .get(name)
+                .and_then(Value::as_str)
+                .is_some_and(|v| v.trim().to_lowercase().trim_start_matches('.') == sat.value);
+            if matches {
+                args.insert(name.clone(), Value::String(sat.value.clone()));
             }
         }
 
@@ -1092,6 +1106,41 @@ convert:
                 pe["plan"][0]["args"]["to_format"],
                 json!(want),
                 "input {input}"
+            );
+        }
+    }
+
+    /// `satisfied_args`: an arg the prompt does not list, asking for what the tool does anyway,
+    /// takes its declared spelling and validates; any other value, or one beside an `unless` arg,
+    /// is an unsupported arg. Mirrors Python `test_a_satisfied_arg_is_accepted_with_its_value_only`.
+    #[test]
+    fn a_satisfied_arg_is_accepted_with_its_value_only() {
+        let r = crate::registry::load_registry_str(
+            "shrink:\n  description: Shrink\n  required_args: [inputs]\n  optional_args: [target]\n  satisfied_args:\n    container: {value: mp4, unless: [target]}\n",
+        )
+        .unwrap();
+        let run = |extra: Value| -> Result<Value, String> {
+            let mut args = json!({"inputs": ["a.mov"]});
+            args.as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
+            let mut p = json!({"plan": [{"tool": "shrink", "args": args}]});
+            normalize_plan(&mut p, Some(&r));
+            validate_step(&p["plan"][0], &r, Path::new("."), None).map_err(|e| e.to_string())?;
+            Ok(p["plan"][0]["args"].clone())
+        };
+        let kept = json!({"inputs": ["a.mov"], "container": "mp4"});
+        assert_eq!(run(json!({"container": "mp4"})), Ok(kept.clone()));
+        assert_eq!(run(json!({"container": ".MP4"})), Ok(kept));
+        for extra in [
+            json!({"container": "mkv"}),
+            json!({"target": "archive", "container": "mp4"}),
+            json!({"container": 4}),
+        ] {
+            let err = run(extra.clone()).unwrap_err();
+            assert!(
+                err.contains("unsupported args: [\"container\"]"),
+                "{extra}: {err}"
             );
         }
     }

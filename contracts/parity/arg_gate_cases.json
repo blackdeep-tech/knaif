@@ -4,7 +4,8 @@
   "_expected_values": "`expected` is the clarify payload both runtimes must produce, or null for 'pass through, let validation decide'. Question text is compared exactly: it is the only thing the user sees, and two runtimes phrasing the same refusal differently is a fork.",
   "registries": {
     "volume": "adjust_volume:\n  description: Adjust volume.\n  required_args: [inputs]\n  optional_args: [normalize, level]\nclarify:\n  description: Ask for clarification.\n  required_args: [question]\n",
-    "rotate": "rotate_video:\n  description: Rotate a video.\n  required_args: [input]\n  optional_args: [angle, flip]\n  any_of_args: [angle, flip]\n"
+    "rotate": "rotate_video:\n  description: Rotate a video.\n  required_args: [input]\n  optional_args: [angle, flip]\n  any_of_args: [angle, flip]\n",
+    "shrink": "shrink:\n  description: Shrink, always writing mp4\n  required_args: [inputs]\n  optional_args: [target]\n  satisfied_args:\n    container: {value: mp4, unless: [target]}\n"
   },
   "cases": [
     {
@@ -83,6 +84,27 @@
       "registry": "volume",
       "plan": {"plan": [{"tool": "adjust_volume", "args": {"inputs": ["a.wav"]}}]},
       "expected": null
+    },
+    {
+      "name": "a_satisfied_arg_passes_through",
+      "gate": "unsupported",
+      "registry": "shrink",
+      "plan": {"plan": [{"tool": "shrink", "args": {"inputs": ["a.mov"], "container": "mp4"}}]},
+      "expected": null
+    },
+    {
+      "name": "a_satisfied_arg_with_another_value_clarifies",
+      "gate": "unsupported",
+      "registry": "shrink",
+      "plan": {"plan": [{"tool": "shrink", "args": {"inputs": ["a.mov"], "container": "mkv"}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't shrink that way — that isn't supported. Could you rephrase?"}}]}
+    },
+    {
+      "name": "a_satisfied_arg_beside_an_unless_arg_clarifies",
+      "gate": "unsupported",
+      "registry": "shrink",
+      "plan": {"plan": [{"tool": "shrink", "args": {"inputs": ["a.mov"], "target": "archive", "container": "mp4"}}]},
+      "expected": {"plan": [{"tool": "clarify", "args": {"question": "I can't shrink that way — that isn't supported. Could you rephrase?"}}]}
     }
   ]
 }

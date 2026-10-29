@@ -1,7 +1,8 @@
 {
   "_comment": "Golden parity fixtures for the deterministic planner pipeline (parse -> normalize -> apply_defaults -> validate). Consumed by BOTH the Python (python/core/tests/test_planner_parity.py) and Rust (knaif-core planner parity test) validators; both must produce the same valid/invalid outcome + error substring. Registries are inline tools.yaml text so parity is on an identical registry, independent of skill content.",
   "registries": {
-    "demo": "find:\n  description: Find files\n  required_args: [path]\n  optional_args: [file_type]\ncompress:\n  description: Compress\n  required_args: [input]\n  optional_args: [quality, output, tries, at]\n  defaults: {output: out.mp4}\n  arg_schemas:\n    quality: {type: enum, enum: [low, high], aliases: {maximum: high}}\n    tries: {type: integer, min: 1, max: 5}\n    at: {type: string}\ncombine:\n  description: Combine\n  optional_args: [inputs]\nreport:\n  description: Report\n  any_of_args: [a, b]\n  optional_args: [a, b]\nsecret_op:\n  description: Internal only\n  internal: true\n  required_args: [payload]\nstamp:\n  description: Stamp a file\n  required_args: [input]\n  arg_schemas:\n    output: {type: string}\ncut:\n  description: Cut one file\n  required_args: [input]\n  optional_args: [end]\n  arg_schemas:\n    input: {type: string}\nread_text:\n  description: Read a file's text\n  required_args: [input]\n  batch_output: .txt\n"
+    "demo": "find:\n  description: Find files\n  required_args: [path]\n  optional_args: [file_type]\ncompress:\n  description: Compress\n  required_args: [input]\n  optional_args: [quality, output, tries, at]\n  defaults: {output: out.mp4}\n  arg_schemas:\n    quality: {type: enum, enum: [low, high], aliases: {maximum: high}}\n    tries: {type: integer, min: 1, max: 5}\n    at: {type: string}\ncombine:\n  description: Combine\n  optional_args: [inputs]\nreport:\n  description: Report\n  any_of_args: [a, b]\n  optional_args: [a, b]\nsecret_op:\n  description: Internal only\n  internal: true\n  required_args: [payload]\nstamp:\n  description: Stamp a file\n  required_args: [input]\n  arg_schemas:\n    output: {type: string}\ncut:\n  description: Cut one file\n  required_args: [input]\n  optional_args: [end]\n  arg_schemas:\n    input: {type: string}\nread_text:\n  description: Read a file's text\n  required_args: [input]\n  batch_output: .txt\n",
+    "satisfied": "shrink:\n  description: Shrink, always writing mp4\n  required_args: [inputs]\n  optional_args: [target, quality]\n  satisfied_args:\n    container: {value: mp4, unless: [target]}\n"
   },
   "cases": [
     {
@@ -475,6 +476,81 @@
             "args": {
               "input": "a.mp4",
               "output": "b.mp4"
+            }
+          }
+        ]
+      },
+      "valid": false,
+      "error_contains": "unsupported args"
+    },
+    {
+      "name": "satisfied_arg_is_dropped",
+      "registry": "satisfied",
+      "plan": {
+        "plan": [
+          {
+            "tool": "shrink",
+            "args": {
+              "inputs": [
+                "a.mov"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "satisfied_arg_matches_case_and_dot_insensitively",
+      "registry": "satisfied",
+      "plan": {
+        "plan": [
+          {
+            "tool": "shrink",
+            "args": {
+              "inputs": [
+                "a.mov"
+              ],
+              "container": ".MP4"
+            }
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "satisfied_arg_with_another_value_is_still_unsupported",
+      "registry": "satisfied",
+      "plan": {
+        "plan": [
+          {
+            "tool": "shrink",
+            "args": {
+              "inputs": [
+                "a.mov"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "valid": false,
+      "error_contains": "unsupported args"
+    },
+    {
+      "name": "satisfied_arg_beside_an_unless_arg_is_still_unsupported",
+      "registry": "satisfied",
+      "plan": {
+        "plan": [
+          {
+            "tool": "shrink",
+            "args": {
+              "inputs": [
+                "a.mov"
+              ],
+              "target": "archive",
+              "container": "mp4"
             }
           }
         ]

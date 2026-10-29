@@ -164,6 +164,10 @@ class CompressVideoIntent(Intent):
             options["target_size_mb"] = target_size_mb
         if args.get("output") is not None:
             options["output_path"] = args["output"]
+        # "Convert it to mp4 and make it smaller": the mp4 was asked for, so a file of another
+        # format that cannot shrink still comes out as one (`satisfied_args` in tools.yaml).
+        if args.get("container"):
+            options["format_asked"] = True
 
         plan: list[dict[str, Any]] = [
             {

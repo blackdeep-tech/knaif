@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from knaif.planner import (
@@ -851,6 +853,37 @@ def test_normalize_plan_arg_key_alias_and_type_coercion():
     p = {"plan": [{"tool": "split_pdf", "args": {"input": "a.pdf", "pages": "1", "ranges": "2"}}]}
     normalize_plan(p, reg)
     assert p["plan"][0]["args"]["ranges"] == "2"
+
+
+def test_a_satisfied_arg_is_accepted_with_its_value_only():
+    """`satisfied_args`: an arg the prompt does not list, asking for what the tool does anyway
+    ("to mp4" on a tool that always writes mp4), takes its declared spelling and validates; any
+    other value, or one beside an `unless` arg, is an unsupported arg (owner, 2026-10-29)."""
+    from knaif.registry import SatisfiedArg, ToolDef
+
+    reg = {
+        "shrink": ToolDef(
+            name="shrink",
+            description="shrink",
+            required_args=("inputs",),
+            optional_args=("target",),
+            satisfied_args={"container": SatisfiedArg(value="mp4", unless=("target",))},
+        )
+    }
+
+    def _run(args):
+        p = {"plan": [{"tool": "shrink", "args": {"inputs": ["a.mov"], **args}}]}
+        normalize_plan(p, reg)
+        try:
+            validate_step(p["plan"][0], reg, root=Path("."), sandbox=None)
+        except ValueError as exc:
+            return str(exc)
+        return p["plan"][0]["args"]
+
+    assert _run({"container": "mp4"}) == {"inputs": ["a.mov"], "container": "mp4"}
+    assert _run({"container": ".MP4"}) == {"inputs": ["a.mov"], "container": "mp4"}
+    for args in ({"container": "mkv"}, {"target": "archive", "container": "mp4"}, {"container": 4}):
+        assert "unsupported args: ['container']" in _run(args), args
 
 
 def test_normalize_plan_enum_separator_insensitive():

@@ -76,6 +76,12 @@ compress_video:
   optional_args: [target, target_size_mb, quality, crf, output, preview]
   # A size is the user's to give: one the request does not state is left out (2026-10-28).
   stated_args: [target_size_mb]
+  # "Convert clip.mov to mp4 and make it smaller": the 4B writes the mp4 down as `container`.
+  # Accepted with that one value and not listed in the prompt; it means the mp4 was asked for,
+  # so a file of another format that cannot shrink still comes out as one (owner, 2026-10-29).
+  # Any other container, or one beside a `target` (archive writes mkv), is unsupported.
+  satisfied_args:
+    container: {value: mp4, unless: [target]}
   # What the plan says it leaves ("leaves 1 mp4", not the input's .mov). The archive target
   # writes mkv, which this does not follow; read by the result set only.
   produces: {format: mp4}
