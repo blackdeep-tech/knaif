@@ -252,10 +252,22 @@ run "$WORK/manifest-bad.yaml" "$DIR" backend install cuda >/dev/null 2>&1 || tru
 run "$WORK/manifest.yaml" "$DIR" backend verify cuda | grep -q "ok" \
   && ok "the existing install survived a failed re-install" || bad "a failed re-install damaged the existing payload"
 
-echo "5. a payload from another release is refused at LOAD time"
-# The receipt is stamped from the manifest, so one install is enough to test the upgrade case — no
-# second build needed. This is the requirement install-time pinning structurally cannot meet.
-run "$WORK/manifest-stale.yaml" "$DIR" backend install cuda >/dev/null
+echo "5. another release's payload: refused at install, reported STALE after an upgrade"
+# Since 1.2.1 the receipt is stamped with the RUNNING binary's version, and `backend install` refuses
+# a manifest from another release outright — so that refusal is checked first, by its message (any
+# other failure would pass a bare exit-code check), and the upgrade case is made the way an upgrade
+# makes it: the receipt keeps an older release's stamp. One install is still enough, no second
+# build needed. `list` reads the same receipt stamp the loader checks (`backend_dir_state`, called
+# from knaif-llm and unit-tested in backend_store.rs); loading itself needs a GPU and is not
+# exercised here.
+REFUSAL="$(run "$WORK/manifest-stale.yaml" "$DIR" backend install cuda 2>&1 >/dev/null || true)"
+printf '%s' "$REFUSAL" | grep -q "knaif 0.0.9's" \
+  && ok "install refuses another release's manifest" || bad "install did not refuse another release's manifest: $REFUSAL"
+run "$WORK/manifest.yaml" "$DIR" backend verify cuda | grep -q "ok" \
+  && ok "the refused install left the existing payload alone" || bad "the refused install damaged the existing payload"
+sed -i 's/^\( *knaif_version: \).*$/\1"0.0.9"/' "$DIR/.knaif-backends.yaml"
+grep -q '^ *knaif_version: "0.0.9"$' "$DIR/.knaif-backends.yaml" \
+  || { echo "ERROR: no knaif_version in the receipt — cannot rehearse a stale payload." >&2; exit 1; }
 run "$WORK/manifest.yaml" "$DIR" backend list | grep -q "STALE" && ok "list reports STALE" || bad "list did not report a stale payload"
 run "$WORK/manifest.yaml" "$DIR" backend install cuda >/dev/null
 run "$WORK/manifest.yaml" "$DIR" backend list | grep -q "installed" && ok "re-install clears it" || bad "re-install did not clear the stale state"
