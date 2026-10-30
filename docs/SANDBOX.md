@@ -42,3 +42,24 @@ overwrote a fixture would silently change what every later eval run measures —
 would show up as a model regression, in a run that had nothing to do with the notebook.
 
 Safe to delete at any time; the next run recreates what it needs.
+
+## `sandbox/manual/` — testing by hand
+
+`just manual-test` fills it with fresh copies of the ffmpeg and documents fixtures (`ffmpeg/`,
+`documents/`; the clips too small to shrink sit beside the others), so a manual run never writes
+into `sandbox/fixtures/`, for the same reason as the workbench. It then opens a bash (Git Bash on
+Windows) in `sandbox/manual/ffmpeg/` with the helpers from `scripts/manual_test.sh` loaded, from
+whichever shell you called it in; `exit` returns. In a bash already, `source
+scripts/manual_test.sh` loads them without the extra shell.
+
+| Helper | Does |
+|---|---|
+| `k <skill> "…"` | runs the native build in `target/release-<kind>/` (`$KNAIF_KIND`, else `cuda`): `k ffmpeg "make clip.mov smaller"` |
+| `knative <skill> "…"` | runs the installed knaif (the release on `PATH`), to compare a build with what users have |
+| `kpy <skill> "…"` | runs the Python CLI for real (`-D`, not a preview) |
+| `kbuild [kind]` | builds `target/release-<kind>/` (`cuda`, `vulkan`, `cpu`) with 4 jobs, and points `k` at it |
+| `kreset` | deletes `sandbox/manual/` and copies the fixtures back, keeping you in `ffmpeg/` or `documents/` |
+
+The runners take the CLI's flags after the skill, e.g. `--model knaif-qwen3-1.7b-v2`. `kreset`
+regenerates missing fixtures first. Files a run saves outside the folder (Desktop, Downloads) are
+not touched by `kreset`.
