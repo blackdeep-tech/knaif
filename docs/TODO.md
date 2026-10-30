@@ -330,6 +330,28 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   and `llama-cpp-python` 0.3.35 (0.3.36), all unchanged since 1.0.1. Not done on 1.3.0 because
   its evals are already underway.
 
+- [ ] **The Linux container's warm cache breaks after a llama.cpp bump.** Found 2026-10-30 building
+  the 1.4.0 CUDA payload: `llama-cpp-sys-2`'s `build.rs` hard-links its libraries into
+  `target/release/`, `examples/` and `deps/` only `if !dst.exists()`, and `exists()` follows
+  symlinks, so the previous version's SONAME links (`libggml.so -> libggml.so.0`, target gone)
+  read as absent and the hard link panics with `AlreadyExists` after the whole llama.cpp compile.
+  `build-in-container.sh`'s one-volume-per-kind rule covers a kind switch, not a version bump within
+  a kind. Fixed by hand in both volumes (`knaif-target-cuda`, `-vulkan`: dangling `lib*.so*` links
+  removed). Durable fix: the script removes dangling `lib*.so*` links in those three folders before
+  the build, as `build_native_kind.sh` already replaces stale staged libs on Windows (#102).
+
+- [ ] **Small leftovers from the 1.4.0 freeze** (2026-10-30), none blocking:
+  - Three code comments still name the 1.3.0 `--overwrite` flag, which `--allow overwrite`
+    replaced: `apps/cli/src/main.rs` (the overwrite gate, two places) and
+    `python/core/knaif/app.py` (`_confirm_overwrites`'s docstring).
+  - `rehearse-backend-install.sh --platform linux-x64` from a Windows checkout: the container
+    leaves the Linux payload in `dist/`, not `dist/staging/`, so `--stage`/`--fragment` must be
+    given, and read through `/mnt/c` the CRLF manifest fails the `status:` match; it passes from LF
+    copies. Either look in both places and strip `\r`, or say in RELEASE.md §7 to run it from the
+    WSL clone.
+  - `just site-check` needs `mise x --`: the PATH's Corepack pnpm (12.14.0) is refused by the
+    site's pinned 12.4.1.
+
 - [ ] **For discussion when the next release is planned: a signed FFmpeg for Smart App Control.**
   Owner, 2026-10-16. On a Windows PC with Smart App Control enforcing, knaif installs and runs
   (signed), but Windows blocks FFmpeg itself, so the ffmpeg skill cannot run at all there; confirmed

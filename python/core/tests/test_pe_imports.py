@@ -170,6 +170,16 @@ def test_the_ucrt_forwarders_are_accepted(artifact) -> None:
     assert cpi.main([str(bindir)]) == 0
 
 
+def test_combase_is_a_windows_dll(artifact) -> None:
+    """`windows-sys` 0.61 links `CoTaskMemFree` from `combase.dll`, not `ole32.dll`.
+
+    The known-folder lookup frees `SHGetKnownFolderPath`'s string with it; 1.4.0's knaif.exe
+    imports nothing else from combase, which every Windows since 8 has in System32.
+    """
+    bindir = artifact({"knaif.exe": ["combase.dll"]})
+    assert cpi.main([str(bindir)]) == 0
+
+
 def test_an_unstaged_vc_runtime_fails(artifact, capsys) -> None:
     """W1 itself: the defect that shipped in every 1.0.x Windows artifact."""
     bindir = artifact({"knaif.exe": ["vcruntime140.dll"]})

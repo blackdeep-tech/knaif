@@ -168,6 +168,56 @@ lanes:
     model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
     public_name: knaif-qwen3-1.7b-v2
     timeout_s: 900
+  # Release 1.4.0: the frozen artifacts as scripts/release_evidence.sh unpacks them (sandbox/r140/),
+  # one run script per platform (RELEASE.md §4). macOS CPU: the same tree without libggml-metal.
+  r140-win-4b:
+    kind: native_cli
+    binary: sandbox/r140/artifact/knaif-1.4.0-windows-x64/bin/knaif.exe
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r140-win-1.7b:
+    kind: native_cli
+    binary: sandbox/r140/artifact/knaif-1.4.0-windows-x64/bin/knaif.exe
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
+  r140-linux-4b:
+    kind: native_cli
+    binary: sandbox/r140/artifact/knaif-1.4.0-linux-x64/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r140-linux-1.7b:
+    kind: native_cli
+    binary: sandbox/r140/artifact/knaif-1.4.0-linux-x64/bin/knaif
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
+  r140-mac-4b:
+    kind: native_cli
+    binary: sandbox/r140/artifact/knaif-1.4.0-macos-arm64/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 600
+  r140-mac-1.7b:
+    kind: native_cli
+    binary: sandbox/r140/artifact/knaif-1.4.0-macos-arm64/bin/knaif
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 600
+  r140-mac-cpu-4b:
+    kind: native_cli
+    binary: sandbox/r140/artifact-cpu/knaif-1.4.0-macos-arm64/bin/knaif
+    model_path: models/knaif-qwen3-4b-v2-q4_k_m.gguf
+    public_name: knaif-qwen3-4b-v2
+    timeout_s: 900
+  r140-mac-cpu-1.7b:
+    kind: native_cli
+    binary: sandbox/r140/artifact-cpu/knaif-1.4.0-macos-arm64/bin/knaif
+    model_path: models/knaif-qwen3-1.7b-v2-q6_k.gguf
+    public_name: knaif-qwen3-1.7b-v2
+    timeout_s: 900
   # Release 1.3.0: the unpacked frozen artifacts (built from the freeze 8c94cbe), as r5c-* did for
   # 1.2.0 (backend chosen by the environment each run sets; the lane records where layers landed).
   # Windows: dist/knaif-1.3.0-windows-x64.zip. Linux (WSL): knaif-1.3.0-linux-x64.tar.gz.

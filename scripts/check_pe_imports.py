@@ -46,6 +46,7 @@ WINDOWS_PROVIDED = {
     "bcrypt.dll",
     "bcryptprimitives.dll",
     "cfgmgr32.dll",
+    "combase.dll",  # CoTaskMemFree in windows-sys 0.61 (known folders); System32 since Windows 8
     "comdlg32.dll",
     "crypt32.dll",
     "dbghelp.dll",

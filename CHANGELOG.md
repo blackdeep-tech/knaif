@@ -14,29 +14,40 @@ and end with a desktop notification; a run leaves only the results you asked for
 ### Added
 
 - **Name a file by its http(s) link.** knaif downloads it and works on it like a local file. It
-  asks first (`--allow-download` grants it; `--yes` alone does not), never downloads in a
+  asks first (`--allow download` or `--yes` approves it up front), never downloads in a
   `--dry-run`, and refuses other schemes, links that carry a password, web pages and oversized
   responses.
 - **One request over many files.** "Every video here" or a pattern such as `*.mov` runs the steps
   once per file and ends with a batch report; one file can give several results, and a later step
   works on every file an earlier step produced.
 - **"Beep when done."** A request that asks to be told when it finishes ends with a desktop
-  notification and a beep, whether the work succeeded, failed or was stopped at a question. It is
-  understood in English, German, Spanish, French, Bulgarian, Russian and Chinese.
-- **Downloads, Desktop, Documents, Pictures, Music and Videos** in a request mean your real
-  folders.
+  notification and a beep (a beep alone where notifications are unavailable), once work has
+  started, whether it succeeded, failed or was stopped at a question. It is understood in English,
+  German, Spanish, French, Bulgarian, Russian and Chinese.
+- **Save results into your real Downloads, Desktop, Documents, Pictures, Music or Videos folder**
+  by naming it in the request.
+- **Split a video into pieces** (every N seconds, or N equal parts), **save many stills from a
+  video** (every N seconds, every Nth frame, or N spread evenly), and **split a PDF every N pages**.
+- **`--stdout`** prints a text result (`extract_text`) alone on stdout for a pipe, and saves
+  nothing. **`--keep-intermediates`**, or asking for it in the request, keeps every step's output
+  in your folder.
 - **"Make it smaller" says what it saved**: "N% smaller (A → B)", for videos and PDFs.
 
 ### Changed
 
+- **`--allow` replaces `--overwrite`.** `--allow download,overwrite,model` approves those
+  questions up front (a comma list or a repeated flag), and **`--yes` now approves all of them**,
+  including replacing an existing file, which in 1.3.0 always asked. Without either, each one asks
+  (Enter is no), and without a terminal the run stops and names the permission it needs.
 - **A run leaves only the results you asked for.** The files a chain makes along the way stay in
-  a scratch folder, and each result is checked there before it moves into your folder, so a run
-  that fails or is interrupted leaves nothing half-written.
+  a scratch folder, and each result is written and checked there before it moves into your folder,
+  so a step that fails leaves nothing half-written.
 - **"Convert every video to mp4" skips the ones that already are**, and says which, instead of
   making a numbered copy of each.
-- **"Make it smaller" never hands back a bigger file.** The audio is never re-encoded above the
-  source's bitrate, and a result that is not smaller is not written: knaif says it left the file
-  as it was. A size the request never states is no longer assumed.
+- **"Make it smaller" no longer hands back a bigger file.** The audio is no longer re-encoded above
+  the source's own bitrate, and a result that is not smaller is not written: knaif says it left the
+  file as it was. When the request also asks for another format, you get the converted file, and
+  knaif says it is not smaller. A size the request never states is no longer assumed.
 - **A converted file keeps its own name** (`clip.mkv`, not `clip_converted.mkv`); a name already
   taken gets a number, and a name you give an output is never read as an input.
 - **A request that names a count asks which files** when the folder has more ("merge the two
@@ -46,10 +57,14 @@ and end with a desktop notification; a run leaves only the results you asked for
 - **Tool lookup understands more word forms**: plurals, other inflections, hyphenated words and
   trailing punctuation.
 - llama.cpp is updated to a 2026-10-05 build.
+- **For skill authors:** every tool declares its `effects:` (`fs.read`, `fs.write`, `net`,
+  `exec:<program>` or `[]`), and a bundle with an undeclared one does not load; each `tools.yaml`
+  entry matches exactly one class by name; shared tools come from `toolkits/` (`fs`, `net`).
+  See `docs/TOOL_SCHEMA.md`.
 
 ### Fixed
 
-- **"Convert clip.mov to mp4 and make it smaller"** makes one smaller mp4 instead of answering
+- **"Convert clip.mov to mp4 and make it smaller"** plans one compress to mp4 instead of answering
   that it isn't supported.
 - **Removing the audio or changing the volume of a video saved as `.webm`** no longer fails on an
   h264 source: the video is re-encoded for the WebM container instead of copied.
@@ -59,12 +74,13 @@ and end with a desktop notification; a run leaves only the results you asked for
   step creates** no longer fails with "No such file".
 - "Except" in a request leaves that kind of file out of every step, trims from the end ("the last
   3 seconds") cut the end, and `extract_text` saves its text as `<name>.txt`.
-- On Windows, a run with no terminal (output redirected to `NUL`) no longer waits on a question.
+- On Windows, the Python CLI with its input redirected from `NUL` no longer waits on a question
+  nobody can answer.
 
 ### Known issues
 
 - **`knaif-qwen3-1.7b-v2` often leaves out the "notify me when done" part** of a request; the 4B
-  model keeps it. Neither shipped model was trained on the new features.
+  model usually keeps it. Neither shipped model was trained on the new features.
 - With Smart App Control on, the ffmpeg skill cannot run on Windows: Windows blocks FFmpeg.
 - **On a Mac, the first run takes about 15 s longer** while Metal compiles its shaders; later runs
   do not pay it again.
