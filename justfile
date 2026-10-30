@@ -327,24 +327,15 @@ loader-check: build-native
     uv run python "{{justfile_directory()}}/scripts/check_loader_compat.py"
 
 # Helpers: k (target build), knative (installed release), kpy (Python), kbuild, kreset; see
-# scripts/manual_test.sh. Git Bash sets MSYSTEM, a PowerShell terminal does not.
-# Fresh sandbox/manual/ for testing by hand, and the line that loads the helpers in your shell
+# scripts/manual_test.sh.
+# Fresh sandbox/manual/ for testing by hand, then a bash in its ffmpeg/ with the helpers loaded (exit returns)
 [windows]
 manual-test:
-    @& (just _bash) scripts/manual_test.sh setup $(if ($env:MSYSTEM) { 'gitbash' } else { 'powershell' })
+    @& (just _bash) scripts/manual_test.sh
 
 [unix]
 manual-test:
-    @bash "{{justfile_directory()}}/scripts/manual_test.sh" setup "$(basename "${SHELL:-bash}")"
-
-# Fresh sandbox/manual/, then a bash in its ffmpeg/ with the helpers loaded (exit returns)
-[windows]
-manual-shell:
-    @& (just _bash) scripts/manual_test.sh shell
-
-[unix]
-manual-shell:
-    @bash "{{justfile_directory()}}/scripts/manual_test.sh" shell
+    @bash "{{justfile_directory()}}/scripts/manual_test.sh"
 
 # Build + run the native CLI with the MOCK backend (no llama.cpp — fast build, `--model` won't
 # work). For dev/plumbing/CI: `just native-mock -- --version`, `just native-mock -- skills list`,

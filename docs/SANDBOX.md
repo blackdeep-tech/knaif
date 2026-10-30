@@ -47,10 +47,10 @@ Safe to delete at any time; the next run recreates what it needs.
 
 `just manual-test` fills it with fresh copies of the ffmpeg and documents fixtures (`ffmpeg/`,
 `documents/`; the clips too small to shrink sit beside the others), so a manual run never writes
-into `sandbox/fixtures/`, for the same reason as the workbench. It then prints the line that loads
-the helpers from `scripts/manual_test.sh` into the shell you called it from. They are bash
-functions, so from PowerShell (or zsh) it points at `just manual-shell` instead, which opens a bash
-(Git Bash on Windows) in `sandbox/manual/ffmpeg/` with them loaded; `exit` returns.
+into `sandbox/fixtures/`, for the same reason as the workbench. It then opens a bash (Git Bash on
+Windows) in `sandbox/manual/ffmpeg/` with the helpers from `scripts/manual_test.sh` loaded, from
+whichever shell you called it in; `exit` returns. In a bash already, `source
+scripts/manual_test.sh` loads them without the extra shell.
 
 | Helper | Does |
 |---|---|

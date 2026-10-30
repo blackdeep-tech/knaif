@@ -2,10 +2,9 @@
 # Shell helpers for testing knaif by hand: a throwaway folder of fixture copies, and one command
 # per runtime, in bash (Git Bash on Windows):
 #
-#   just manual-test                fresh folder, and prints the line that loads the helpers in your shell
-#   just manual-shell               fresh folder, then a new bash in sandbox/manual/ffmpeg with the
-#                                   helpers loaded (`exit` returns to the shell you came from)
-#   source scripts/manual_test.sh   the helpers alone, in the current shell
+#   just manual-test                fresh folder, then a bash in sandbox/manual/ffmpeg with the helpers
+#                                   loaded, from any shell (`exit` returns to the shell you came from)
+#   source scripts/manual_test.sh   the helpers alone, in the current bash
 #
 #   k <skill> "…"        run the native build in target/release-<kind>/:  k ffmpeg "make clip.mov smaller"
 #   knative <skill> "…"  run the installed knaif (the release on PATH), to compare with k
@@ -14,7 +13,7 @@
 #   kreset               wipe sandbox/manual/ and copy the fixtures back, staying in ffmpeg/ or documents/
 #
 # The runners take the CLI's own flags after the skill, e.g. `k ffmpeg --model knaif-qwen3-1.7b-v2 "…"`.
-# As a script: `setup [caller-shell]` is what manual-test runs, `shell` what manual-shell runs.
+# Run as a script (what manual-test does), it resets the folder and opens that bash.
 #
 # KNAIF_KIND picks the binary (default cuda). KNAIF_BUILD_JOBS caps the build's parallel jobs
 # (default 4: a full-width CUDA build runs the CPU hot).
@@ -78,7 +77,7 @@ kreset() {
   echo "reset: sandbox/manual/$(basename "$PWD")"
 }
 
-# Loaded as the --rcfile of the shell `shell` opens: the user's own setup first, then the folder.
+# Loaded as the --rcfile of the shell the script opens: the user's own setup first, then the folder.
 if [ "${KNAIF_MANUAL_SHELL:-}" = 1 ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
   unset KNAIF_MANUAL_SHELL
   [ -f ~/.bashrc ] && . ~/.bashrc
@@ -86,27 +85,11 @@ if [ "${KNAIF_MANUAL_SHELL:-}" = 1 ] && [ "${BASH_SOURCE[0]}" != "$0" ]; then
   PS1='\[\e[32m\](knaif manual)\[\e[0m\] \w\$ '
 fi
 
+# Run, not sourced: the helpers are bash functions, which no other shell can load, so open a bash.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-  case "${1:-}" in
-    setup | shell)
-      kreset >/dev/null || exit 1
-      echo "ready: sandbox/manual/ (ffmpeg/, documents/)"
-      [ -x "$(_k_bin)" ] || echo "no $KNAIF_KIND binary yet: kbuild $KNAIF_KIND builds it"
-      if [ "$1" = shell ]; then
-        echo "k, knative, kpy, kbuild, kreset are loaded; exit to leave"
-        KNAIF_MANUAL_SHELL=1 exec "$BASH" --rcfile "$KNAIF_ROOT/scripts/manual_test.sh" -i
-      fi
-      # $2 is the shell the recipe was called from (the recipe knows, this bash does not).
-      line="source $KNAIF_ROOT/scripts/manual_test.sh && cd $KNAIF_MANUAL/ffmpeg"
-      case "${2:-bash}" in
-        bash | gitbash) printf '\nload the helpers here (k, knative, kpy, kbuild, kreset):\n\n  %s\n\n' "$line" ;;
-        *)
-          printf '\nthe helpers are bash functions, and this shell is %s. Either:\n\n' "$2"
-          printf '  just manual-shell        opens a bash here with them loaded (exit returns)\n\n'
-          printf 'or, in a bash terminal:\n\n  %s\n\n' "$line"
-          ;;
-      esac
-      ;;
-    *) echo "usage: bash scripts/manual_test.sh shell|setup [caller-shell], or source it" >&2; exit 2 ;;
-  esac
+  kreset >/dev/null || exit 1
+  echo "ready: sandbox/manual/ (ffmpeg/, documents/)"
+  [ -x "$(_k_bin)" ] || echo "no $KNAIF_KIND binary yet: kbuild $KNAIF_KIND builds it"
+  echo "k, knative, kpy, kbuild, kreset are loaded; exit to leave"
+  KNAIF_MANUAL_SHELL=1 exec "$BASH" --rcfile "$KNAIF_ROOT/scripts/manual_test.sh" -i
 fi
