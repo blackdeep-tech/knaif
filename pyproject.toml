@@ -117,6 +117,24 @@ ignore_missing_imports = true
 
 [tool.pyright]
 extraPaths = ["notebooks/shared", "skills/documents/notebooks", "skills/documents/notebooks/helpers"]
+# Setting `exclude` replaces pyright's defaults, so the first three restate them. The rest are
+# generated trees (Rust build output, eval fixtures, run history, training artifacts) that hold
+# hundreds of thousands of files and make Pylance's workspace scan crawl.
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "target",
+    "sandbox",
+    "dist",
+    "models",
+    "evals/runs",
+    "evals/store",
+    "python/training/cache",
+    "python/training/merged",
+    "python/training/output",
+    "python/training/adapters",
+]
 
 [tool.pytest.ini_options]
 # Paths are resolved from the repo root (cwd). Framework tests live under
