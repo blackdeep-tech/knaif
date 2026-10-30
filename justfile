@@ -355,6 +355,17 @@ verify-build-kind kind="cpu":
 loader-check: build-native
     uv run python "{{justfile_directory()}}/scripts/check_loader_compat.py"
 
+# Helpers: k (target build), knative (installed release), kpy (Python), kbuild, kreset; see
+# scripts/manual_test.sh.
+# Fresh sandbox/manual/ for testing by hand, then a bash in its ffmpeg/ with the helpers loaded (exit returns)
+[windows]
+manual-test:
+    @& (just _bash) scripts/manual_test.sh
+
+[unix]
+manual-test:
+    @bash "{{justfile_directory()}}/scripts/manual_test.sh"
+
 # Build + run the native CLI with the MOCK backend (no llama.cpp — fast build, `--model` won't
 # work). For dev/plumbing/CI: `just native-mock -- --version`, `just native-mock -- skills list`,
 # `just native-mock -- models pull knaif-qwen3-4b-v1`. For real inference use `just native` below.

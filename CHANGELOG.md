@@ -5,6 +5,73 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-10-30
+
+**Links, many files at once, and "beep when done".** Same models as 1.2.0 (`knaif-qwen3-4b-v2`
+and `knaif-qwen3-1.7b-v2`). A request can name a file by its link, cover every file in a folder,
+and end with a desktop notification; a run leaves only the results you asked for.
+
+### Added
+
+- **Name a file by its http(s) link.** knaif downloads it and works on it like a local file. It
+  asks first (`--allow-download` grants it; `--yes` alone does not), never downloads in a
+  `--dry-run`, and refuses other schemes, links that carry a password, web pages and oversized
+  responses.
+- **One request over many files.** "Every video here" or a pattern such as `*.mov` runs the steps
+  once per file and ends with a batch report; one file can give several results, and a later step
+  works on every file an earlier step produced.
+- **"Beep when done."** A request that asks to be told when it finishes ends with a desktop
+  notification and a beep, whether the work succeeded, failed or was stopped at a question. It is
+  understood in English, German, Spanish, French, Bulgarian, Russian and Chinese.
+- **Downloads, Desktop, Documents, Pictures, Music and Videos** in a request mean your real
+  folders.
+- **"Make it smaller" says what it saved**: "N% smaller (A → B)", for videos and PDFs.
+
+### Changed
+
+- **A run leaves only the results you asked for.** The files a chain makes along the way stay in
+  a scratch folder, and each result is checked there before it moves into your folder, so a run
+  that fails or is interrupted leaves nothing half-written.
+- **"Convert every video to mp4" skips the ones that already are**, and says which, instead of
+  making a numbered copy of each.
+- **"Make it smaller" never hands back a bigger file.** The audio is never re-encoded above the
+  source's bitrate, and a result that is not smaller is not written: knaif says it left the file
+  as it was. A size the request never states is no longer assumed.
+- **A converted file keeps its own name** (`clip.mkv`, not `clip_converted.mkv`); a name already
+  taken gets a number, and a name you give an output is never read as an input.
+- **A request that names a count asks which files** when the folder has more ("merge the two
+  videos" among five), and a pattern that matches nothing asks instead of running.
+- **A folder or pattern in the plan is shown as the files it found.** The Python CLI uses the
+  native CLI's plain and tree views and its flags, so both read the same.
+- **Tool lookup understands more word forms**: plurals, other inflections, hyphenated words and
+  trailing punctuation.
+- llama.cpp is updated to a 2026-10-05 build.
+
+### Fixed
+
+- **"Convert clip.mov to mp4 and make it smaller"** makes one smaller mp4 instead of answering
+  that it isn't supported.
+- **Removing the audio or changing the volume of a video saved as `.webm`** no longer fails on an
+  h264 source: the video is re-encoded for the WebM container instead of copied.
+- **"The last frame"** is now exactly the final frame; it was about three frames early, and could
+  be further off on a variable frame rate.
+- **Previewing a chain that rotates, reorders, removes or splits the pages of a PDF an earlier
+  step creates** no longer fails with "No such file".
+- "Except" in a request leaves that kind of file out of every step, trims from the end ("the last
+  3 seconds") cut the end, and `extract_text` saves its text as `<name>.txt`.
+- On Windows, a run with no terminal (output redirected to `NUL`) no longer waits on a question.
+
+### Known issues
+
+- **`knaif-qwen3-1.7b-v2` often leaves out the "notify me when done" part** of a request; the 4B
+  model keeps it. Neither shipped model was trained on the new features.
+- With Smart App Control on, the ffmpeg skill cannot run on Windows: Windows blocks FFmpeg.
+- **On a Mac, the first run takes about 15 s longer** while Metal compiles its shaders; later runs
+  do not pay it again.
+- **The macOS `.pkg` keeps no receipt for the `PATH` link, the model or the tool choices**, so
+  `pkgutil` does not list them. `/usr/local/knaif/uninstall.sh` still removes knaif and its link;
+  the model stays in `~/.knaif`.
+
 ## [1.3.0] — 2026-10-10
 
 **knaif on macOS, and an optional model daemon.** Same models as 1.2.0 (`knaif-qwen3-4b-v2`
