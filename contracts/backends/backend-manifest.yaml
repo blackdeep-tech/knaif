@@ -97,9 +97,9 @@ backends:
         files:
           - name: libggml-cuda.so
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.0/libggml-cuda.so
-            sha256: "785f7460ea391067ca65eec3184ae99e18c8f4abb0e6b264ef3d571849076e78"
-            size_bytes: 162996880
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/libggml-cuda.so
+            sha256: "60b31b25828caed260401d8c45da58a9fe92f94a812f637683b0646262d8e6a6"
+            size_bytes: 156372176
           - name: libcudart.so.13
             tag: redist-cuda-13.3
             url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/libcudart.so.13
@@ -135,9 +135,9 @@ backends:
         files:
           - name: ggml-cuda.dll
             tag: product
-            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.2.1/ggml-cuda.dll
-            sha256: "a3a9a8cdc6410f3756cea3c2a319c911e85a73ebc58b235d6f10666e6c66ea2a"
-            size_bytes: 150272480
+            url: https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/ggml-cuda.dll
+            sha256: "2fe16de94216dfc1e983c8bb194e9b928a078cae2d2eefcca1aa95227311dd63"
+            size_bytes: 140944864
           - name: cudart64_13.dll
             tag: redist-cuda-13.3
             url: https://github.com/blackdeep-tech/knaif/releases/download/redist-cuda-13.3/cudart64_13.dll
