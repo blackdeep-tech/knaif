@@ -94,7 +94,18 @@
 
 # ---------------------------------------------------------------------------------------------------
 # AMENDMENTS (each with its date and reason, written before the stage it affects runs):
-#   none yet
+#   2026-10-30  `setup` cannot download the CUDA payload before the v1.4.0 assets are published
+#               (ggml-cuda.dll moved to that tag). The frozen payload was installed with the shipped
+#               binary from a local server, its manifest copy differing only in the URLs
+#               (setup-local.log), and `backend verify cuda` against the shipped manifest is ok, as
+#               in 1.2.0. Installed once more from the live URLs after publishing.
+#   2026-11-02  (owner) The first `gpu` stage (2026-11-01 17:07-17:48) is VOID. The native lane
+#               lacked what 1.4.0's new rows need and the Python lane gives them: an absolute
+#               scratch root, the eval link server, known folders and an alert sink beside the row
+#               (it wrote into the user's own Downloads), a copy of a folder row's own folder, and
+#               a batch that finished with a failed file read as a plan. Fixed in 3ab4fc8
+#               (python/core/knaif/evalsuite, not frozen code); its boards are kept under
+#               void/2026-11-01-gpu/. The gate rules are unchanged; `gpu` runs again in full.
 # ---------------------------------------------------------------------------------------------------
 
 R="evals/runs/$(basename "$(cd "$(dirname "$0")" && pwd)")"
