@@ -349,6 +349,22 @@ def _patch_native(tmp_path, monkeypatch) -> dict[str, Any]:
     return seen
 
 
+def test_a_native_run_serves_the_corpus_links(tmp_path, monkeypatch) -> None:
+    """URL rows fetch `https://files.knaif.test/…` from the eval's local server, as the Python
+    lane's do; without it every one failed on DNS in the 1.4.0 Windows cells."""
+    from knaif.evalsuite import cli, url_server
+
+    _patch_native(tmp_path, monkeypatch)
+    started: list[Any] = []
+    monkeypatch.setattr(url_server, "start_for_corpus", lambda *a: started.append(a))
+    args = _native_args(tmp_path)
+    cli._cmd_native(args)
+    [(data_dir, fixture_dir, utterances)] = started
+    assert data_dir == Path("skills") / "ffmpeg" / "data"
+    assert fixture_dir == Path(args.fixture_dir)
+    assert utterances == ["convert clip.mp4 to mkv", "trim clip.mp4", "cut clip.mp4"]
+
+
 def test_a_batch_run_plans_the_selected_rows_once_and_records_it(tmp_path, monkeypatch) -> None:
     from knaif.evalsuite import cli
 

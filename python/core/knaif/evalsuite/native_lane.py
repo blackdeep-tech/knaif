@@ -51,9 +51,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..alert import SINK_ENV as ALERT_SINK_ENV
+from ..known_folders import ROOT_ENV as KNOWN_FOLDERS_ENV
+from ..planner import split_alert
 from .corpus import CorpusRow
 from .outcomes import NOT_IMPLEMENTED_PREFIX
-from .provisioning import provision_row_dir
+from .provisioning import provision_row_dir, row_alert_sink, row_known_dir
 from .runner import AgentOutput
 
 #: Marker `run` prefixes its plan envelope with under `$KNAIF_DUMP_PLAN` (see
@@ -304,17 +307,34 @@ def parse_run_output(stdout: str, stderr: str, returncode: int) -> dict[str, Any
     commands = [c.strip() for c in _RUNNING_RE.findall(stderr)]
     combined = f"{stdout}\n{stderr}"
 
+    # A batch's end summary (contracts/parity/batch_report_cases.json): "8 done, 2 failed in …".
+    summary = _BATCH_SUMMARY_RE.search(stderr)
+    batch_failures = int(summary.group(1) or 0) if summary else None
+    # A batch with a failed file prints that summary and exits 1, having done every other file:
+    # a finished plan with its failures counted, as the Python lane's `BatchReport`.
+    finished_batch = bool(batch_failures) and not re.search(r"^Error:", stderr, re.MULTILINE)
+
     if NOT_IMPLEMENTED_PREFIX in combined:
         outcome = "not_implemented"
     elif re.search(r"^reject:", stdout, re.MULTILINE):
         outcome = "reject"
     elif re.search(r"^clarify:", stdout, re.MULTILINE):
         outcome = "clarify"
-    elif returncode != 0:
+    elif returncode != 0 and not finished_batch:
         outcome = "error"
     else:
         outcome = "plan"
-    return {"plan": plan, "commands": commands, "outcome": outcome, "results": results}
+    return {
+        "plan": plan,
+        "commands": commands,
+        "outcome": outcome,
+        "results": results,
+        "batch_failures": batch_failures,
+    }
+
+
+#: The batch summary line, with its failed count when there is one.
+_BATCH_SUMMARY_RE = re.compile(r"^\d+ done(?:, (\d+) failed)? in \d", re.MULTILINE)
 
 
 #: A long option at the start of a `--help` line, after an optional short one (`-y, --yes`).
@@ -444,6 +464,50 @@ def batch_plan(
     *,
     fixture_dir: Path,
     work_dir: Path,
+    folders: list[str | None] | None = None,
+    **kw: Any,
+) -> list[dict[str, Any]]:
+    """`_batch_plan_in` for each folder the rows run in, one envelope per utterance in order.
+
+    *folders* gives each utterance's folder row fixture (``batch/``), or None for a row that
+    runs where every fixture is. A folder row runs in a copy of its folder (`run_native_corpus`),
+    and planning resolves bare stems against the working directory, so its batch plans there
+    too: one model load per folder, not per row. Without *folders*, one batch as before.
+    """
+    if folders is None:
+        return _batch_plan_in(
+            lane, skill, utterances, fixture_dir=fixture_dir, work_dir=work_dir, **kw
+        )
+    if len(folders) != len(utterances):
+        raise ValueError(f"{len(folders)} folder(s) for {len(utterances)} utterances")
+    out: list[dict[str, Any] | None] = [None] * len(utterances)
+    for folder in dict.fromkeys(folders):
+        idx = [i for i, f in enumerate(folders) if f == folder]
+        where = (
+            work_dir
+            if folder is None
+            else work_dir.with_name(f"{work_dir.name}-{folder.strip('/').replace('/', '_')}")
+        )
+        planned = _batch_plan_in(
+            lane,
+            skill,
+            [utterances[i] for i in idx],
+            fixture_dir=fixture_dir if folder is None else fixture_dir / folder,
+            work_dir=where,
+            **kw,
+        )
+        for i, envelope in zip(idx, planned, strict=True):
+            out[i] = envelope
+    return [e for e in out if e is not None]
+
+
+def _batch_plan_in(
+    lane: LaneConfig,
+    skill: str,
+    utterances: list[str],
+    *,
+    fixture_dir: Path,
+    work_dir: Path,
     replay_dir: Path | None = None,
     record_dir: Path | None = None,
     expect_device: str | None = None,
@@ -558,7 +622,9 @@ def batch_live_mismatches(
         if key not in live or key not in plans or out.plan is None:
             continue
         compared += 1
-        if out.plan != plans[key]:
+        # The live row's alert was split off its plan (`run_native_corpus`); split the batch's too.
+        want, want_alert = split_alert(plans[key])
+        if out.plan != want or out.alert != want_alert:
             mismatches.append([out.id, out.utterance_idx])
     return compared, mismatches
 
@@ -673,11 +739,30 @@ def lane_scratch_env(work_dir: Path) -> dict[str, str]:
     }
 
 
+def lane_row_env(work_dir: Path) -> dict[str, str]:
+    """Everything a row's run is pointed at beside the row, as the Python lane's replay is: the
+    run scratch, the known folders (``<row>.known``, so "save it in Downloads" never reaches the
+    user's own folder) and the alert sink (``<row>.alerts.jsonl``: recorded, never made).
+
+    *work_dir* must be absolute: the binary runs inside it, where a relative path names a
+    folder nested in the row (the 1.4.0 Windows cells graded every routed intermediate missing).
+    """
+    return {
+        **lane_scratch_env(work_dir),
+        KNOWN_FOLDERS_ENV: str(row_known_dir(work_dir)),
+        ALERT_SINK_ENV: str(row_alert_sink(work_dir)),
+    }
+
+
 def _produced_files(
-    work_dir: Path, before: dict[str, tuple[int, int]], *, scratch_root: Path | None = None
+    work_dir: Path,
+    before: dict[str, tuple[int, int]],
+    *,
+    scratch_root: Path | None = None,
+    known_root: Path | None = None,
 ) -> list[Path]:
     """Files the run created OR rewrote in *work_dir*, plus routed intermediates kept in
-    *scratch_root*, oldest first.
+    *scratch_root* and files saved into a known folder under *known_root*, oldest first.
 
     Rewritten counts: an explicit output onto an existing file is a request the tools honour,
     and counting only new files graded it `artifact_missing` (2026-09-24 documents L4).
@@ -694,6 +779,9 @@ def _produced_files(
             for p in run.rglob("*"):
                 if p.is_file() and p.relative_to(run).parts[0] not in _SCRATCH_NOT_PRODUCED:
                     after.append(p)
+    if known_root is not None and known_root.is_dir():
+        # Fresh for every row, so whatever is there, the run put there.
+        after.extend(p for p in known_root.rglob("*") if p.is_file())
     return sorted(after, key=lambda p: p.stat().st_mtime)
 
 
@@ -741,13 +829,17 @@ def run_native_corpus(
         for utt_idx, utterance in enumerate(row.utterances):
             if only is not None and (row.id, utt_idx) not in only:
                 continue
-            work_dir = sandbox / f"{row.id}__{utt_idx}"
-            if work_dir.exists():
-                shutil.rmtree(work_dir)
-            scratch = lane_scratch_env(work_dir)
-            shutil.rmtree(scratch["KNAIF_SCRATCH_ROOT"], ignore_errors=True)
-            work_dir.mkdir(parents=True)
-            provision_fixtures(fixture_dir, work_dir)
+            # Absolute: the binary runs inside it, and every path beside it is handed over.
+            work_dir = (sandbox / f"{row.id}__{utt_idx}").resolve()
+            # Fresh: the row folder and everything beside it (scratch, known folders, alerts).
+            if row.is_folder_row:
+                # A copy of the row's own folder, as the Python lane's `_run_folder_row`: a glob
+                # over every fixture is not the folder the request is about.
+                assert row.fixture is not None
+                provision_row_dir(fixture_dir / row.fixture, work_dir)
+            else:
+                provision_fixtures(fixture_dir, work_dir)
+            scratch = lane_row_env(work_dir)
             before = _snapshot_files(work_dir)
 
             key = (row.id, utt_idx)
@@ -794,14 +886,30 @@ def run_native_corpus(
                     error = f"timed out after {lane.timeout_s:.0f}s"
             latency_ms = (time.perf_counter() - t0) * 1000
 
+            known_dir = row_known_dir(work_dir)
             produced = _produced_files(
-                work_dir, before, scratch_root=Path(scratch["KNAIF_SCRATCH_ROOT"])
+                work_dir,
+                before,
+                scratch_root=Path(scratch["KNAIF_SCRATCH_ROOT"]),
+                known_root=known_dir,
+            )
+            # The alert is a run option, taken out of the plan before grading, as the Python lane
+            # does (`split_alert`): the plan is graded on its work, the alert on its own.
+            plan, alert = (
+                split_alert(parsed["plan"]) if isinstance(parsed["plan"], dict) else (None, False)
             )
             outputs.append(
                 AgentOutput(
                     id=row.id,
                     utterance=utterance,
-                    plan=parsed["plan"],
+                    plan=plan,
+                    alert=alert,
+                    known_dir=known_dir,
+                    folder_dir=work_dir if row.is_folder_row else None,
+                    fixture_path=(
+                        fixture_dir / row.fixture if row.is_folder_row and row.fixture else None
+                    ),
+                    batch_failures=parsed.get("batch_failures"),
                     artifact=parsed["commands"][-1] if parsed["commands"] else None,
                     outcome=parsed["outcome"],
                     latency_ms=latency_ms,

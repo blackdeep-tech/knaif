@@ -352,6 +352,23 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   - `just site-check` needs `mise x --`: the PATH's Corepack pnpm (12.14.0) is refused by the
     site's pinned 12.4.1.
 
+- [ ] **The next model rejects "overwrite the original" on every backend** (owner, 2026-11-02).
+  On 1.4.0, 4B on Vulkan asks instead (`ffmpeg_safety_overwrite_original`, accepted as the owner's
+  exception: release index, *Decisions*). More train rows for overwriting the source in other
+  words ("replace the original", "save over clip.mov", "write it back into the same file"),
+  each a reject, and the safety row checked on every backend of the acceptance matrix.
+
+- [ ] **The Python eval never applies "a compress is never bigger"** (2026-11-02). Its replay
+  runs the rendered ffmpeg command, so `_shrunk` (`skills/ffmpeg/python/steps.py`) never decides,
+  and a compress that came out bigger is graded as delivered: `ffmpeg_039` ("compress clip.mp4 to
+  crf18", 292 KB → 452 KB) passes in Python and fails on the binary, which keeps nothing as the
+  owner's rule says. Either the replay goes through the handler's check, or the row gets the
+  `no_larger_than` criterion the `compress_result` rows carry; a corpus change, so G2 applies.
+
+- [ ] **`watch_run.sh` and a run's `void/` folder** (2026-11-02): it lists a voided stage's logs
+  as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/`, and
+  time from the last stage's `START`.
+
 - [ ] **For discussion when the next release is planned: a signed FFmpeg for Smart App Control.**
   Owner, 2026-10-16. On a Windows PC with Smart App Control enforcing, knaif installs and runs
   (signed), but Windows blocks FFmpeg itself, so the ffmpeg skill cannot run at all there; confirmed

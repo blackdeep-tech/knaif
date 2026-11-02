@@ -1035,6 +1035,14 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             "did not happen."
         )
 
+    # URL-input rows fetch from the eval's local server, as the Python lane's do (`cmd_run`);
+    # the binary inherits `KNAIF_NET_TEST_HOST` from this process.
+    from .url_server import start_for_corpus
+
+    start_for_corpus(
+        _corpus_path(args.skill).parent, fixture_dir, [u for row in corpus for u in row.utterances]
+    )
+
     lane = native_lane.load_lane(Path(args.config), args.lane, Path.cwd())
     packaged = _require_packaged(lane, args)
     lane_sandbox = sandbox / f"lane-{lane.name}"
@@ -1119,6 +1127,12 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             if only is None or (r.id, j) in only
         ]
         by_key = {(r.id, j): u for r in rows for j, u in enumerate(r.utterances)}
+        # A folder row plans in its folder, where it runs (`native_lane.batch_plan`).
+        folder_of = {
+            (r.id, j): (r.fixture if r.is_folder_row else None)
+            for r in rows
+            for j in range(len(r.utterances))
+        }
         model_sha = _sha256_file(lane.model_path)
         components = {
             "model_sha256": model_sha,
@@ -1136,6 +1150,7 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
                 lane,
                 args.skill,
                 [by_key[k] for k in selected],
+                folders=[folder_of[k] for k in selected],
                 fixture_dir=fixture_dir,
                 work_dir=lane_sandbox / ".batch",
                 replay_dir=replay_dir,
@@ -1157,6 +1172,7 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
                 lane,
                 args.skill,
                 [by_key[k] for k in missing],
+                folders=[folder_of[k] for k in missing],
                 fixture_dir=fixture_dir,
                 work_dir=lane_sandbox / ".batch",
                 record_dir=replay_dir,
@@ -1201,6 +1217,12 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
             if only is None or (r.id, j) in only
         ]
         by_key = {(r.id, j): u for r in rows for j, u in enumerate(r.utterances)}
+        # A folder row plans in its folder, where it runs (`native_lane.batch_plan`).
+        folder_of = {
+            (r.id, j): (r.fixture if r.is_folder_row else None)
+            for r in rows
+            for j in range(len(r.utterances))
+        }
         if recorded:
             raw = Path(recorded).read_bytes()
             lines = [ln for ln in raw.decode("utf-8").splitlines() if ln.strip()]
@@ -1225,6 +1247,7 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
                 lane,
                 args.skill,
                 [by_key[k] for k in keys],
+                folders=[folder_of[k] for k in keys],
                 fixture_dir=fixture_dir,
                 work_dir=lane_sandbox / ".batch",
                 expect_device=compute_backend,

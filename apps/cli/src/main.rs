@@ -2975,6 +2975,25 @@ fn run_documents_step(
             }
             let started = std::time::Instant::now();
             let written = commit_in(tool, step_args, base, sandbox, bundle, work_dir)?;
+            // The saved text's read result for the L4 lane, as the read path writes it: the lane
+            // grades pages and text, which the saved file cannot give back (pages are joined by
+            // a blank line). Read again only under the plan dump; a user's run reads once.
+            if tool == "extract_text" && plan_dump_enabled() {
+                let input =
+                    knaif_skill_documents::run::input_path_in(step_args, base, sandbox, work_dir)?;
+                let records = knaif_skill_documents::text::extract_text_with(
+                    &input,
+                    step_args.get("pages").and_then(serde_json::Value::as_str),
+                    step_args
+                        .get("ocr")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false),
+                )?;
+                let read = knaif_skill_documents::run::ReadResult::Text(records);
+                if let Some(line) = result_dump(true, tool, &read_result_json(&read)) {
+                    eprintln!("{line}");
+                }
+            }
             ui::note_written(written.len());
             ui::note_written_paths(&written);
             // A compress says what it saved, or that it kept the original (as ffmpeg's does).
