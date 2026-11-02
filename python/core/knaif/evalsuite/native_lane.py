@@ -906,8 +906,12 @@ def run_native_corpus(
                     alert=alert,
                     known_dir=known_dir,
                     folder_dir=work_dir if row.is_folder_row else None,
+                    # The row's original (a folder row's folder), as the Python lane gives it:
+                    # `no_larger_than` and the like find it when the result is elsewhere.
                     fixture_path=(
-                        fixture_dir / row.fixture if row.is_folder_row and row.fixture else None
+                        fixture_dir / row.fixture
+                        if row.fixture and (fixture_dir / row.fixture).exists()
+                        else None
                     ),
                     batch_failures=parsed.get("batch_failures"),
                     artifact=parsed["commands"][-1] if parsed["commands"] else None,
