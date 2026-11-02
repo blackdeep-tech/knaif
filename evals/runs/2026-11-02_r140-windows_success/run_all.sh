@@ -106,6 +106,11 @@
 #               candidate: installed with this binary from a local server, its manifest copy differing
 #               only in the URLs (setup-local.log), and `backend verify cuda` against the shipped
 #               manifest is ok, as in 1.2.0. Installed once more from the live URLs after publishing.
+#   2026-11-02  (owner) The `gpu` stage and the two 1.7B documents `live` cells of 12:36-13:18 are
+#               VOID: the native lane gave the grader no fixture for a row naming one file, so
+#               `no_larger_than` could not find the original of a result in a known folder or from
+#               a URL (documents_both_002). Fixed in 752b207 (eval code, not frozen); their boards
+#               are kept under void/2026-11-02-gpu/. Gate rules unchanged; both run again in full.
 # ---------------------------------------------------------------------------------------------------
 
 R="evals/runs/$(basename "$(cd "$(dirname "$0")" && pwd)")"
