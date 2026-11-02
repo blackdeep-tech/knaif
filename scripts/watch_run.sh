@@ -20,6 +20,8 @@
 #      the total. The optional third column prices a stage that has not started (an encode row
 #      costs ~10x a planning row); without it the run's average pace stands in.
 # Without either, a log's total is unknown and the progress line says so instead of guessing.
+# `scripts/release_evidence.sh` writes TOTALS for each stage it runs. Logs under `void/` (a voided
+# stage's, kept as evidence) are not counted.
 R="${1:?usage: watch_run.sh <run folder>}"
 R="${R%/}"
 INTERVAL="${WATCH_INTERVAL:-10}"
@@ -94,6 +96,9 @@ bar() { # done total width -> [█████░░░░░]
   printf '%s' "$s"
 }
 strip() { local s=$1; s=${s#"${s%%[![:space:]]*}"}; printf '%s' "$s"; }
+# A stage's name: its log's path in the run folder, or from `parity/` for one TOTALS names there
+# (L3's and the daemon's, `../../parity/...`).
+stage_name() { local n=${1#"$R"/}; n=${n#../../}; n=${n%.log}; printf '%s' "$n"; }
 # `... exit=0 Sun Oct 11 11:51:19 RDT 2026` -> `11:51:19  ... exit=0`
 event() {
   sed -E 's/^(.*[^ ]) +[A-Z][a-z]{2} [A-Z][a-z]{2} +[0-9]+ ([0-9]{2}:[0-9]{2}:[0-9]{2}) [A-Z]+ [0-9]{4}(.*)$/\2  \1\3/'
@@ -108,6 +113,7 @@ while true; do
   if [ -f "$R/TOTALS" ]; then
     while read -r name n spr; do
       [ -z "$name" ] && continue
+      n=${n%$'\r'}; spr=${spr%$'\r'}   # a TOTALS saved with Windows line ends
       logs+=("$R/$name"); want["$R/$name"]=$n
       [ -n "$spr" ] && pace["$R/$name"]=$spr
     done < "$R/TOTALS"
@@ -117,7 +123,7 @@ while true; do
     [ "$(rows_in "$p")" -gt 0 ] || [ -n "$(header_total "$p")" ] || continue
     logs+=("$p")
   done < <(find "$R" -name '*.log' ! -name 'fixtures*' ! -name '*_rerun.log' ! -name '*_compose.log' \
-    -printf '%T@ %p\n' 2>/dev/null | sort -n)
+    ! -path "$R/void/*" -printf '%T@ %p\n' 2>/dev/null | sort -n)
 
   done_all=0; total_all=0; unknown=0
   for p in "${logs[@]}"; do
@@ -200,10 +206,10 @@ while true; do
 
   if [ "${#logs[@]}" -gt 0 ]; then
     out+="${B}Stages${N}"$'\n'
-    w=0; for p in "${logs[@]}"; do n=${p#"$R"/}; n=${n%.log}; [ "${#n}" -gt "$w" ] && w=${#n}; done
+    w=0; for p in "${logs[@]}"; do n=$(stage_name "$p"); [ "${#n}" -gt "$w" ] && w=${#n}; done
     seen_active=0
     for p in "${logs[@]}"; do
-      n=${p#"$R"/}; n=${n%.log}
+      n=$(stage_name "$p")
       d=$(rows_in "$p"); t=$(header_total "$p"); t=${t:-${want[$p]:-?}}
       if [ "$p" = "$f" ]; then
         mark="${YEL}▶${N}"; extra=""; [ -n "$stage_left" ] && extra="   ${DIM}~$(fmt "$stage_left") left${N}"
@@ -224,8 +230,7 @@ while true; do
   if [ -n "$f" ]; then
     errs=$(grep -cE "$ERR_RE" "$f")
     ecol=$DIM; [ "$errs" -gt 0 ] && ecol=$RED
-    n=${f#"$R"/}
-    out+="${B}Now${N}      ${n%.log}   $(rows_in "$f") rows   ${ecol}${errs} errors${N}"$'\n'
+    out+="${B}Now${N}      $(stage_name "$f")   $(rows_in "$f") rows   ${ecol}${errs} errors${N}"$'\n'
     last2=$(grep -E "$ROW_RE" "$f" | tail -n 2)
     if [ -n "$last2" ]; then
       prev=$(printf '%s\n' "$last2" | sed -n '1p'); cur=$(printf '%s\n' "$last2" | sed -n '2p')

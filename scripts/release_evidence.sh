@@ -414,6 +414,38 @@ for row in load_corpus(corpus):
         if (row.id, j) in keep:
             print(u.replace('\n', ' '))" "$1"
 }
+subset_size() { subset_utterances "$1" | wc -l | tr -d ' '; }
+
+# -- TOTALS: the stage's row logs and how many rows each will hold, for scripts/watch_run.sh -----
+# Appended, in the order the stage runs them; a log already named keeps its line (a stage run again).
+# Only the watcher reads it: nothing here may fail a stage.
+stage_totals() {
+  local date p model backend skill k v n=""
+  date="${R##*/}"; date="${date%%_*}"; p="../../parity/${date}_$VER-$TAG"
+  for skill in $SKILLS; do
+    v="$(subset_size "$skill" 2>/dev/null)"; [ -n "$v" ] || return 0
+    n="$n $skill=$v"
+  done
+  size() { k=" $1="; v="${n#*"$k"}"; echo "${v%% *}"; }
+  {
+    case "$STAGE" in
+      gpu) for model in $MODELS; do for backend in $GPU_BACKENDS; do for skill in $SKILLS; do
+             echo "$model/$backend/$skill.log $(size "$skill")"; done; done; done ;;
+      cpu) for model in $MODELS; do for skill in $SKILLS; do
+             echo "$model/cpu/$skill.log $(size "$skill")"; done; done ;;
+      live) echo "$MODEL/$BACKEND/live/$SKILL.log $(size "$SKILL")" ;;
+      l3) for model in $MODELS; do for skill in $SKILLS; do
+            echo "$p-l3-$model-$skill/l3.log $(size "$skill")"; done; done ;;
+      daemon) for model in $MODELS; do for k in inprocess daemon; do for skill in $SKILLS; do
+                echo "$p-daemon-plan-equality/$model/$skill.$k.jsonl $(size "$skill")"; done; done; done ;;
+    esac
+  } | while read -r k v; do
+    [ -f "$R/TOTALS" ] && awk -v k="$k" '$1 == k { f = 1 } END { exit !f }' "$R/TOTALS" && continue
+    echo "$k $v" >> "$R/TOTALS"
+  done
+  return 0
+}
+
 daemon_requests() {
   env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" daemon status 2>/dev/null | sed -n 's/^ *requests: *\([0-9]*\).*/\1/p'
 }
@@ -539,6 +571,7 @@ release_stage() {
         fi
       fi
       verify_cuda
+      stage_totals
       case "$STAGE" in
         setup)
           if [ -n "$HAS_CUDA" ]; then log "END $STAGE: CUDA payload installed and verified"

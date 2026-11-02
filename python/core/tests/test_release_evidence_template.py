@@ -7,6 +7,7 @@ a rule changed in one place and not the other would let a release run under rule
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -249,3 +250,90 @@ def test_a_lock_just_taken_by_another_stage_is_not_stolen(tmp_path: Path) -> Non
     """Between `mkdir` and writing its pid another stage holds a lock with no pid yet."""
     proc = _lock_case(tmp_path, 'mkdir "$R/.running"')
     assert "TOOK" not in proc.stdout and "rc=2" in proc.stdout
+
+
+def _totals(tmp_path: Path, *stages: str, **env: str) -> list[str]:
+    """Run `stage_totals` for each stage in turn, subset sizes stubbed (ffmpeg 234, documents 103)."""
+    calls = "".join(f"STAGE={s}; stage_totals\n" for s in stages)
+    body = f"""
+mkdir -p "$R"; MODELS="4b 1.7b"; SKILLS="ffmpeg documents"
+subset_size() {{ case "$1" in ffmpeg) echo 234 ;; documents) echo 103 ;; esac; }}
+{calls}cat "$R/TOTALS"
+"""
+    out = _sourced(
+        tmp_path,
+        "windows",
+        body,
+        R=(tmp_path / "evals/runs/2026-11-02_r140-windows_success").as_posix(),
+        **env,
+    )
+    assert out.returncode == 0, out.stderr
+    return out.stdout.splitlines()
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_each_stage_names_its_row_logs_for_the_watcher(tmp_path: Path) -> None:
+    """Without a total the watcher shows no bar and no time left (`a stage total is unknown`)."""
+    lines = _totals(
+        tmp_path, "gpu", "live", "l3", "daemon", MODEL="1.7b", BACKEND="cuda", SKILL="documents"
+    )
+    assert lines[:4] == [
+        "4b/cuda/ffmpeg.log 234",
+        "4b/cuda/documents.log 103",
+        "4b/vulkan/ffmpeg.log 234",
+        "4b/vulkan/documents.log 103",
+    ]
+    assert "1.7b/cuda/live/documents.log 103" in lines
+    p = "../../parity/2026-11-02_r140-win"
+    assert f"{p}-l3-1.7b-documents/l3.log 103" in lines
+    assert lines[-4:] == [
+        f"{p}-daemon-plan-equality/1.7b/ffmpeg.inprocess.jsonl 234",
+        f"{p}-daemon-plan-equality/1.7b/documents.inprocess.jsonl 103",
+        f"{p}-daemon-plan-equality/1.7b/ffmpeg.daemon.jsonl 234",
+        f"{p}-daemon-plan-equality/1.7b/documents.daemon.jsonl 103",
+    ]
+    assert len(lines) == 8 + 1 + 4 + 8
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_a_stage_run_again_keeps_one_line_per_log(tmp_path: Path) -> None:
+    lines = _totals(tmp_path, "cpu", "cpu")
+    assert lines == [
+        "4b/cpu/ffmpeg.log 234",
+        "4b/cpu/documents.log 103",
+        "1.7b/cpu/ffmpeg.log 234",
+        "1.7b/cpu/documents.log 103",
+    ]
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_the_watcher_draws_a_release_run_from_its_totals(tmp_path: Path) -> None:
+    """Boards a void stage left under `void/` are not this run's rows; a log outside the run
+    folder (L3's, the daemon's under evals/parity) is named from `parity/`."""
+    run = tmp_path / "evals/runs/2026-11-02_r140-windows_success"
+    (run / "4b/cuda").mkdir(parents=True)
+    (run / "void/2026-11-02-gpu/4b/cuda").mkdir(parents=True)
+    l3 = tmp_path / "evals/parity/2026-11-02_r140-win-l3-4b-ffmpeg"
+    l3.mkdir(parents=True)
+    row = "  ✓ ffmpeg_001[0] plan   1 file(s)  trim it\n"
+    (run / "4b/cuda/ffmpeg.log").write_text(row * 3, encoding="utf-8")
+    (run / "void/2026-11-02-gpu/4b/cuda/ffmpeg.log").write_text(row * 4, encoding="utf-8")
+    (l3 / "l3.log").write_text("[  1/4] ✓ ffmpeg_001 trim it\n", encoding="utf-8")
+    (run / "TOTALS").write_text(
+        "4b/cuda/ffmpeg.log 4\n../../parity/2026-11-02_r140-win-l3-4b-ffmpeg/l3.log 4\n",
+        encoding="utf-8",
+    )
+    (run / "COMPLETE").write_text("2026-11-02 14:00:00 START gpu (windows)\n", encoding="utf-8")
+    proc = subprocess.run(
+        [BASH, "scripts/watch_run.sh", run.as_posix()],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=ROOT,
+        env={**os.environ, "WATCH_ONCE": "1", "WATCH_COLOR": "0", "TERM": "dumb"},
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout
+    assert "4 / 8 rows" in out and "50%" in out
+    assert "void/" not in out
+    assert "parity/2026-11-02_r140-win-l3-4b-ffmpeg/l3" in out and "../" not in out
