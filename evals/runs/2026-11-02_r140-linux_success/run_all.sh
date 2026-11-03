@@ -106,6 +106,14 @@
 #               candidate: installed with this binary from a local server, its manifest copy differing
 #               only in the URLs (setup-local.log), and `backend verify cuda` against the shipped
 #               manifest is ok, as in 1.2.0. Installed once more from the live URLs after publishing.
+#   2026-11-03  (owner) The `gpu` stage and the 1.7B documents `live` cell of 12:31-12:59 are VOID:
+#               Linux gave a chain's routed intermediate and its delivered result the same mtime to
+#               the nanosecond, and the native lane, which grades the last file by mtime, graded
+#               the intermediate (documents_128, hard2_006, hard2_008 on the 4B; 127, 128 on the
+#               1.7B). The binary wrote the same files as on Windows. Fixed in the lane (eval
+#               code, not frozen: on a tie the delivered file is last); the boards are kept under
+#               void/2026-11-03-gpu/. Gate rules unchanged; both run again in full, the replies
+#               this stage recorded replayed from the store.
 # ---------------------------------------------------------------------------------------------------
 
 R="evals/runs/$(basename "$(cd "$(dirname "$0")" && pwd)")"
