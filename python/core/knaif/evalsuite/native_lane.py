@@ -766,23 +766,27 @@ def _produced_files(
 
     Rewritten counts: an explicit output onto an existing file is a request the tools honour,
     and counting only new files graded it `artifact_missing` (2026-09-24 documents L4).
+
+    On an equal mtime a delivered file comes after a routed intermediate: Linux stamps files from
+    a coarse clock, so a chain's last two writes can share one, and the last file is the result.
     """
-    after = []
+    after: list[tuple[Path, int]] = []  # (file, 1 when delivered to the user, 0 in the scratch)
     for p in work_dir.iterdir():
         if not p.is_file():
             continue
         st = p.stat()
         if before.get(p.name) != (st.st_mtime_ns, st.st_size):
-            after.append(p)
+            after.append((p, 1))
     if scratch_root is not None and scratch_root.is_dir():
         for run in scratch_root.glob("run-*"):
             for p in run.rglob("*"):
                 if p.is_file() and p.relative_to(run).parts[0] not in _SCRATCH_NOT_PRODUCED:
-                    after.append(p)
+                    after.append((p, 0))
     if known_root is not None and known_root.is_dir():
         # Fresh for every row, so whatever is there, the run put there.
-        after.extend(p for p in known_root.rglob("*") if p.is_file())
-    return sorted(after, key=lambda p: p.stat().st_mtime)
+        after.extend((p, 1) for p in known_root.rglob("*") if p.is_file())
+    after.sort(key=lambda item: (item[0].stat().st_mtime_ns, item[1]))
+    return [p for p, _ in after]
 
 
 def run_native_corpus(

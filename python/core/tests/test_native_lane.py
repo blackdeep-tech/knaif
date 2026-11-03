@@ -348,6 +348,32 @@ def test_a_file_the_run_rewrote_counts_as_produced(tmp_path: Path) -> None:
     assert produced == {"out.md", "fresh.txt"}
 
 
+def test_a_delivered_file_outranks_an_intermediate_written_in_the_same_tick(tmp_path: Path) -> None:
+    """Linux stamps files from a coarse clock, so a chain's last two writes can share an mtime to
+    the nanosecond. The grader takes the last file as the result; on a tie that was the routed
+    intermediate, and 1.4.0's Linux documents cells graded `sample_p1-2.pdf` for the reordered
+    `sample_p1-2-reordered.pdf` (2026-11-03). The file delivered to the user's folder is last."""
+    import os
+
+    from knaif.evalsuite.native_lane import _produced_files, _snapshot_files
+
+    work = tmp_path / "row"
+    work.mkdir()
+    before = _snapshot_files(work)
+    scratch = tmp_path / "scratch"
+    intermediate = scratch / "run-1-abc" / "sample_p1-2.pdf"
+    intermediate.parent.mkdir(parents=True)
+    intermediate.write_bytes(b"step 1")
+    final = work / "sample_p1-2-reordered.pdf"
+    final.write_bytes(b"step 2")
+    tick = 1_793_706_271_184_526_147
+    for p in (intermediate, final):
+        os.utime(p, ns=(tick, tick))
+
+    produced = _produced_files(work, before, scratch_root=scratch)
+    assert produced == [intermediate, final]
+
+
 # ── L4 runs the packaged layout (release plan R2) ─────────────────────────────────────────────
 # The 2026-09 L4 scripts exported KNAIF_PDFIUM_PATH at pypdfium2's copy, which proved OCR works
 # with a library no user has. The lane now strips the override, and a binary with no PDFium
