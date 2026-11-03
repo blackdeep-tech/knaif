@@ -366,8 +366,14 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   `no_larger_than` criterion the `compress_result` rows carry; a corpus change, so G2 applies.
 
 - [ ] **`watch_run.sh` and a run's `void/` folder** (2026-11-02): it lists a voided stage's logs
-  as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/`, and
-  time from the last stage's `START`.
+  as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/` (done),
+  and time from the last stage's `START`.
+
+- [ ] **A stopped batch-planning cell loses its plans** (owner, 2026-11-02, after 1.4.0). The lane
+  stages each reply beside the sandbox and promotes the batch into the store only when it ends,
+  then wipes the staging folder on the next start: pausing 1.4.0's 4B CPU ffmpeg cell at 188 of
+  234 plans would have cost ~37 min (saved by hand, amendment in the Windows run script). Make a
+  restart keep a stopped batch's replies where the device check cannot fail or can be re-proved.
 
 - [ ] **For discussion when the next release is planned: a signed FFmpeg for Smart App Control.**
   Owner, 2026-10-16. On a Windows PC with Smart App Control enforcing, knaif installs and runs
