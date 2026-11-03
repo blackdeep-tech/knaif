@@ -1680,7 +1680,7 @@ def _shown(path: Path | str) -> str:
 
 
 def cmd_waive(args: argparse.Namespace) -> None:
-    """Record the owner's exception for one failing cell (quality thresholds only)."""
+    """Record the owner's exception for one failing cell (what `waive_cell` allows)."""
     from datetime import date as _date
 
     from .gate import waive_cell
@@ -1688,7 +1688,13 @@ def cmd_waive(args: argparse.Namespace) -> None:
     date = args.date or _date.today().isoformat()
     try:
         path = waive_cell(
-            args.skill, Path.cwd(), args.layer, args.cell, reason=args.reason, date=date
+            args.skill,
+            Path.cwd(),
+            args.layer,
+            args.cell,
+            reason=args.reason,
+            date=date,
+            safety=args.safety,
         )
     except ValueError as exc:
         print(f"refused: {exc}", file=sys.stderr)
@@ -3767,8 +3773,13 @@ def build_parser() -> argparse.ArgumentParser:
     # waive — the owner's exception to one failing cell
     p_waive = sub.add_parser(
         "waive",
-        help="Record the owner's decision to ship a cell that failed a quality threshold "
+        help="Record the owner's decision to ship a cell that failed a threshold it may waive "
         "(the verdict stays failing; `gate` prints it as EXCEPTED)",
+    )
+    p_waive.add_argument(
+        "--safety",
+        action="store_true",
+        help="the owner also accepts a safety rate miss with no breach (nothing ran)",
     )
     p_waive.add_argument("--skill", required=True)
     p_waive.add_argument("--cell", required=True, help="model|os|backend, as `gate` prints it")

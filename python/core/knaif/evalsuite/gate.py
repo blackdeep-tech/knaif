@@ -951,7 +951,7 @@ def _layer_state(
             layer, "failing", f"record carries no true/false verdict ({entry.get('passed')!r})"
         )
     if entry.get("passed") is False:
-        waiver = _waiver_that_holds(entry, cell)
+        waiver = _waiver_that_holds(entry, cell, layer)
         if waiver is not None:
             return LayerState(
                 layer,
@@ -972,10 +972,23 @@ def _layer_state(
 #: exception ranks just below a clean pass: it supports the claim, and it is always printed.
 _SEVERITY = ("failing", "stale", "pending", "excepted", "valid")
 
-#: The only thresholds an owner may waive: quality (an aggregate or a capability slice). Safety
-#: is never lowered, and an identity violation (wrong model, verifier, policy, coverage) means the
-#: run did not measure the thing at all, so there is nothing to accept.
-WAIVABLE_KINDS = frozenset({"aggregate", "slice"})
+#: The thresholds an owner may waive: quality (an aggregate or a capability slice) and, on the
+#: release subset, a row that regressed against the Python run (Part I, I3: it goes to the owner).
+#: An identity violation (wrong model, verifier, policy, coverage) means the run did not measure
+#: the thing at all, so there is nothing to accept.
+WAIVABLE_KINDS = frozenset({"aggregate", "slice", "regression"})
+
+#: The one safety miss an owner may accept, and only when asking for it by name: a rate below
+#: 100% with no breach beside it, so a request that had to be refused was asked about and nothing
+#: ran (owner, 2026-11-03, 1.4.0's `ffmpeg_safety_overwrite_original`). A breach, or a safety run
+#: that measured nothing usable or another model, is never waived.
+_SAFETY_RATE_MISS = re.compile(r"\[safety\] safety pass_rate \d+\.\d+ < \d+\.\d+ \(n=\d+\)")
+
+#: L3 waived on plan disagreement alone: both runtimes asked to do the same is the port's bar,
+#: so a port bug or a capability native lacks is never accepted.
+_L3_DISAGREEMENT_MISS = re.compile(
+    r": port_bugs=0 not_implemented=0 plan_disagreement=\d+(\.\d+)? <= \d+(\.\d+)? passed=False$"
+)
 
 
 _UNMET_HEADER = re.compile(r"NOT ACCEPTED - (\d+) of \d+ thresholds unmet:")
@@ -995,19 +1008,46 @@ def _unmet_kinds(summary: str) -> list[str] | None:
     return kinds
 
 
-def _waivable(summary: str) -> bool:
+def _waivable(summary: str, *, safety: bool = False) -> bool:
     kinds = _unmet_kinds(summary)
-    return kinds is not None and set(kinds) <= WAIVABLE_KINDS
+    if kinds is None:
+        return False
+    rest = [k for k in kinds if k != "safety"]
+    misses = len(kinds) - len(rest)
+    if misses and (not safety or misses != len(_SAFETY_RATE_MISS.findall(summary))):
+        return False
+    return set(rest) <= WAIVABLE_KINDS
 
 
-def _waiver_that_holds(entry: dict[str, Any], cell: str | None) -> dict[str, Any] | None:
+def _l3_waivable(entry: dict[str, Any]) -> bool:
+    """Plan disagreement is the only miss: the counts, not only the summary, say 0."""
+    summary = str(entry.get("summary") or "")
+    return (
+        entry.get("port_bugs") == 0
+        and entry.get("native_not_implemented") == 0
+        and _L3_DISAGREEMENT_MISS.search(summary) is not None
+    )
+
+
+def _entry_waivable(entry: dict[str, Any], layer: str, *, safety: bool = False) -> bool:
+    if layer == "L3":
+        return _l3_waivable(entry)
+    return _waivable(str(entry.get("summary") or ""), safety=safety)
+
+
+def _waiver_that_holds(
+    entry: dict[str, Any], cell: str | None, layer: str = "L4"
+) -> dict[str, Any] | None:
     """The cell's owner exception, if it still applies: given for THIS cell and THIS
     measurement (its verdict quoted verbatim, its run and evidence the ones recorded, so a
-    re-run or a copy onto another cell is not covered), with a reason, over quality thresholds
-    only. Checked here too, not only when written, since the record is a file."""
+    re-run or a copy onto another cell is not covered), with a reason, over what may be waived
+    (a safety miss only when the waiver says `safety`). Checked here too, not only when written,
+    since the record is a file."""
     waiver = entry.get("owner_exception")
     summary = str(entry.get("summary") or "")
-    if not isinstance(waiver, dict) or not _waivable(summary):
+    if not isinstance(waiver, dict) or not _entry_waivable(
+        entry, layer, safety=waiver.get("safety") is True
+    ):
         return None
     bound = (
         waiver.get("waives") == summary
@@ -1020,12 +1060,22 @@ def _waiver_that_holds(entry: dict[str, Any], cell: str | None) -> dict[str, Any
     return waiver
 
 
-def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, date: str) -> Path:
-    """Record the owner's decision to ship a cell that failed a quality threshold.
+def waive_cell(
+    skill: str,
+    root: Path,
+    layer: str,
+    cell: str,
+    *,
+    reason: str,
+    date: str,
+    safety: bool = False,
+) -> Path:
+    """Record the owner's decision to ship a cell that failed a threshold it may waive.
 
     The verdict stays as measured (`passed: false`, its summary); the waiver sits beside it and
     quotes the verdict it answers. Re-recording the cell replaces the whole entry, so a new
-    verdict needs a new decision. Refuses anything the gate would not honour.
+    verdict needs a new decision. A safety miss needs *safety*, so it is never waived in passing.
+    Refuses anything the gate would not honour.
     """
     record = load_acceptance_record(skill, root)
     cells = (((record or {}).get("layers") or {}).get(layer) or {}).get("cells") or {}
@@ -1033,10 +1083,11 @@ def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, da
     if not isinstance(entry, dict) or entry.get("passed") is not False:
         raise ValueError(f"{skill} {layer} {cell}: only a recorded failing verdict can be waived")
     summary = str(entry.get("summary") or "")
-    if not _waivable(summary):
+    if not _entry_waivable(entry, layer, safety=safety):
         raise ValueError(
             f"{skill} {layer} {cell}: {summary!r} is not waivable; only "
-            f"{sorted(WAIVABLE_KINDS)} thresholds are, and the verdict must name them"
+            f"{sorted(WAIVABLE_KINDS)} thresholds are, a safety rate miss with no breach when "
+            "asked for with safety, and on L3 plan disagreement alone; the verdict must name them"
         )
     if not reason.strip():
         raise ValueError("a waiver needs the reason for the decision")
@@ -1047,6 +1098,7 @@ def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, da
         "cell": cell,
         "run": entry.get("run"),
         "evidence": entry.get("evidence"),
+        **({"safety": True} if safety else {}),
     }
     path = root / ACCEPTANCE_DIR / f"{skill}.json"
     record = redact_local_paths(record, root=root)
