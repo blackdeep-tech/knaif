@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A URL isn't a file, so I can't work on it. Is there a local file named clip.mp4 I should convert?"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "strip_audio", "args": {"inputs": ["clip.mp4"], "output": "clip_silent.mkv"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "That format isn't supported. Which container should I convert to - mp4, mkv, webm, gif, or a custom one?"}}]}

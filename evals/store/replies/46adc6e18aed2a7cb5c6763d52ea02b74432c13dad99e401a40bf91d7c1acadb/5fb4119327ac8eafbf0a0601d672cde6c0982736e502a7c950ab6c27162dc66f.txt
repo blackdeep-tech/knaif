@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["all.pdf"], "output": "merged.pdf"}}]}

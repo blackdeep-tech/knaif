@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "I need a local file path, not a URL. Is there a video on this machine I should use?"}}]}

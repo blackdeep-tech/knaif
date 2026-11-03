@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "A 0x0 output isn't achievable - that would destroy the file. A zero-size output isn't supported."}}]}

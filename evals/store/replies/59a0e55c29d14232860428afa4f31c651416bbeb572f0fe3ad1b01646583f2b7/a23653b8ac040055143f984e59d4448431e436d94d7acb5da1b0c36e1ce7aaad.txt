@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "extract_frames", "args": {"input": "clip.mp4", "every": "5s"}}]}

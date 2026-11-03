@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "height": 480, "output": "clip_480p.mp4"}}, {"tool": "strip_audio", "args": {"inputs": ["clip_480p.mp4"]}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "That isn't a media file I can work on. Could you give me the filename?"}}]}

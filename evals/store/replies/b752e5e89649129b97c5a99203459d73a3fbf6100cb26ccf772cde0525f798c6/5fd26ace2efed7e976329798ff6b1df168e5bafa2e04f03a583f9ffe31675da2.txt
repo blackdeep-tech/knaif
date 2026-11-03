@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Sending files isn't supported - I only process media on this machine. Should I prepare clip.mp4 for a specific platform instead?"}}]}

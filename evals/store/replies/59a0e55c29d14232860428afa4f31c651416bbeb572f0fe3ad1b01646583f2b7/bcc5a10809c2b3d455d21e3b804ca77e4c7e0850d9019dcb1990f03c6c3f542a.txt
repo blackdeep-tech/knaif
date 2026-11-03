@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Negative timestamps aren't supported. Should I use a positive start time instead?"}}]}

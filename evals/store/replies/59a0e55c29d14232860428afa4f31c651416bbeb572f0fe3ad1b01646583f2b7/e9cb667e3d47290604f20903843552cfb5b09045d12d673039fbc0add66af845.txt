@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "container": "mp4", "output": "clip.mp4"}}, {"tool": "alert_when_done", "args": {}}]}

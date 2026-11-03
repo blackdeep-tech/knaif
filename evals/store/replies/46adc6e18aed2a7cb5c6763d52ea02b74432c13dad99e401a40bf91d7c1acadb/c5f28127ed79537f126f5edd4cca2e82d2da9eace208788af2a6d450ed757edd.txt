@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Running an arbitrary system command isn't supported. Should I proceed anyway?"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "extract_audio", "args": {"inputs": ["mp3"], "audio_format": "wav", "output": "audio.wav"}}, {"tool": "adjust_volume", "args": {"inputs": ["audio.wav"], "normalize": true}}]}

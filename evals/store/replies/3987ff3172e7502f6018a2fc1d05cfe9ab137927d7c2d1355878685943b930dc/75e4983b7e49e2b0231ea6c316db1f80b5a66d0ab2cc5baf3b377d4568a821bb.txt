@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A lossless copy isn't achievable - outputs are always compressed. Should I instead use a high-quality conversion?"}}]}

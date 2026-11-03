@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["clip_ctr.mp4"], "target_size_mb": 1, "output": "clip_ctr_small.mp4"}}, {"tool": "alert_when_done", "args": {}}]}

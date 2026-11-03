@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A negative timestamp isn't valid. Should I trim from the start of the video, or from a specific point?"}}]}

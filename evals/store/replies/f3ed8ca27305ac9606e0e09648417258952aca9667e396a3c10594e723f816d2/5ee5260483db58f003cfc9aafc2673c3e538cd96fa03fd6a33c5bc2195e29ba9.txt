@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "container": "mp4", "output": "clip.mp4"}}, {"tool": "trim_video", "args": {"input": "clip.mp4", "start": "00:00:00", "end": "00:00:03"}}]}
