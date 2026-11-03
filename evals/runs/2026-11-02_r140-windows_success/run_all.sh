@@ -111,6 +111,13 @@
 #               `no_larger_than` could not find the original of a result in a known folder or from
 #               a URL (documents_both_002). Fixed in 752b207 (eval code, not frozen); their boards
 #               are kept under void/2026-11-02-gpu/. Gate rules unchanged; both run again in full.
+#   2026-11-02  (owner) The `cpu` stage was paused at 17:18 in its first cell (4B CPU ffmpeg) while
+#               batch planning, 188 of 234 replies recorded by this binary in this run and none
+#               promoted (a batch is promoted only once it ends). Those 188 are moved into the store
+#               namespace the cell named (f3ed8ca27305) with the lane's own `promote_replies`, so the
+#               restarted stage replays them and plans the other rows with the model. The device
+#               check they skipped cannot fail on a CPU cell, and the cold-start sample still runs
+#               live against them (I5). The board counts them as reused; they were measured here.
 # ---------------------------------------------------------------------------------------------------
 
 R="evals/runs/$(basename "$(cd "$(dirname "$0")" && pwd)")"

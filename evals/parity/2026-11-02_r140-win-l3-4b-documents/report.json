@@ -1,0 +1,2604 @@
+{
+  "skill": "documents",
+  "mode": "command",
+  "model": "<repo>\\models\\knaif-qwen3-4b-v2-q4_k_m.gguf",
+  "counts": {
+    "match": 101,
+    "mismatch": 2,
+    "decline-divergence": 0,
+    "not-comparable": 0,
+    "native-not-implemented": 0,
+    "port-bug": 0
+  },
+  "total": 103,
+  "elapsed_s": 470.4,
+  "rows": [
+    {
+      "id": "documents_001",
+      "utterance": "inspect sample.png",
+      "tags": [
+        "inspect",
+        "image"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "png: 1 page(s), 1396 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.png\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"png\",\"size_bytes\":1396,\"encrypted\":false,\"has_text_layer\":false,\"pages\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "png: 1 page(s), 1396 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.png\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_002",
+      "utterance": "inspect sample-scanned.pdf",
+      "tags": [
+        "inspect",
+        "scan"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 1 page(s), 5707 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample-scanned.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":5707,\"encrypted\":false,\"has_text_layer\":false,\"pages\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 1 page(s), 5707 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample-scanned.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_003",
+      "utterance": "extract sample.pdf",
+      "tags": [
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_004",
+      "utterance": "extract sample.docx",
+      "tags": [
+        "extract",
+        "office"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.docx\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.docx\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_005",
+      "utterance": "within sample.pdf find gamma",
+      "tags": [
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [0..5]: Gamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"gamma\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":3,\"snippet\":\"Gamma page three\",\"span\":[0,5]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [0..5]: Gamma page three\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"gamma\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_006",
+      "utterance": "convert sample.txt to markdown",
+      "tags": [
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  sample-1.md\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.txt\",\"to_format\":\"md\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  sample-1.md\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.txt\", \"to_format\": \"md\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_007",
+      "utterance": "compress sample.pdf",
+      "tags": [
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_008",
+      "utterance": "ocr sample-scanned.pdf",
+      "tags": [
+        "ocr"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_009",
+      "utterance": "split pages 2-3 of sample.pdf into a new pdf",
+      "tags": [
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_010",
+      "utterance": "turn all pages of sample.pdf 90 degrees",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_011",
+      "utterance": "remove page 3 from sample.pdf",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  sample-removed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_012",
+      "utterance": "reorder sample.pdf to 2,3,1",
+      "tags": [
+        "organize"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"2,3,1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"2,3,1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_013",
+      "utterance": "watermark sample.pdf with DRAFT",
+      "tags": [
+        "watermark"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_014",
+      "utterance": "number sample.pdf",
+      "tags": [
+        "page_numbers"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_015",
+      "utterance": "protect sample.pdf",
+      "tags": [
+        "security",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What password should I use to protect sample.pdf?",
+        "raw": "clarify: What password should I use to protect sample.pdf?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What password should I use to protect sample.pdf?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What password should I use to protect sample.pdf?",
+        "raw": "clarify: What password should I use to protect sample.pdf?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What password should I use to protect sample.pdf?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_017",
+      "utterance": "merge these documents",
+      "tags": [
+        "merge",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which documents should I merge?",
+        "raw": "clarify: Which documents should I merge?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Which documents should I merge?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which documents should I merge?",
+        "raw": "clarify: Which documents should I merge?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which documents should I merge?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_018",
+      "utterance": "process my document",
+      "tags": [
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which document, and what would you like done with it?",
+        "raw": "clarify: Which document, and what would you like done with it?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Which document, and what would you like done with it?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Which document, and what would you like done with it?",
+        "raw": "clarify: Which document, and what would you like done with it?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Which document, and what would you like done with it?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_020",
+      "utterance": "delete all documents",
+      "tags": [
+        "reject"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "this request is blocked by the documents skill's safety policy.",
+        "raw": "reject: this request is blocked by the documents skill's safety policy.\n"
+      },
+      "python": {
+        "kind": "reject",
+        "commands": [],
+        "plan": [],
+        "text": "this request is blocked by the documents skill's safety policy.",
+        "raw": "reject: this request is blocked by the documents skill's safety policy.\n"
+      }
+    },
+    {
+      "id": "documents_027",
+      "utterance": "inspect sample.pdf",
+      "tags": [
+        "inspect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2227 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":2227,\"encrypted\":false,\"has_text_layer\":true,\"pages\":3}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2227 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_036",
+      "utterance": "rotate sample.pdf 90 degrees",
+      "tags": [
+        "rotate"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90,\"pages\":\"1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90, \"pages\": \"1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_040",
+      "utterance": "reorder sample.pdf to 3,2,1",
+      "tags": [
+        "reorder"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"3,2,1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would reorder pages →\n  sample-reordered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"3,2,1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_047",
+      "utterance": "merge sample.pdf and sample-scanned.pdf into merged.pdf",
+      "tags": [
+        "merge"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"merged.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"merged.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_055",
+      "utterance": "number the pages of sample.pdf",
+      "tags": [
+        "number"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom-center\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_059",
+      "utterance": "password-protect sample.pdf with secret",
+      "tags": [
+        "protect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_063",
+      "utterance": "unlock sample-protected.pdf with password secret",
+      "tags": [
+        "unlock"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_081",
+      "utterance": "merge sample.pdf and sample-scanned.pdf into combined.pdf, then add page numbers",
+      "tags": [
+        "merge",
+        "number",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould merge 2 file(s) →\n  combined.pdf\nstep 2 of 2:\nwould add page numbers →\n  combined-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"combined.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"combined.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould merge 2 file(s) →\n  combined.pdf\nstep 2 of 2:\nwould add page numbers →\n  combined-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"combined.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"combined.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_087",
+      "utterance": "I just got handed sample.pdf and have no clue what's inside - how many pages is it and is the text actually selectable?",
+      "tags": [
+        "inspect",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2227 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":2227,\"encrypted\":false,\"has_text_layer\":true,\"pages\":3}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2227 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_088",
+      "utterance": "Before I send sample-scanned.pdf to the print shop, can you confirm whether it has a real text layer or it's just an image?",
+      "tags": [
+        "inspect",
+        "scan",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 1 page(s), 5707 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample-scanned.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":5707,\"encrypted\":false,\"has_text_layer\":false,\"pages\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 1 page(s), 5707 bytes, encrypted=false, text_layer=false\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample-scanned.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_089",
+      "utterance": "I need to paste the wording from sample.docx into an email - can you pull all the text out for me?",
+      "tags": [
+        "extract",
+        "office",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.docx\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.docx\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_090",
+      "utterance": "My screen reader chokes on sample.pdf; just give me the plain text so I can read it.",
+      "tags": [
+        "extract",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_091",
+      "utterance": "A coworker swears the word Gamma shows up somewhere in sample.pdf but I can't spot it - which page is it on?",
+      "tags": [
+        "find",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [0..5]: Gamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Gamma\",\"regex\":false,\"ignore_case\":false}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":3,\"snippet\":\"Gamma page three\",\"span\":[0,5]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [0..5]: Gamma page three\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Gamma\", \"regex\": false, \"ignore_case\": false}}]}\n"
+      }
+    },
+    {
+      "id": "documents_093",
+      "utterance": "My manager only accepts plain .txt files, so I need a .txt copy of sample.md saved out to send him.",
+      "tags": [
+        "convert",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to txt →\n  sample.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.md\",\"to_format\":\"txt\",\"output\":\"sample.txt\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to txt →\n  sample.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.md\", \"to_format\": \"txt\", \"output\": \"sample.txt\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_094",
+      "utterance": "Marketing wants sample.docx as a PDF so the layout doesn't shift on their computers - can you make that?",
+      "tags": [
+        "convert",
+        "office",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to pdf →\n  sample-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.docx\",\"to_format\":\"pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to pdf →\n  sample-1.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.docx\", \"to_format\": \"pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_095",
+      "utterance": "sample.pdf is too big for our email server, which rejects anything over 10 MB - can you slim it down?",
+      "tags": [
+        "compress",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (lossless-optimize) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"high\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (lossless-optimize) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"high\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_097",
+      "utterance": "sample-scanned.pdf is basically a photo of a contract - I can't select or search any of the text. Make it searchable.",
+      "tags": [
+        "ocr",
+        "scan",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  sample-scanned-ocr.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_099",
+      "utterance": "Only pages 2 to 3 of sample.pdf matter to the client - carve those out into their own PDF I can send.",
+      "tags": [
+        "split",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_101",
+      "utterance": "Someone scanned sample.pdf sideways and every page is turned 90 degrees the wrong way - fix the orientation.",
+      "tags": [
+        "rotate",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":-90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": -90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_103",
+      "utterance": "The last page of sample.pdf is just a blank sheet - drop it before I archive this.",
+      "tags": [
+        "organize",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"-1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  sample-removed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"-1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_105",
+      "utterance": "sample.pdf came off the scanner backwards, the pages are in reverse - put them back in the proper order.",
+      "tags": [
+        "reorder",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "error",
+        "commands": [],
+        "plan": [],
+        "text": "exit 1: Unrecognized page reference: \"2-3-4\"",
+        "raw": "===KNAIF-PLAN==={\"plan\":[{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample.pdf\",\"order\":\"1-2-3-4\"}}]}\nError: the step failed\n\nCaused by:\n    Unrecognized page reference: \"2-3-4\"\n"
+      },
+      "python": {
+        "kind": "error",
+        "commands": [],
+        "plan": [],
+        "text": "exit 1: Unrecognized page reference: '2-3-4'",
+        "raw": "===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"order\": \"1-2-3-4\"}}]}\nError: the step failed\n\nCaused by:\n    Unrecognized page reference: '2-3-4'\n"
+      }
+    },
+    {
+      "id": "documents_107",
+      "utterance": "I'd rather send the client one attachment than two - combine sample.pdf and sample-scanned.pdf into one.pdf.",
+      "tags": [
+        "merge",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  one.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"one.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  one.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"one.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_108",
+      "utterance": "This copy of sample.pdf isn't final - stamp DRAFT across it so nobody mistakes it for the signed version.",
+      "tags": [
+        "watermark",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"DRAFT\",\"position\":\"center\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would watermark →\n  sample-watermarked.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"DRAFT\", \"position\": \"center\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_110",
+      "utterance": "The printed copies of sample.pdf keep getting shuffled in meetings - add page numbers so people can follow along.",
+      "tags": [
+        "number",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom-center\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_111",
+      "utterance": "I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.",
+      "tags": [
+        "protect",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"hunter2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"hunter2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_113",
+      "utterance": "I'm sick of typing the password every time I open sample-protected.pdf - the password is secret, please take it off.",
+      "tags": [
+        "unlock",
+        "realistic"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would unlock →\n  sample-protected-unlocked.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_116",
+      "utterance": "Komprimiere sample.pdf, sie ist zu groß.",
+      "tags": [
+        "compress",
+        "de",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_117",
+      "utterance": "Combina sample.pdf y sample-scanned.pdf en uno.pdf.",
+      "tags": [
+        "merge",
+        "es",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  one.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"one.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  one.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"one.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_118",
+      "utterance": "Extrae el texto de sample.pdf.",
+      "tags": [
+        "extract",
+        "es",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_119",
+      "utterance": "Numérote les pages de sample.pdf.",
+      "tags": [
+        "number",
+        "fr",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_120",
+      "utterance": "Protège sample.pdf avec le mot de passe hunter2.",
+      "tags": [
+        "protect",
+        "fr",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"protect_pdf\",\"args\":{\"input\":\"sample.pdf\",\"password\":\"hunter2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would password-protect →\n  sample-protected-1.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample.pdf\", \"password\": \"hunter2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_121",
+      "utterance": "Сожми sample.pdf, файл слишком большой.",
+      "tags": [
+        "compress",
+        "ru",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_122",
+      "utterance": "Найди Gamma в sample.pdf.",
+      "tags": [
+        "find",
+        "ru",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [0..5]: Gamma page three\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"Gamma\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[{\"page\":3,\"snippet\":\"Gamma page three\",\"span\":[0,5]}],\"count\":1}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "p3 [0..5]: Gamma page three\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"Gamma\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_123",
+      "utterance": "Раздели страници 2-3 от sample.pdf в нов файл.",
+      "tags": [
+        "split",
+        "bg",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"2-3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-2_3.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"2-3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_124",
+      "utterance": "Завърти sample.pdf на 90 градуса.",
+      "tags": [
+        "rotate",
+        "bg",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_125",
+      "utterance": "压缩 sample.pdf。",
+      "tags": [
+        "compress",
+        "zh",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_126",
+      "utterance": "把 sample.pdf 旋转 90 度。",
+      "tags": [
+        "rotate",
+        "zh",
+        "multilingual"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_127",
+      "utterance": "split pages 1-2 of sample.pdf into a new file and stamp DRAFT on it",
+      "tags": [
+        "split",
+        "watermark",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <work>/sample_p1-2.pdf\nstep 2 of 2:\nwould watermark →\n  sample_p1-2-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\",\"output\":\"sample_p1-2.pdf\"}},{\"tool\":\"watermark\",\"args\":{\"input\":\"sample_p1-2.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <work>/sample_p1-2.pdf\nstep 2 of 2:\nwould watermark →\n  sample_p1-2-watermarked.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\", \"output\": \"sample_p1-2.pdf\"}}, {\"tool\": \"watermark\", \"args\": {\"input\": \"sample_p1-2.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_128",
+      "utterance": "remove the last page of sample.pdf, then add page numbers to what's left",
+      "tags": [
+        "organize",
+        "number",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould remove pages →\n  <work>/sample_trimmed.pdf\nstep 2 of 2:\nwould add page numbers →\n  sample_trimmed-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"-1\",\"output\":\"sample_trimmed.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample_trimmed.pdf\",\"position\":\"bottom-center\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould remove pages →\n  <work>/sample_trimmed.pdf\nstep 2 of 2:\nwould add page numbers →\n  sample_trimmed-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"-1\", \"output\": \"sample_trimmed.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample_trimmed.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_129",
+      "utterance": "watermark sample.pdf with CONFIDENTIAL and then compress the result",
+      "tags": [
+        "watermark",
+        "compress",
+        "multi-step"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould watermark →\n  <work>/sample_watermarked.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample_watermarked-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"watermark\",\"args\":{\"input\":\"sample.pdf\",\"text\":\"CONFIDENTIAL\",\"output\":\"sample_watermarked.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_watermarked.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould watermark →\n  <work>/sample_watermarked.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample_watermarked-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"watermark\", \"args\": {\"input\": \"sample.pdf\", \"text\": \"CONFIDENTIAL\", \"output\": \"sample_watermarked.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_watermarked.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_130",
+      "utterance": "extract the first 2 pages of sample.pdf into a new pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_131",
+      "utterance": "extract the text from the first 2 pages of sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_132",
+      "utterance": "extract the first 2 pages of sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_133",
+      "utterance": "pull page 3 out of sample.pdf as its own file",
+      "tags": [
+        "hard",
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-3.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-3.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_134",
+      "utterance": "delete page 3 from sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "remove"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  sample-removed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"3\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would remove pages →\n  sample-removed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"3\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_135",
+      "utterance": "find the word invoice in sample.pdf",
+      "tags": [
+        "hard",
+        "ambiguous",
+        "find"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "No matches.\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"sample.pdf\",\"query\":\"invoice\",\"ignore_case\":true}}]}\n===KNAIF-RESULT==={\"tool\":\"find_in_document\",\"result\":{\"matches\":[],\"count\":0}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "No matches.\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"sample.pdf\", \"query\": \"invoice\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_136",
+      "utterance": "save sample.docx as a pdf",
+      "tags": [
+        "hard",
+        "convert"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to pdf →\n  sample-1.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.docx\",\"to_format\":\"pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to pdf →\n  sample-1.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.docx\", \"to_format\": \"pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_137",
+      "utterance": "drehe sample.pdf um 90 Grad",
+      "tags": [
+        "hard",
+        "multilingual",
+        "rotate"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90}}]}\n"
+      }
+    },
+    {
+      "id": "documents_138",
+      "utterance": "comprime sample.pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "compress"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_139",
+      "utterance": "extrais le texte de sample.pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "extract"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_140",
+      "utterance": "раздели sample.pdf и сохрани первые 2 страницы в новый pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "split"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 1 file(s) →\n  sample-pages-1_2.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_141",
+      "utterance": "разгледай sample.pdf",
+      "tags": [
+        "hard",
+        "multilingual",
+        "inspect"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2227 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"sample.pdf\"}}]}\n===KNAIF-RESULT==={\"tool\":\"inspect_document\",\"result\":{\"format\":\"pdf\",\"size_bytes\":2227,\"encrypted\":false,\"has_text_layer\":true,\"pages\":3}}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "pdf: 3 page(s), 2227 bytes, encrypted=false, text_layer=true\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"sample.pdf\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_142",
+      "utterance": "rotate sample.pdf 90 degrees and then compress it",
+      "tags": [
+        "hard",
+        "chain2",
+        "rotate",
+        "compress"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <work>/sample_rotated.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample_rotated-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90,\"output\":\"sample_rotated.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_rotated.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <work>/sample_rotated.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample_rotated-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90, \"output\": \"sample_rotated.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_rotated.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_143",
+      "utterance": "extract the first 2 pages of sample.pdf into a new pdf and compress it",
+      "tags": [
+        "hard",
+        "chain2",
+        "split",
+        "convert"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <work>/sample_p1-2.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample_p1-2-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\",\"output\":\"sample_p1-2.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_p1-2.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <work>/sample_p1-2.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample_p1-2-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\", \"output\": \"sample_p1-2.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_p1-2.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_hard2_001",
+      "utterance": "unlock sample-protected.pdf with the password secret and rotate every page 90 degrees",
+      "tags": [
+        "hard2"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould unlock →\n  <work>/sample.pdf\nstep 2 of 2:\nwould rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"unlock_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"password\":\"secret\",\"output\":\"sample.pdf\"}},{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":90,\"pages\":\"all\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould unlock →\n  <work>/sample.pdf\nstep 2 of 2:\nwould rotate pages →\n  sample-rotated.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"sample-protected.pdf\", \"password\": \"secret\", \"output\": \"sample.pdf\"}}, {\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 90, \"pages\": \"all\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_hard2_002",
+      "utterance": "ocr sample-scanned.pdf and then compress the result",
+      "tags": [
+        "hard2"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould OCR → searchable PDF →\n  sample-scanned.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample-scanned-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"sample-scanned.pdf\",\"language\":\"eng\",\"output\":\"sample-scanned.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample-scanned.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould OCR → searchable PDF →\n  sample-scanned.pdf\nstep 2 of 2:\nwould compress (ghostscript) →\n  sample-scanned-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"sample-scanned.pdf\", \"language\": \"eng\", \"output\": \"sample-scanned.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample-scanned.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_hard2_003",
+      "utterance": "convert sample.docx to pdf and add page numbers to it",
+      "tags": [
+        "hard2"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould convert to pdf →\n  <work>/sample.pdf\nstep 2 of 2:\nwould add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.docx\",\"to_format\":\"pdf\",\"output\":\"sample.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-right\",\"start_at\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould convert to pdf →\n  <work>/sample.pdf\nstep 2 of 2:\nwould add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.docx\", \"to_format\": \"pdf\", \"output\": \"sample.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"sample.pdf\", \"position\": \"bottom-right\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_hard2_004",
+      "utterance": "put the pages of sample.pdf in the order 3,1,2 and lock the result with the password secret",
+      "tags": [
+        "hard2"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What order should I use?",
+        "raw": "clarify: What order should I use?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What order should I use?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What order should I use?",
+        "raw": "clarify: What order should I use?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample.pdf\", \"page_order\": \"3,1,2\", \"output\": \"sample_reordered.pdf\"}}, {\"tool\": \"protect_pdf\", \"args\": {\"input\": \"sample_reordered.pdf\", \"password\": \"secret\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_hard2_005",
+      "utterance": "merge sample.pdf and sample-scanned.pdf, then keep only pages 1-2 of the merged file",
+      "tags": [
+        "hard2",
+        "multi_file"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould merge 2 file(s) →\n  merged.pdf\nstep 2 of 2:\nwould split →\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"merged.pdf\"}},{\"tool\":\"split_pdf\",\"args\":{\"input\":\"merged.pdf\",\"ranges\":\"1-2\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould merge 2 file(s) →\n  merged.pdf\nstep 2 of 2:\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"merged.pdf\"}}, {\"tool\": \"split_pdf\", \"args\": {\"input\": \"merged.pdf\", \"ranges\": \"1-2\"}}]}\nsplit_pdf\n"
+      }
+    },
+    {
+      "id": "documents_hard2_006",
+      "utterance": "stamp DRAFT across sample.pdf and rotate it 180 degrees",
+      "tags": [
+        "hard2"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <work>/sample_rotated.pdf\nstep 2 of 2:\nwould watermark →\n  sample_rotated-watermarked.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"rotate_pages\",\"args\":{\"input\":\"sample.pdf\",\"degrees\":180,\"output\":\"sample_rotated.pdf\"}},{\"tool\":\"watermark\",\"args\":{\"input\":\"sample_rotated.pdf\",\"text\":\"DRAFT\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould rotate pages →\n  <work>/sample_rotated.pdf\nstep 2 of 2:\nwould watermark →\n  sample_rotated-watermarked.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"rotate_pages\", \"args\": {\"input\": \"sample.pdf\", \"degrees\": 180, \"output\": \"sample_rotated.pdf\"}}, {\"tool\": \"watermark\", \"args\": {\"input\": \"sample_rotated.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_hard2_007",
+      "utterance": "drop page 2 from sample.pdf, watermark what is left with FINAL and compress it",
+      "tags": [
+        "hard2"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nwould remove pages →\n  <work>/sample_trimmed.pdf\nstep 2 of 3:\nwould watermark →\n  <work>/sample_watermarked.pdf\nstep 3 of 3:\nwould compress (ghostscript) →\n  sample_watermarked-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"remove_pages\",\"args\":{\"input\":\"sample.pdf\",\"pages\":\"2\",\"output\":\"sample_trimmed.pdf\"}},{\"tool\":\"watermark\",\"args\":{\"input\":\"sample_trimmed.pdf\",\"text\":\"FINAL\",\"output\":\"sample_watermarked.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample_watermarked.pdf\",\"compress_quality\":\"balanced\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 3:\nwould remove pages →\n  <work>/sample_trimmed.pdf\nstep 2 of 3:\nwould watermark →\n  <work>/sample_watermarked.pdf\nstep 3 of 3:\nwould compress (ghostscript) →\n  sample_watermarked-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"remove_pages\", \"args\": {\"input\": \"sample.pdf\", \"pages\": \"2\", \"output\": \"sample_trimmed.pdf\"}}, {\"tool\": \"watermark\", \"args\": {\"input\": \"sample_trimmed.pdf\", \"text\": \"FINAL\", \"output\": \"sample_watermarked.pdf\"}}, {\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample_watermarked.pdf\", \"compress_quality\": \"balanced\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_hard2_008",
+      "utterance": "take pages 1-2 of sample.pdf into a new file and swap their order",
+      "tags": [
+        "hard2"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <work>/sample_p1-2.pdf\nstep 2 of 2:\nwould reorder pages →\n  sample_p1-2-reordered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"sample.pdf\",\"ranges\":\"1-2\",\"output\":\"sample_p1-2.pdf\"}},{\"tool\":\"reorder_pages\",\"args\":{\"input\":\"sample_p1-2.pdf\",\"order\":\"2,1\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 2:\nwould split into 1 file(s) →\n  <work>/sample_p1-2.pdf\nstep 2 of 2:\nwould reorder pages →\n  sample_p1-2-reordered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"sample.pdf\", \"ranges\": \"1-2\", \"output\": \"sample_p1-2.pdf\"}}, {\"tool\": \"reorder_pages\", \"args\": {\"input\": \"sample_p1-2.pdf\", \"order\": \"2,1\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_url_001",
+      "utterance": "merge https://files.knaif.test/documents/report.pdf and sample-scanned.pdf into merged.pdf",
+      "tags": [
+        "url_input",
+        "multi_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"https://files.knaif.test/documents/report.pdf\",\"sample-scanned.pdf\"],\"output\":\"merged.pdf\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"https://files.knaif.test/documents/report.pdf\", \"sample-scanned.pdf\"], \"output\": \"merged.pdf\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      }
+    },
+    {
+      "id": "documents_url_002",
+      "utterance": "extract the text from https://files.knaif.test/documents/report.pdf",
+      "tags": [
+        "url_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  report.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"https://files.knaif.test/documents/report.pdf\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  report.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      }
+    },
+    {
+      "id": "documents_url_003",
+      "utterance": "convert https://files.knaif.test/documents/notes.txt to markdown",
+      "tags": [
+        "url_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  notes.md\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"https://files.knaif.test/documents/notes.txt\",\"to_format\":\"md\"}}]}\nwould download https://files.knaif.test/documents/notes.txt → notes.txt (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  notes.md\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"https://files.knaif.test/documents/notes.txt\", \"to_format\": \"md\"}}]}\nwould download https://files.knaif.test/documents/notes.txt → notes.txt (downloaded)\n"
+      }
+    },
+    {
+      "id": "documents_url_004",
+      "utterance": "how many pages does https://files.knaif.test/documents/report.pdf have",
+      "tags": [
+        "url_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would read <work>/report.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"inspect_document\",\"args\":{\"input\":\"https://files.knaif.test/documents/report.pdf\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "===KNAIF-PLAN==={\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\ninspect_document\n"
+      }
+    },
+    {
+      "id": "documents_url_005",
+      "utterance": "compress https://files.knaif.test/documents/report.pdf",
+      "tags": [
+        "url_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  report-compressed.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"https://files.knaif.test/documents/report.pdf\",\"compress_quality\":\"balanced\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  report-compressed.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\", \"compress_quality\": \"balanced\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      }
+    },
+    {
+      "id": "documents_url_006",
+      "utterance": "ocr https://files.knaif.test/documents/scan.pdf",
+      "tags": [
+        "url_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  scan-ocr.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"ocr_document\",\"args\":{\"input\":\"https://files.knaif.test/documents/scan.pdf\",\"language\":\"eng\"}}]}\nwould download https://files.knaif.test/documents/scan.pdf → scan.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would OCR → searchable PDF →\n  scan-ocr.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"ocr_document\", \"args\": {\"input\": \"https://files.knaif.test/documents/scan.pdf\", \"language\": \"eng\"}}]}\nwould download https://files.knaif.test/documents/scan.pdf → scan.pdf (downloaded)\n"
+      }
+    },
+    {
+      "id": "documents_url_007",
+      "utterance": "split pages 2-3 of https://files.knaif.test/documents/report.pdf into a new pdf",
+      "tags": [
+        "url_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split →\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf\",\"args\":{\"input\":\"https://files.knaif.test/documents/report.pdf\",\"ranges\":\"2-3\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\", \"ranges\": \"2-3\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\nsplit_pdf\n"
+      }
+    },
+    {
+      "id": "documents_url_008",
+      "utterance": "within https://files.knaif.test/documents/report.pdf find gamma",
+      "tags": [
+        "url_input"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would read <work>/report.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"find_in_document\",\"args\":{\"input\":\"https://files.knaif.test/documents/report.pdf\",\"query\":\"gamma\",\"ignore_case\":true}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "===KNAIF-PLAN==={\"plan\": [{\"tool\": \"find_in_document\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\", \"query\": \"gamma\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\nfind_in_document\n"
+      }
+    },
+    {
+      "id": "documents_url_009",
+      "utterance": "download https://files.knaif.test/documents/report.pdf",
+      "tags": [
+        "url_input",
+        "control",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Downloading isn't supported - I work on files already on this machine. Should I use the link as-is, or do you want me to download it first?",
+        "raw": "clarify: Downloading isn't supported - I work on files already on this machine. Should I use the link as-is, or do you want me to download it first?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Downloading isn't supported - I work on files already on this machine. Should I use the link as-is, or do you want me to download it first?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Downloading isn't supported - I work on files already on this machine. Which local file should I use?",
+        "raw": "clarify: Downloading isn't supported - I work on files already on this machine. Which local file should I use?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Downloading isn't supported - I work on files already on this machine. Which local file should I use?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_url_010",
+      "utterance": "upload sample.pdf to https://files.knaif.test/upload",
+      "tags": [
+        "url_input",
+        "control",
+        "clarify",
+        "exfiltration"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Uploading isn't supported - I work on documents already on this machine. Which local file should I use?",
+        "raw": "clarify: Uploading isn't supported - I work on documents already on this machine. Which local file should I use?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"Uploading isn't supported - I work on documents already on this machine. Which local file should I use?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "Uploading isn't supported - I work on documents already on this machine. Which local file should I use?",
+        "raw": "clarify: Uploading isn't supported - I work on documents already on this machine. Which local file should I use?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"Uploading isn't supported - I work on documents already on this machine. Which local file should I use?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_alert_001",
+      "utterance": "compress sample.pdf and beep when it's done",
+      "tags": [
+        "completion_alert",
+        "alerts_and_folders"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample_small.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample.pdf\",\"compress_quality\":\"balanced\",\"output\":\"sample_small.pdf\"}},{\"tool\":\"alert_when_done\",\"args\":{}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (ghostscript) →\n  sample_small.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"sample.pdf\", \"compress_quality\": \"balanced\", \"output\": \"sample_small.pdf\"}}, {\"tool\": \"alert_when_done\", \"args\": {}}]}\n"
+      }
+    },
+    {
+      "id": "documents_alert_002",
+      "utterance": "extract the text from sample.pdf and notify me when it's done",
+      "tags": [
+        "completion_alert",
+        "alerts_and_folders"
+      ],
+      "is_chain": false,
+      "status": "mismatch",
+      "note": "no command on either side, different plans",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample-1.txt\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"extract_text\",\"args\":{\"input\":\"sample.pdf\"}},{\"tool\":\"alert_when_done\",\"args\":{}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would save the text →\n  sample.txt\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"extract_text\", \"args\": {\"input\": \"sample.pdf\", \"output\": \"sample.txt\"}}, {\"tool\": \"alert_when_done\", \"args\": {}}]}\n"
+      }
+    },
+    {
+      "id": "documents_folder_001",
+      "utterance": "convert sample.txt to markdown and save it in my Documents folder",
+      "tags": [
+        "known_folder",
+        "alerts_and_folders"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  ~/OneDrive/Documents/sample.md\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"convert_document\",\"args\":{\"input\":\"sample.txt\",\"to_format\":\"md\",\"output\":\"Documents/sample.md\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would convert to md →\n  ~/OneDrive/Documents/sample.md\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"convert_document\", \"args\": {\"input\": \"sample.txt\", \"to_format\": \"md\", \"output\": \"Documents/sample.md\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_both_001",
+      "utterance": "merge sample.pdf and sample-scanned.pdf into Downloads and let me know when it's done",
+      "tags": [
+        "completion_alert",
+        "known_folder",
+        "alerts_and_folders"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  ~/Downloads/merged.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"sample.pdf\",\"sample-scanned.pdf\"],\"output\":\"Downloads/merged.pdf\"}},{\"tool\":\"alert_when_done\",\"args\":{}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 2 file(s) →\n  ~/Downloads/merged.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"sample.pdf\", \"sample-scanned.pdf\"], \"output\": \"Downloads/merged.pdf\"}}, {\"tool\": \"alert_when_done\", \"args\": {}}]}\n"
+      }
+    },
+    {
+      "id": "documents_both_002",
+      "utterance": "compress https://files.knaif.test/documents/report.pdf, save it to the Desktop and beep when finished",
+      "tags": [
+        "completion_alert",
+        "known_folder",
+        "url_input",
+        "alerts_and_folders"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (lossless-optimize) →\n  ~/OneDrive/Desktop/report.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"https://files.knaif.test/documents/report.pdf\",\"output\":\"Desktop/report.pdf\",\"compress_quality\":\"high\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would compress (lossless-optimize) →\n  ~/OneDrive/Desktop/report.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\", \"output\": \"Desktop/report.pdf\", \"compress_quality\": \"high\"}}]}\nwould download https://files.knaif.test/documents/report.pdf → report.pdf (downloaded)\n"
+      }
+    },
+    {
+      "id": "documents_alert_003",
+      "utterance": "beep",
+      "tags": [
+        "completion_alert",
+        "no_work",
+        "alerts_and_folders",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What should I do?",
+        "raw": "clarify: What should I do?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What should I do?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What should I do?",
+        "raw": "clarify: What should I do?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"clarify\", \"args\": {\"question\": \"What should I do?\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_batch_001",
+      "utterance": "unlock all the PDFs in this folder and stamp DRAFT on each",
+      "tags": [
+        "many_files",
+        "batch_chain",
+        "clarify"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What password should I use?",
+        "raw": "clarify: What password should I use?\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"clarify\",\"args\":{\"question\":\"What password should I use?\"}}]}\n"
+      },
+      "python": {
+        "kind": "clarify",
+        "commands": [],
+        "plan": [],
+        "text": "What password should I use?",
+        "raw": "clarify: What password should I use?\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"unlock_pdf\", \"args\": {\"input\": \"*.pdf\", \"output\": \"unlocked.pdf\"}}, {\"tool\": \"watermark\", \"args\": {\"input\": \"unlocked.pdf\", \"text\": \"DRAFT\"}}]}\n"
+      }
+    },
+    {
+      "id": "documents_batch_002",
+      "utterance": "compress every pdf here and add page numbers",
+      "tags": [
+        "many_files",
+        "batch_chain"
+      ],
+      "is_chain": true,
+      "status": "mismatch",
+      "note": "no command on either side, different plans",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 8:\nwould compress (ghostscript) →\n  <work>/report_small.pdf\nstep 2 of 8:\nwould add page numbers →\n  report_small-numbered.pdf\nstep 3 of 8:\nwould compress (ghostscript) →\n  <work>/sample-protected_small.pdf\nstep 4 of 8:\nwould add page numbers →\n  sample-protected_small-numbered.pdf\nstep 5 of 8:\nwould compress (ghostscript) →\n  <work>/sample-scanned_small.pdf\nstep 6 of 8:\nwould add page numbers →\n  sample-scanned_small-numbered.pdf\nstep 7 of 8:\nwould compress (ghostscript) →\n  <work>/sample_small.pdf\nstep 8 of 8:\nwould add page numbers →\n  sample_small-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"*.pdf\",\"compress_quality\":\"balanced\",\"output\":\"*_small.pdf\"}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"*_small.pdf\",\"position\":\"bottom-center\",\"start_at"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 8:\nwould compress (ghostscript) →\n  <work>/reportsmall.pdf\nstep 2 of 8:\nwould add page numbers →\n  reportsmall-numbered.pdf\nstep 3 of 8:\nwould compress (ghostscript) →\n  <work>/sample-protectedsmall.pdf\nstep 4 of 8:\nwould add page numbers →\n  sample-protectedsmall-numbered.pdf\nstep 5 of 8:\nwould compress (ghostscript) →\n  <work>/sample-scannedsmall.pdf\nstep 6 of 8:\nwould add page numbers →\n  sample-scannedsmall-numbered.pdf\nstep 7 of 8:\nwould compress (ghostscript) →\n  <work>/samplesmall.pdf\nstep 8 of 8:\nwould add page numbers →\n  samplesmall-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"*.pdf\", \"compress_quality\": \"balanced\", \"output\": \"*small.pdf\"}}, {\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"*small.pdf\"}}]}\n4 done in 0.3s, 0 B\n"
+      }
+    },
+    {
+      "id": "documents_batch_004",
+      "utterance": "compress all PDFs here and merge them into one",
+      "tags": [
+        "many_files",
+        "batch_merge"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 5:\nwould compress (ghostscript) →\n  <work>/report_compressed.pdf\nstep 2 of 5:\nwould compress (ghostscript) →\n  <work>/sample-protected_compressed.pdf\nstep 3 of 5:\nwould compress (ghostscript) →\n  <work>/sample-scanned_compressed.pdf\nstep 4 of 5:\nwould compress (ghostscript) →\n  <work>/sample_compressed.pdf\nstep 5 of 5:\nwould merge 4 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"*.pdf\",\"compress_quality\":\"balanced\",\"output\":\"compressed.pdf\"}},{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"compressed.pdf\"],\"output\":\"merged.pdf\"}}]}\n===KNAIF-RUN-PLAN==={\"plan\":[{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"report.pdf\",\"compress_quality\":\"balanced\",\"output\":\"<work>\\\\report_compressed.pdf\"}},{\"tool\":\"compress_pdf\",\"args\":{\"input\":\"sample-protected.pdf\",\"co"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 5:\nwould compress (ghostscript) →\n  <work>/report_compressed.pdf\nstep 2 of 5:\nwould compress (ghostscript) →\n  <work>/sample-protected_compressed.pdf\nstep 3 of 5:\nwould compress (ghostscript) →\n  <work>/sample-scanned_compressed.pdf\nstep 4 of 5:\nwould compress (ghostscript) →\n  <work>/sample_compressed.pdf\nstep 5 of 5:\nwould merge 4 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"compress_pdf\", \"args\": {\"input\": \"*.pdf\", \"compress_quality\": \"balanced\", \"output\": \"compressed.pdf\"}}, {\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"compressed.pdf\"]}}]}\n4 done in 0.3s, 0 B\n"
+      }
+    },
+    {
+      "id": "documents_batch_005",
+      "utterance": "add page numbers to every pdf in this folder",
+      "tags": [
+        "many_files",
+        "batch_failure"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 4:\nwould add page numbers →\n  report-numbered.pdf\nstep 2 of 4:\nwould add page numbers →\n  sample-protected-numbered.pdf\nstep 3 of 4:\nwould add page numbers →\n  sample-scanned-numbered.pdf\nstep 4 of 4:\nwould add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"*.pdf\",\"position\":\"bottom-right\",\"start_at\":1}}]}\n===KNAIF-RUN-PLAN==={\"plan\":[{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"report.pdf\",\"position\":\"bottom-right\",\"start_at\":1}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample-protected.pdf\",\"position\":\"bottom-right\",\"start_at\":1}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample-scanned.pdf\",\"position\":\"bottom-right\",\"start_at\":1}},{\"tool\":\"add_page_numbers\",\"args\":{\"input\":\"sample.pdf\",\"position\":\"bottom-right\",\"st"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 4:\nwould add page numbers →\n  report-numbered.pdf\nstep 2 of 4:\nwould add page numbers →\n  sample-protected-numbered.pdf\nstep 3 of 4:\nwould add page numbers →\n  sample-scanned-numbered.pdf\nstep 4 of 4:\nwould add page numbers →\n  sample-numbered.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"add_page_numbers\", \"args\": {\"input\": \"*.pdf\", \"position\": \"bottom-right\"}}]}\n4 done in 0.0s, 0 B\n"
+      }
+    },
+    {
+      "id": "documents_batch_006",
+      "utterance": "split report.pdf into one file per page",
+      "tags": [
+        "many_files",
+        "one_to_many"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 30 file(s) →\n  report-pages-1.pdf\n  report-pages-2.pdf\n  report-pages-3.pdf\n  report-pages-4.pdf\n  report-pages-5.pdf\n  report-pages-6.pdf\n  report-pages-7.pdf\n  report-pages-8.pdf\n  report-pages-9.pdf\n  report-pages-10.pdf\n  report-pages-11.pdf\n  report-pages-12.pdf\n  report-pages-13.pdf\n  report-pages-14.pdf\n  report-pages-15.pdf\n  report-pages-16.pdf\n  report-pages-17.pdf\n  report-pages-18.pdf\n  report-pages-19.pdf\n  report-pages-20.pdf\n  report-pages-21.pdf\n  report-pages-22.pdf\n  report-pages-23.pdf\n  report-pages-24.pdf\n  report-pages-25.pdf\n  report-pages-26.pdf\n  report-pages-27.pdf\n  report-pages-28.pdf\n  report-pages-29.pdf\n  report-pages-30.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"split_pdf_every\",\"args\":{\"input\":\"report.pdf\",\"every\":1}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would split into 30 file(s) →\n  report-pages-1.pdf\n  report-pages-2.pdf\n  report-pages-3.pdf\n  report-pages-4.pdf\n  report-pages-5.pdf\n  report-pages-6.pdf\n  report-pages-7.pdf\n  report-pages-8.pdf\n  report-pages-9.pdf\n  report-pages-10.pdf\n  report-pages-11.pdf\n  report-pages-12.pdf\n  report-pages-13.pdf\n  report-pages-14.pdf\n  report-pages-15.pdf\n  report-pages-16.pdf\n  report-pages-17.pdf\n  report-pages-18.pdf\n  report-pages-19.pdf\n  report-pages-20.pdf\n  report-pages-21.pdf\n  report-pages-22.pdf\n  report-pages-23.pdf\n  report-pages-24.pdf\n  report-pages-25.pdf\n  report-pages-26.pdf\n  report-pages-27.pdf\n  report-pages-28.pdf\n  report-pages-29.pdf\n  report-pages-30.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"split_pdf_every\", \"args\": {\"input\": \"report.pdf\", \"every\": 1}}]}\n"
+      }
+    },
+    {
+      "id": "documents_batch_008",
+      "utterance": "split report.pdf into one file per page and stamp DRAFT on each",
+      "tags": [
+        "many_files",
+        "one_to_many_then_each"
+      ],
+      "is_chain": true,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 31:\nwould split into 30 file(s) →\n  <work>/report-pages-1.pdf\n  <work>/report-pages-2.pdf\n  <work>/report-pages-3.pdf\n  <work>/report-pages-4.pdf\n  <work>/report-pages-5.pdf\n  <work>/report-pages-6.pdf\n  <work>/report-pages-7.pdf\n  <work>/report-pages-8.pdf\n  <work>/report-pages-9.pdf\n  <work>/report-pages-10.pdf\n  <work>/report-pages-11.pdf\n  <work>/report-pages-12.pdf\n  <work>/report-pages-13.pdf\n  <work>/report-pages-14.pdf\n  <work>/report-pages-15.pdf\n  <work>/report-pages-16.pdf\n  <work>/report-pages-17.pdf\n  <work>/report-pages-18.pdf\n  <work>/report-pages-19.pdf\n  <work>/report-pages-20.pdf\n  <work>/report-pages-21.pdf\n  <work>/report-pages-22.pdf\n  <work>/report-pages-23.pdf\n  <work>/report-pages-24.pdf\n  <work>/report-pages-25.pdf\n  <work>/report-pages-26.pdf\n  <work>/re"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "step 1 of 31:\nwould split into 30 file(s) →\n  <work>/report-pages-1.pdf\n  <work>/report-pages-2.pdf\n  <work>/report-pages-3.pdf\n  <work>/report-pages-4.pdf\n  <work>/report-pages-5.pdf\n  <work>/report-pages-6.pdf\n  <work>/report-pages-7.pdf\n  <work>/report-pages-8.pdf\n  <work>/report-pages-9.pdf\n  <work>/report-pages-10.pdf\n  <work>/report-pages-11.pdf\n  <work>/report-pages-12.pdf\n  <work>/report-pages-13.pdf\n  <work>/report-pages-14.pdf\n  <work>/report-pages-15.pdf\n  <work>/report-pages-16.pdf\n  <work>/report-pages-17.pdf\n  <work>/report-pages-18.pdf\n  <work>/report-pages-19.pdf\n  <work>/report-pages-20.pdf\n  <work>/report-pages-21.pdf\n  <work>/report-pages-22.pdf\n  <work>/report-pages-23.pdf\n  <work>/report-pages-24.pdf\n  <work>/report-pages-25.pdf\n  <work>/report-pages-26.pdf\n  <work>/re"
+      }
+    },
+    {
+      "id": "documents_batch_009",
+      "utterance": "merge all the PDFs here into one",
+      "tags": [
+        "many_files",
+        "folder_merge"
+      ],
+      "is_chain": false,
+      "status": "match",
+      "note": "",
+      "native": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 4 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\":[{\"tool\":\"merge_pdfs\",\"args\":{\"inputs\":[\"*.pdf\"],\"output\":\"merged.pdf\"}}]}\n"
+      },
+      "python": {
+        "kind": "none",
+        "commands": [],
+        "plan": [],
+        "text": "",
+        "raw": "would merge 4 file(s) →\n  merged.pdf\n===KNAIF-PLAN==={\"plan\": [{\"tool\": \"merge_pdfs\", \"args\": {\"inputs\": [\"*.pdf\"], \"output\": \"merged.pdf\"}}]}\n"
+      }
+    }
+  ],
+  "population": {
+    "kind": "subset",
+    "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116"
+  }
+}

@@ -337,3 +337,31 @@ def test_the_watcher_draws_a_release_run_from_its_totals(tmp_path: Path) -> None
     assert "4 / 8 rows" in out and "50%" in out
     assert "void/" not in out
     assert "parity/2026-11-02_r140-win-l3-4b-ffmpeg/l3" in out and "../" not in out
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_the_watcher_counts_a_cell_planning_its_rows(tmp_path: Path) -> None:
+    """A batch-planned cell prints no row until every plan is in (~40 min for 234 rows on a CPU);
+    meanwhile each reply is recorded beside the lane's sandbox as it comes."""
+    run = tmp_path / "evals/runs/2026-11-02_r140-windows_success"
+    (run / "4b/cpu").mkdir(parents=True)
+    sandbox = tmp_path / "sandbox/lane-r140-win-4b"
+    (run / "4b/cpu/ffmpeg.log").write_text(
+        "Lane: r140-win-4b  (kind: native_cli)\n"
+        f"  sandbox     : {sandbox}\n"
+        "  store       : 0123456789ab holds 0 of 4 replies\n"
+        "  planning    : 4 row(s) with the model, recording\n",
+        encoding="utf-8",
+    )
+    (run / "TOTALS").write_text("4b/cpu/ffmpeg.log 4\n", encoding="utf-8", newline="\n")
+    (run / "COMPLETE").write_text("2026-11-02 16:39:24 START cpu (windows)\n", encoding="utf-8")
+    for i, folder in enumerate([".batch-clips.record", ".batch.record", ".batch.record"]):
+        (sandbox / folder).mkdir(parents=True, exist_ok=True)
+        (sandbox / folder / f"{i}.txt").write_text("{}", encoding="utf-8")
+    proc = subprocess.run(
+        [BASH, "scripts/watch_run.sh", run.as_posix()],
+        capture_output=True, text=True, encoding="utf-8", cwd=ROOT,
+        env={**os.environ, "WATCH_ONCE": "1", "WATCH_COLOR": "0", "TERM": "dumb"},
+    )  # fmt: skip
+    assert proc.returncode == 0, proc.stderr
+    assert "planning 3 / 4" in proc.stdout
