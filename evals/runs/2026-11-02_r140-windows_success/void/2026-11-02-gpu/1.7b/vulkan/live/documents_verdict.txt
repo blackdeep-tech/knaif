@@ -1,0 +1,10 @@
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-1.7b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/1.7b/documents_qwen3-1.7b-sft-v9-flat-q6_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+NOT ACCEPTED - 2 of 124 thresholds unmet:
+  [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None
+  [regression] documents_both_002#0: Python passed it, the binary did not (knaif 0.75 < Python's 1.0). Python: compress_pdf -> '{"plan": [{"tool": "compress_pdf", "args": {"input": "https://files.knaif.test/documents/report.pdf", "compress_quality": "small", "output": "Desktop/report_small.pdf"}}]}'; binary: compress_pdf -> None
+  recorded L4 evidence: evals/acceptance/documents.json
