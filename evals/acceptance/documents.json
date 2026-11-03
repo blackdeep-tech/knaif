@@ -137,6 +137,28 @@
             "kind": "subset",
             "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
             "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|cuda",
+            "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\cuda\\live\\documents_r140-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
           }
         },
         "knaif-qwen3-1.7b-v2|windows-x64|vulkan": {
@@ -167,6 +189,28 @@
             "kind": "subset",
             "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
             "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|vulkan",
+            "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\vulkan\\live\\documents_r140-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
           }
         },
         "knaif-qwen3-4b-v2|windows-x64|cpu": {
@@ -233,6 +277,28 @@
             "kind": "subset",
             "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
             "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|cpu",
+            "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\cpu\\live\\documents_r140-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
           }
         },
         "knaif-qwen3-4b-v2|linux-x64|cuda": {
@@ -1157,7 +1223,29 @@
           "passed": false,
           "backend": "cuda",
           "git_sha": "25ef79aedfc9099db6806c94c64c8afb0d3ff3dd",
-          "git_dirty": true
+          "git_dirty": true,
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "plan disagreement above the 0.0183 bound with 0 port bugs and 0 capabilities native lacks; the owner accepts the rows as plan differences between the two runtimes' llama.cpp builds, bound unchanged, 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "2026-11-02_r140-win-l3-4b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.019417 <= 0.0183 passed=False",
+            "cell": "knaif-qwen3-4b-v2",
+            "run": "evals\\parity\\2026-11-02_r140-win-l3-4b-documents",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
+          }
         },
         "knaif-qwen3-1.7b-v2": {
           "population": {
@@ -1189,7 +1277,29 @@
           "passed": false,
           "backend": "cuda",
           "git_sha": "25ef79aedfc9099db6806c94c64c8afb0d3ff3dd",
-          "git_dirty": true
+          "git_dirty": true,
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "plan disagreement above the 0.0183 bound with 0 port bugs and 0 capabilities native lacks; the owner accepts the rows as plan differences between the two runtimes' llama.cpp builds, bound unchanged, 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "2026-11-02_r140-win-l3-1.7b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.029126 <= 0.0183 passed=False",
+            "cell": "knaif-qwen3-1.7b-v2",
+            "run": "evals\\parity\\2026-11-02_r140-win-l3-1.7b-documents",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
+          }
         }
       }
     }
