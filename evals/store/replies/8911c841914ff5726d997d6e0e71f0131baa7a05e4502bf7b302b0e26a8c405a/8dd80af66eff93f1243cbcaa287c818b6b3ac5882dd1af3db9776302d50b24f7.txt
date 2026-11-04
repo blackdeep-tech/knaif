@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "What should be improved: file size, quality, resolution, audio, or platform compatibility?"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "alert_when_done", "args": {}}]}

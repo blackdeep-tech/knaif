@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "split_pdf_every", "args": {"input": "report.pdf", "every": 1}}]}

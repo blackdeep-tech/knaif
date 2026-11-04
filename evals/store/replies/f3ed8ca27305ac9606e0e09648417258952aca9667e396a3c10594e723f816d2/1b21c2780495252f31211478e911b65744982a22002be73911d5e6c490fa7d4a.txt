@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_pdf", "args": {"input": "*.pdf", "compress_quality": "balanced", "output": "compressed.pdf"}}, {"tool": "merge_pdfs", "args": {"inputs": "compressed.pdf"}}]}

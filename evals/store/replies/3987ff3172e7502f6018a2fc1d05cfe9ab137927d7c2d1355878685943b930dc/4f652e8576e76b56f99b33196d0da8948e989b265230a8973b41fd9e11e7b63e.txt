@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_document", "args": {"input": "sample.md", "to_format": "txt", "output": "sample.txt"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "trim_video", "args": {"inputs": ["*.mp4"], "start": "00:00:02", "output": "trimmed_clips.mp4"}}, {"tool": "concat_video", "args": {"inputs": ["trimmed_clips.mp4"]}}]}

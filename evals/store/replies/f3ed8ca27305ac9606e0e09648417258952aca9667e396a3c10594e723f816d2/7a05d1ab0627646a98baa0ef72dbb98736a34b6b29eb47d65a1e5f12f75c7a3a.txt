@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "concat_video", "args": {"inputs": ["clip.mp4", "clip.mov"]}}]}

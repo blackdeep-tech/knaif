@@ -342,6 +342,11 @@ accept() {  # $1 model, $2 lane, $3 backend, $4 board, $5 skill, $6 dir
   rel < "$d/${skill}_accept.log" > "$d/${skill}_verdict.txt"
   { echo "=== $STAGE $model $backend $skill (placement $(placement "$board"))"; cat "$d/${skill}_verdict.txt"; echo "exit $rc"; } \
     >> "$R/verdicts.txt"
+  judge "$model" "$backend" "$skill" "$d"
+}
+
+judge() {  # $1 model, $2 backend, $3 skill, $4 dir: what a cell's written verdict means for the stage
+  local model="$1" backend="$2" skill="$3" d="$4"
   if grep -q "measures the full corpus" "$d/${skill}_verdict.txt"; then
     missed "$model $backend $skill: no earlier full-corpus cell on this platform; its first release measures the full corpus (owner)"
     return 0
@@ -351,7 +356,7 @@ accept() {  # $1 model, $2 lane, $3 backend, $4 board, $5 skill, $6 dir
     return 0
   fi
   if ! grep -qE "^(NOT )?ACCEPTED" "$d/${skill}_verdict.txt" || ! grep -q "recorded L4 evidence" "$d/${skill}_verdict.txt"; then
-    failed "accept-native $model $backend $skill: no verdict recorded (exit $rc)"
+    failed "accept-native $model $backend $skill: no verdict recorded"
     record_failed_cell "$model" "$backend" "$skill" "accept-native recorded no verdict"; return 1
   fi
   log "$STAGE $model $backend $skill: $(grep -m1 -E '^(NOT )?ACCEPTED' "$d/${skill}_verdict.txt")"
@@ -360,15 +365,34 @@ accept() {  # $1 model, $2 lane, $3 backend, $4 board, $5 skill, $6 dir
   return 0
 }
 
+# What a finished cell's grade rests on besides the binary and the model: the committed eval code.
+# Empty while that code has local changes, so such a cell is never kept.
+harness_fp() {  # $1 skill
+  git diff --quiet HEAD -- python/core/knaif "skills/$1" 2> /dev/null || return 0
+  echo "$(git rev-parse HEAD:python/core/knaif) $(git rev-parse "HEAD:skills/$1")"
+}
+
 cell() {  # $1 model, $2 backend, [$3 live, $4 skills]: the subset cell
-  local model="$1" backend="$2" how="${3:-store}" lane d skill
+  local model="$1" backend="$2" how="${3:-store}" lane d skill key fp
   lane="$(lane_for "$model" "$backend")"
   d="$R/$model/$backend"; [ "$how" = live ] && d="$d/live"
   mkdir -p "$d"
   backend_env "$backend"
   for skill in ${4:-$SKILLS}; do
+    # A stage run again after a stop keeps each cell that finished, if nothing that graded it
+    # changed; FRESH=1 runs every cell again.
+    fp="$(harness_fp "$skill")"
+    key=""; [ -n "$fp" ] && key="$EXE_SHA $(gguf_sha "$model") $how $fp"
+    if [ -z "${FRESH:-}" ] && [ -n "$key" ] && [ -s "$d/${skill}_verdict.txt" ] \
+      && [ "$(cat "$d/.$skill.done" 2> /dev/null)" = "$key" ]; then
+      log "$STAGE $model $backend $skill: kept, finished in an earlier attempt of this stage"
+      judge "$model" "$backend" "$skill" "$d"
+      continue
+    fi
+    rm -f "$d/.$skill.done"
     run_cell "$skill" "$lane" "$d" "$how" || { record_failed_cell "$model" "$backend" "$skill" "the lane run failed or was VOID"; continue; }
-    accept "$model" "$lane" "$backend" "$d/${skill}_${lane}_success.json" "$skill" "$d"
+    accept "$model" "$lane" "$backend" "$d/${skill}_${lane}_success.json" "$skill" "$d" \
+      && [ -n "$key" ] && echo "$key" > "$d/.$skill.done"
   done
 }
 
@@ -414,48 +438,123 @@ for row in load_corpus(corpus):
         if (row.id, j) in keep:
             print(u.replace('\n', ' '))" "$1"
 }
+subset_size() { subset_utterances "$1" | wc -l | tr -d ' '; }
+
+# -- TOTALS: the stage's row logs and how many rows each will hold, for scripts/watch_run.sh -----
+# Appended, in the order the stage runs them; a log already named keeps its line (a stage run again).
+# Only the watcher reads it: nothing here may fail a stage.
+stage_totals() {
+  local date p model backend skill k v n=""
+  date="${R##*/}"; date="${date%%_*}"; p="../../parity/${date}_$VER-$TAG"
+  for skill in $SKILLS; do
+    v="$(subset_size "$skill" 2>/dev/null)"; [ -n "$v" ] || return 0
+    n="$n $skill=$v"
+  done
+  size() { k=" $1="; v="${n#*"$k"}"; echo "${v%% *}"; }
+  {
+    case "$STAGE" in
+      gpu) for model in $MODELS; do for backend in $GPU_BACKENDS; do for skill in $SKILLS; do
+             echo "$model/$backend/$skill.log $(size "$skill")"; done; done; done ;;
+      cpu) for model in $MODELS; do for skill in $SKILLS; do
+             echo "$model/cpu/$skill.log $(size "$skill")"; done; done ;;
+      live) echo "$MODEL/$BACKEND/live/$SKILL.log $(size "$SKILL")" ;;
+      l3) for model in $MODELS; do for skill in $SKILLS; do
+            echo "$p-l3-$model-$skill/l3.log $(size "$skill")"; done; done ;;
+      daemon) for model in $MODELS; do for k in inprocess daemon; do for skill in $SKILLS; do
+                echo "$p-daemon-plan-equality/$model/$skill.$k.jsonl $(size "$skill")"; done; done; done ;;
+    esac
+  } | while read -r k v; do
+    [ -f "$R/TOTALS" ] && awk -v k="$k" '$1 == k { f = 1 } END { exit !f }' "$R/TOTALS" && continue
+    echo "$k $v" >> "$R/TOTALS"
+  done
+  return 0
+}
+
 daemon_requests() {
   env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" daemon status 2>/dev/null | sed -n 's/^ *requests: *\([0-9]*\).*/\1/p'
 }
+# One pass of the daemon check over a skill's utterances, resumable: the complete lines a stopped
+# pass wrote are kept (a last line without its newline was cut mid-write and is dropped) and the
+# rest are planned and appended. Each line is one utterance planned from a fresh context, which is
+# why the two passes can be byte-identical at all, so a pass planned in two runs equals one.
+# Sets PLANNED to how many utterances this run planned.
+daemon_pass() {  # $1 model dir, $2 skill, $3 inprocess|daemon, $4 gguf, $5 n
+  local dir="$1" skill="$2" k="$3" m="$4" n="$5" out done rest
+  out="$dir/$skill.$k.jsonl"
+  done=0; [ -f "$out" ] && done="$(wc -l < "$out" | tr -d ' ')"
+  [ "$done" -le "$n" ] || done=0
+  if [ "$done" -gt 0 ]; then head -n "$done" "$out" > "$out.tmp" && mv "$out.tmp" "$out"; else : > "$out"; fi
+  PLANNED=$((n - done))
+  [ "$PLANNED" -gt 0 ] || return 0
+  [ "$done" -gt 0 ] && log "daemon ${dir##*/} $skill $k: kept $done of $n lines from a stopped attempt"
+  rest="$dir/$skill.$k.rest.txt"
+  tail -n "+$((done + 1))" "$dir/$skill.utterances.txt" > "$rest"
+  rest="$(abspath "$rest")"   # the binary runs in the fixture folder
+  if [ "$k" = inprocess ]; then
+    (cd "sandbox/fixtures/$skill" && env "${ENVS[@]}" KNAIF_NO_DAEMON=1 "$EXE" plan --skill "$skill" --model "$m" \
+      --batch "$rest" --json) >> "$out" 2>> "$R/daemon_${dir##*/}_$skill.$k.err"
+  else
+    (cd "sandbox/fixtures/$skill" && env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" plan --skill "$skill" --model "$m" \
+      --batch "$rest" --json) >> "$out" 2>> "$R/daemon_${dir##*/}_$skill.$k.err"
+  fi
+  local rc=$?
+  rm -f "$rest"
+  return $rc
+}
+
 stage_daemon() {
-  local date d model m skill n rc before after a b errs list
+  local date d model m skill n rc before after a b errs key todo
   date="${R##*/}"; date="${date%%_*}"
   d="evals/parity/${date}_$VER-$TAG-daemon-plan-equality"
   # A client that sets generation overrides never uses a daemon (daemon.rs, disabled_by_env).
   unset KNAIF_N_THREADS KNAIF_N_THREADS_BATCH
   backend_env "$DAEMON_BACKEND"
   for model in $MODELS; do
-    rm -rf "${d:?}/$model" && mkdir -p "$d/$model"
+    # A stage run again keeps what a stopped attempt planned with this binary and model;
+    # FRESH=1 starts over.
+    key="$EXE_SHA $(gguf_sha "$model")"
+    if [ -n "${FRESH:-}" ] || [ "$(cat "$d/$model/key" 2> /dev/null)" != "$key" ]; then
+      rm -rf "${d:?}/$model" && mkdir -p "$d/$model" && echo "$key" > "$d/$model/key"
+    fi
+    rm -f "$d/$model/result.txt"
     m="$(abspath "$(gguf "$model")")"
     env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" daemon stop > /dev/null 2>&1
+    todo=0
     for skill in $SKILLS; do
       regen "$skill" "$R/fixtures.log" || return 1
-      subset_utterances "$skill" > "$d/$model/$skill.utterances.txt" || { failed "daemon $model $skill: listing"; return 1; }
+      subset_utterances "$skill" > "$d/$model/$skill.utterances.new" || { failed "daemon $model $skill: listing"; return 1; }
+      # Lines are kept only against the same utterances.
+      if ! cmp -s "$d/$model/$skill.utterances.new" "$d/$model/$skill.utterances.txt"; then
+        mv "$d/$model/$skill.utterances.new" "$d/$model/$skill.utterances.txt"
+        rm -f "$d/$model/$skill.inprocess.jsonl" "$d/$model/$skill.daemon.jsonl"
+      else
+        rm -f "$d/$model/$skill.utterances.new"
+      fi
       n="$(wc -l < "$d/$model/$skill.utterances.txt" | tr -d ' ')"
-      list="$(abspath "$d/$model/$skill.utterances.txt")"
-      (cd "sandbox/fixtures/$skill" && env "${ENVS[@]}" KNAIF_NO_DAEMON=1 "$EXE" plan --skill "$skill" --model "$m" \
-        --batch "$list" --json) \
-        > "$d/$model/$skill.inprocess.jsonl" 2> "$R/daemon_${model}_$skill.inprocess.err"
+      daemon_pass "$d/$model" "$skill" inprocess "$m" "$n"
       rc=$?
       [ $rc -eq 0 ] && [ "$(wc -l < "$d/$model/$skill.inprocess.jsonl" | tr -d ' ')" = "$n" ] \
         || { failed "daemon $model $skill: the in-process pass failed or is incomplete"; return 1; }
+      [ "$(wc -l 2> /dev/null < "$d/$model/$skill.daemon.jsonl" | tr -d ' ')" = "$n" ] || todo=1
     done
-    env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" daemon start --model "$m" 2>&1 | rel > "$d/$model/daemon.txt" \
-      || { failed "daemon $model: daemon start failed"; return 1; }
+    if [ $todo -ne 0 ]; then
+      env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" daemon start --model "$m" 2>&1 | rel >> "$d/$model/daemon.txt" \
+        || { failed "daemon $model: daemon start failed"; return 1; }
+    fi
     for skill in $SKILLS; do
       n="$(wc -l < "$d/$model/$skill.utterances.txt" | tr -d ' ')"
-      list="$(abspath "$d/$model/$skill.utterances.txt")"
-      before="$(daemon_requests)"
-      [ -n "$before" ] || { failed "daemon $model $skill: no daemon running"; return 1; }
-      (cd "sandbox/fixtures/$skill" && env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" plan --skill "$skill" --model "$m" \
-        --batch "$list" --json) \
-        > "$d/$model/$skill.daemon.jsonl" 2> "$R/daemon_${model}_$skill.daemon.err"
+      before=0
+      if [ $todo -ne 0 ]; then
+        before="$(daemon_requests)"
+        [ -n "$before" ] || { failed "daemon $model $skill: no daemon running"; return 1; }
+      fi
+      daemon_pass "$d/$model" "$skill" daemon "$m" "$n"
       rc=$?
-      after="$(daemon_requests)"
+      after="$before"; [ "$PLANNED" -gt 0 ] && after="$(daemon_requests)"
       [ $rc -eq 0 ] && [ "$(wc -l < "$d/$model/$skill.daemon.jsonl" | tr -d ' ')" = "$n" ] \
         || { failed "daemon $model $skill: the daemon pass failed or is incomplete"; continue; }
-      [ -n "$after" ] && [ $((after - before)) -ge "$n" ] \
-        || { failed "daemon $model $skill: the daemon served $((${after:-0} - before)) of $n requests"; continue; }
+      [ -n "$after" ] && [ $((after - before)) -ge "$PLANNED" ] \
+        || { failed "daemon $model $skill: the daemon served $((${after:-0} - before)) of $PLANNED requests"; continue; }
       errs="$(grep -c '"error"' "$d/$model/$skill.inprocess.jsonl")"
       [ "$errs" -lt "$n" ] || { failed "daemon $model $skill: every line is an error envelope"; continue; }
       a="$(sha256_of "$d/$model/$skill.inprocess.jsonl")"
@@ -539,6 +638,7 @@ release_stage() {
         fi
       fi
       verify_cuda
+      stage_totals
       case "$STAGE" in
         setup)
           if [ -n "$HAS_CUDA" ]; then log "END $STAGE: CUDA payload installed and verified"

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_speed", "args": {"inputs": ["https://files.knaif.test/ffmpeg/talk.mp4"], "speed": 2.0}}]}

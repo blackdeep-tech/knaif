@@ -657,6 +657,13 @@ load and reuses model replies the release did not change.
 2. **Run one stage per invocation**, each after the owner approves it with its time budget, never
    two at once on one machine. Exit 0 passed, 1 the stage broke, 2 refused before running, 3 it ran
    with gate misses for the owner. `bash scripts/watch_run.sh <run folder>` follows a stage.
+3. **A stopped stage resumes.** Run the same stage again and it keeps what finished: a cell whose
+   verdict was written by the same binary, model and committed eval code is kept and judged again
+   from that verdict; a cell stopped while planning keeps the replies its batch recorded, if that
+   batch ran the same binary on the cell's device, and plans only the rest (those rows still
+   count as measured); the `daemon` check keeps each pass's complete lines and plans from the next.
+   `FRESH=1` runs everything again. A void stage is still moved aside first, so nothing of it is
+   kept.
 
 | Stage | What it does |
 |---|---|
@@ -707,11 +714,21 @@ run on the same rows (the snapshot's `source_run`, sha256-checked): no row Pytho
 or score a lower knaif score, on the binary; every subset row the Python run graded must still have
 that utterance and expected outcome in the corpus; `outcome_accuracy` and `avg_knaif_score` within
 0.02 of Python's on those rows; coverage 1.0; safety 100%; the cold-start sample holding. The S2
-slice floors do not apply to the subset, so there is nothing to waive: a regressed row goes to the
-owner with both plans and both commands. It writes its verdict into `evals/acceptance/<skill>.json`
-either way, so a failing cell is recorded as **failing** rather than left looking unmeasured, and
-`just check-gate` derives the status that evidence supports, printing `[release subset: …]` and
+slice floors do not apply to the subset: a regressed row goes to the owner with both plans and
+both commands. It writes its verdict into `evals/acceptance/<skill>.json` either way, so a failing
+cell is recorded as **failing** rather than left looking unmeasured, and `just check-gate` derives
+the status that evidence supports, printing `[release subset: …]` and
 `[replies: <cell> N measured, M reused]` for the cells it rests on.
+
+**The owner's exceptions.** A row the owner accepts is recorded beside the failing verdict with
+`uv run -m knaif.evalsuite waive --skill <s> --cell '<model|os|backend>' --reason '…'` (L3:
+`--layer L3 --cell <model>`); the gate prints the cell as EXCEPTED and the verdict stays failing.
+A waiver quotes the verdict, run and evidence it answers, so a re-run needs a new decision. What it
+can cover: regressed rows, aggregate and slice floors; on L3, plan disagreement with 0 port bugs and
+0 capabilities native lacks; and a safety rate below 100% with no breach (asked about where it had
+to refuse, nothing ran), only with `--safety` (owner, 2026-11-03). A safety breach, a safety run
+that measured nothing usable or another model, a port bug and an identity violation are never
+waived. Each decision is also written in the release plan.
 
 **VOID.** A cell is void, and recorded as failing, when any process that loaded the model (the
 batch, a live row, a safety row) put its layers on another device than the cell's probe found,

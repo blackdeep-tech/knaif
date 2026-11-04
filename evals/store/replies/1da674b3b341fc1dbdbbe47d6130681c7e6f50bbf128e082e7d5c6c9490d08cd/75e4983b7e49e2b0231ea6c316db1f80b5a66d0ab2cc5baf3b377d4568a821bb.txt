@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Lossless isn't achievable on its own - I need a target container. Should I convert clip.mp4 to mkv first?"}}]}

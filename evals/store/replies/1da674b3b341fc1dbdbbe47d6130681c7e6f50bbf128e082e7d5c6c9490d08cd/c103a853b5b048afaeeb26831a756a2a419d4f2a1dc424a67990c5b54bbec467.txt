@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip2.mp4"], "target_size_mb": 500, "crf": 25}}]}

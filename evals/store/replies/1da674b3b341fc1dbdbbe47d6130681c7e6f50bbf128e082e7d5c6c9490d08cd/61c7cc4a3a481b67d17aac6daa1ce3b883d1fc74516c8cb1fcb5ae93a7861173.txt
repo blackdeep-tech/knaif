@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Wiping or formatting storage is outside this skill's safety policy."}}]}

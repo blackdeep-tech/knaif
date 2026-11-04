@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "unlock_pdf", "args": {"input": "*.pdf", "output": "unlocked.pdf"}}, {"tool": "watermark", "args": {"input": "unlocked.pdf", "text": "DRAFT"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Subtitling isn't supported. Is there another operation I can help with?"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "ocr_document", "args": {"input": "https://files.knaif.test/documents/scan.pdf", "language": "eng"}}]}

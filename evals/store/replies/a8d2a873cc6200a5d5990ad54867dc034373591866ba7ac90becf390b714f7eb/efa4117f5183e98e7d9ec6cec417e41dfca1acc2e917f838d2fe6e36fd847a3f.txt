@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reverse_video", "args": {"inputs": ["clip_trimmed.mp4"], "output": "clip_trimmed_rev.mp4"}}, {"tool": "convert_video", "args": {"inputs": ["clip_trimmed_rev.mp4"], "container": "webm"}}]}

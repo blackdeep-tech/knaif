@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["*.mp4"], "height": 720, "keep_aspect_ratio": true, "output": "720p_videos.mp4"}}, {"tool": "strip_audio", "args": {"inputs": ["720p_videos.mp4"]}}]}

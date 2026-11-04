@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 720, "output": "clip_720p.mp4"}}, {"tool": "strip_audio", "args": {"inputs": ["clip_720p.mp4"], "output": "clip_720p.webm"}}]}

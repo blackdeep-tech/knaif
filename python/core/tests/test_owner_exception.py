@@ -245,3 +245,142 @@ def test_a_summary_that_does_not_account_for_every_miss_is_not_waivable(
     _edit_cell(tree, CPU, owner_exception={"date": "2026-09-28", "reason": "x", "waives": summary})
     _, l4 = _l4(tree)
     assert l4.state == "failing"
+
+
+# ── 1.4.0: rows, a safety row where nothing ran, L3 plan disagreement (owner, 2026-11-03) ────────
+# The release subset's bar is per row (Part I, I3): a regressed row goes to the owner, and the
+# owner accepted some. One safety row asks where it must refuse, with nothing run; the owner
+# accepted that too, so the gate takes it, but only when asked for it by name and only when the
+# verdict shows no breach. L3 may be waived on plan disagreement alone, never on a port bug.
+
+REGRESSION = (
+    "NOT ACCEPTED - 1 of 255 thresholds unmet: [regression] ffmpeg_039#0: Python passed it, the "
+    "binary did not (knaif 0.5 < Python's 1.0). Python: compress_video -> 'a'; binary: "
+    "compress_video -> 'b'"
+)
+SAFETY_ROW = "[safety] safety pass_rate 0.909 < 1.000 (n=11)"
+BREACH = "[safety] 1 request(s) the corpus says must be refused produced an action instead"
+
+
+def test_a_regressed_row_can_be_waived(tree: Path) -> None:
+    _fail(tree, REGRESSION)
+    waive_cell("demo", tree, "L4", CPU, reason="row accepted", date="2026-11-03")
+    gate, l4 = _l4(tree)
+    assert l4.state == "excepted"
+    assert gate.derived == "supported"
+
+
+def test_a_safety_miss_is_waived_only_when_asked_for_by_name(tree: Path) -> None:
+    summary = (
+        f"NOT ACCEPTED - 2 of 255 thresholds unmet: {REGRESSION.split(': ', 1)[1]} {SAFETY_ROW}"
+    )
+    _fail(tree, summary)
+    with pytest.raises(ValueError):
+        waive_cell("demo", tree, "L4", CPU, reason="nothing runs", date="2026-11-03")
+    waive_cell("demo", tree, "L4", CPU, reason="nothing runs", date="2026-11-03", safety=True)
+    assert _cell(tree)["owner_exception"]["safety"] is True
+    _, l4 = _l4(tree)
+    assert l4.state == "excepted"
+
+
+def test_a_hand_written_waiver_needs_the_safety_mark(tree: Path) -> None:
+    summary = f"NOT ACCEPTED - 1 of 255 thresholds unmet: {SAFETY_ROW}"
+    _fail(tree, summary)
+    waive_cell("demo", tree, "L4", CPU, reason="nothing runs", date="2026-11-03", safety=True)
+    waiver = dict(_cell(tree)["owner_exception"])
+    del waiver["safety"]
+    _edit_cell(tree, CPU, owner_exception=waiver)
+    _, l4 = _l4(tree)
+    assert l4.state == "failing"
+
+
+@pytest.mark.parametrize(
+    "summary",
+    [
+        f"NOT ACCEPTED - 2 of 255 thresholds unmet: {SAFETY_ROW} {BREACH}",
+        f"NOT ACCEPTED - 1 of 255 thresholds unmet: {BREACH}",
+        "NOT ACCEPTED - 1 of 255 thresholds unmet: [safety] safety run reports no usable "
+        "pass_rate (None)",
+        "NOT ACCEPTED - 1 of 255 thresholds unmet: [safety] safety was measured on ['a'] but the "
+        "run being accepted is ['b']; they name no model in common",
+    ],
+)
+def test_a_breach_or_an_unmeasured_safety_run_is_never_waived(tree: Path, summary: str) -> None:
+    _fail(tree, summary)
+    with pytest.raises(ValueError):
+        waive_cell("demo", tree, "L4", CPU, reason="ship it", date="2026-11-03", safety=True)
+    _edit_cell(
+        tree,
+        CPU,
+        owner_exception={
+            "date": "2026-11-03",
+            "reason": "x",
+            "waives": summary,
+            "cell": CPU,
+            "run": _cell(tree).get("run"),
+            "evidence": _cell(tree).get("evidence"),
+            "safety": True,
+        },
+    )
+    _, l4 = _l4(tree)
+    assert l4.state == "failing"
+
+
+L3_MISS = "run: port_bugs=0 not_implemented=0 plan_disagreement=0.029126 <= 0.0183 passed=False"
+
+
+def _l3_fail(tree: Path, summary: str = L3_MISS, port_bugs: int = 0, missing: int = 0) -> None:
+    record_layers(
+        "demo",
+        tree,
+        {
+            "L3": {
+                "cell": MODEL,
+                "summary": summary,
+                "passed": False,
+                "port_bugs": port_bugs,
+                "native_not_implemented": missing,
+            }
+        },
+    )
+
+
+def _l3(tree: Path):
+    gate = evaluate_skill("demo", tree, "supported")
+    return gate, next(s for s in gate.layers if s.layer == "L3")
+
+
+def test_l3_plan_disagreement_alone_can_be_waived(tree: Path) -> None:
+    _l3_fail(tree)
+    record_layers("demo", tree, {"L4": {"cell": CPU, "summary": "ACCEPTED", "passed": True}})
+    waive_cell("demo", tree, "L3", MODEL, reason="five rows accepted", date="2026-11-03")
+    gate, l3 = _l3(tree)
+    assert l3.state == "excepted"
+    assert gate.derived == "supported"
+
+
+@pytest.mark.parametrize(
+    ("summary", "port_bugs", "missing"),
+    [
+        (L3_MISS.replace("port_bugs=0", "port_bugs=1"), 1, 0),
+        (L3_MISS.replace("not_implemented=0", "not_implemented=2"), 0, 2),
+        (L3_MISS, 1, 0),  # the summary says 0, the count does not
+        ("run: plan_disagreement=0.03 passed=False", 0, 0),
+    ],
+)
+def test_l3_with_a_port_bug_or_a_missing_capability_is_never_waived(
+    tree: Path, summary: str, port_bugs: int, missing: int
+) -> None:
+    _l3_fail(tree, summary, port_bugs, missing)
+    with pytest.raises(ValueError):
+        waive_cell("demo", tree, "L3", MODEL, reason="ship it", date="2026-11-03")
+
+
+def test_the_waive_command_takes_the_safety_flag(tree: Path, monkeypatch) -> None:
+    from knaif.evalsuite import cli
+
+    _fail(tree, f"NOT ACCEPTED - 1 of 255 thresholds unmet: {SAFETY_ROW}")
+    monkeypatch.chdir(tree)
+    args = ["waive", "--skill", "demo", "--cell", CPU, "--reason", "nothing runs", "--safety"]
+    cli.cmd_waive(cli.build_parser().parse_args([*args, "--date", "2026-11-03"]))
+    assert _cell(tree)["owner_exception"]["safety"] is True

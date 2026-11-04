@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "rotate_pages", "args": {"input": "sample.pdf", "degrees": 180, "output": "sample_rotated.pdf"}}, {"tool": "watermark", "args": {"input": "sample_rotated.pdf", "text": "DRAFT"}}]}

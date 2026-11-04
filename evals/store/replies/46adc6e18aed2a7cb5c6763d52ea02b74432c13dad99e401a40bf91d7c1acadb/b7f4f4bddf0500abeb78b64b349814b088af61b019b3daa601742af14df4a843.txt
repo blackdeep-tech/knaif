@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "trim_video", "args": {"input": "mov_file.mov", "start": "00:00:01", "end": "00:00:05"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reverse_video", "args": {"inputs": ["4K_clip.mp4"], "include_audio": true, "output": "4K_clip_rev.mp4"}}, {"tool": "prepare_for_platform", "args": {"inputs": ["4K_clip_rev.mp4"], "platform": "instagram_reels", "preview": true}}]}

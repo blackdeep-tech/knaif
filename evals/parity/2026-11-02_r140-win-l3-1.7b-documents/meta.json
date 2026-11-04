@@ -1,0 +1,51 @@
+{
+  "purpose": "knaif 1.4.0 L3 on the release subset, frozen windows artifact (4240522e8f3d71fb9769240ffa6d46a496edcf08), cuda",
+  "captured": "2026-11-02",
+  "git_sha": "25ef79aedfc9099db6806c94c64c8afb0d3ff3dd",
+  "git_branch": "chore/r1.4.0-evidence-rc2",
+  "git_dirty": true,
+  "corpus": {
+    "path": "skills\\documents\\data\\eval.jsonl",
+    "rows_compared": 103,
+    "sha256": "bbc743ee00c46f8f306d50bff3f4fe082cfddd29aebd4d0ff5da11eeea55a5c8"
+  },
+  "model": {
+    "path": "<repo>\\models\\knaif-qwen3-1.7b-v2-q6_k.gguf",
+    "sha256": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+    "bytes": 1417754976
+  },
+  "binary": {
+    "path": "<repo>\\sandbox\\r140\\artifact\\knaif-1.4.0-windows-x64\\bin\\knaif.exe",
+    "sha256": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+  },
+  "backend": "cuda",
+  "native_n_gpu_layers": null,
+  "backend_note": "Set $KNAIF_PARITY_BACKEND (cpu|vulkan|cuda) so two runs can be compared. A backend change can flip a greedy-argmax near-tie, which would otherwise be indistinguishable from the change under measurement. MEASURED, not theoretical: on 2026-09-10, with the prompt verified byte-identical on both sides, `encode clip.mp4 at crf 22` rendered -crf 23 from native on CUDA and -crf 22 from native on CPU and from Python. The two runtimes link DIFFERENT llama.cpp builds (llama-cpp-2 vs llama-cpp-python), so this is a standing property of the comparison, not a misconfiguration — see `backend_attribution.json` next to this file.",
+  "entry_points": {
+    "native": "<repo>\\sandbox\\r140\\artifact\\knaif-1.4.0-windows-x64\\bin\\knaif.exe run S --dry-run --model knaif-qwen3-1.7b-v2-q6_k.gguf",
+    "python": "uv run knaif-cli run --dry-run --backend llama-cpp --model knaif-qwen3-1.7b-v2",
+    "stage": "rendered command argv (shipped dry-run path)"
+  },
+  "result": {
+    "counts": {
+      "match": 100,
+      "mismatch": 3,
+      "decline-divergence": 0,
+      "not-comparable": 0,
+      "native-not-implemented": 0,
+      "port-bug": 0
+    },
+    "equivalence_rate": 0.970874,
+    "gated": 103,
+    "port_bugs": 0,
+    "native_not_implemented": 0,
+    "plan_disagreement": 3,
+    "plan_disagreement_rate": 0.029126,
+    "max_plan_disagreement": 0.0183,
+    "passed": false
+  },
+  "population": {
+    "kind": "subset",
+    "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116"
+  }
+}

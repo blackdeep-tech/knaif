@@ -1165,19 +1165,35 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         )
         if measured_keys:
             missing = [k for k in keys if k in measured_keys]
-            print(f"  planning    : {len(missing)} row(s) with the model, recording", flush=True)
-            t0 = time.perf_counter()
             held = {p.name for p in replay_dir.glob("*.txt")}
-            native_lane.batch_plan(
-                lane,
-                args.skill,
-                [by_key[k] for k in missing],
-                folders=[folder_of[k] for k in missing],
-                fixture_dir=fixture_dir,
-                work_dir=lane_sandbox / ".batch",
-                record_dir=replay_dir,
-                expect_device=compute_backend,
+            # A batch stopped in an earlier attempt of this cell left replies behind: keep the
+            # ones that pass what a finished batch passes, and plan only the rest. Those rows
+            # still count as measured: this run's binary planned them.
+            kept = native_lane.salvage_stopped_batches(
+                lane_sandbox, replay_dir, lane, compute_backend
             )
+            if kept:
+                again = _replay(missing)
+                missing = [k for k, env in zip(missing, again, strict=True) if is_replay_miss(env)]
+                print(
+                    f"  store       : kept {len(kept)} reply(ies) a stopped batch recorded",
+                    flush=True,
+                )
+            t0 = time.perf_counter()
+            if missing:
+                print(
+                    f"  planning    : {len(missing)} row(s) with the model, recording", flush=True
+                )
+                native_lane.batch_plan(
+                    lane,
+                    args.skill,
+                    [by_key[k] for k in missing],
+                    folders=[folder_of[k] for k in missing],
+                    fixture_dir=fixture_dir,
+                    work_dir=lane_sandbox / ".batch",
+                    record_dir=replay_dir,
+                    expect_device=compute_backend,
+                )
             timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
             # Which binary recorded each new reply, and in which run (I9 "reused from <run>").
             new = sorted(p.stem for p in replay_dir.glob("*.txt") if p.name not in held)
@@ -1586,8 +1602,7 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
         }
         if not cell_oses <= set(new_bins):
             refuse(
-                f"cells were measured on {sorted(cell_oses)}; binaries given for "
-                f"{sorted(new_bins)}"
+                f"cells were measured on {sorted(cell_oses)}; binaries given for {sorted(new_bins)}"
             )
         run = Path(args.sample_run)
         sample_run = run.as_posix()
@@ -1680,7 +1695,7 @@ def _shown(path: Path | str) -> str:
 
 
 def cmd_waive(args: argparse.Namespace) -> None:
-    """Record the owner's exception for one failing cell (quality thresholds only)."""
+    """Record the owner's exception for one failing cell (what `waive_cell` allows)."""
     from datetime import date as _date
 
     from .gate import waive_cell
@@ -1688,7 +1703,13 @@ def cmd_waive(args: argparse.Namespace) -> None:
     date = args.date or _date.today().isoformat()
     try:
         path = waive_cell(
-            args.skill, Path.cwd(), args.layer, args.cell, reason=args.reason, date=date
+            args.skill,
+            Path.cwd(),
+            args.layer,
+            args.cell,
+            reason=args.reason,
+            date=date,
+            safety=args.safety,
         )
     except ValueError as exc:
         print(f"refused: {exc}", file=sys.stderr)
@@ -3767,8 +3788,13 @@ def build_parser() -> argparse.ArgumentParser:
     # waive — the owner's exception to one failing cell
     p_waive = sub.add_parser(
         "waive",
-        help="Record the owner's decision to ship a cell that failed a quality threshold "
+        help="Record the owner's decision to ship a cell that failed a threshold it may waive "
         "(the verdict stays failing; `gate` prints it as EXCEPTED)",
+    )
+    p_waive.add_argument(
+        "--safety",
+        action="store_true",
+        help="the owner also accepts a safety rate miss with no breach (nothing ran)",
     )
     p_waive.add_argument("--skill", required=True)
     p_waive.add_argument("--cell", required=True, help="model|os|backend, as `gate` prints it")

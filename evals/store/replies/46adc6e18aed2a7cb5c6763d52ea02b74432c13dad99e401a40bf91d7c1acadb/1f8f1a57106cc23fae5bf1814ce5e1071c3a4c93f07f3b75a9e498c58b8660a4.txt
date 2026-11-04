@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_volume", "args": {"inputs": ["clip.mp4"]}}]}

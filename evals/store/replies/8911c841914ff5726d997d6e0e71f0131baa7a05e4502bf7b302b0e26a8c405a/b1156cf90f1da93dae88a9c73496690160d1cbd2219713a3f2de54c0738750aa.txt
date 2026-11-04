@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "unlock_pdf", "args": {"input": "sample-protected.pdf", "password": "secret", "output": "sample.pdf"}}, {"tool": "rotate_pages", "args": {"input": "sample.pdf", "degrees": 90, "pages": "all"}}]}

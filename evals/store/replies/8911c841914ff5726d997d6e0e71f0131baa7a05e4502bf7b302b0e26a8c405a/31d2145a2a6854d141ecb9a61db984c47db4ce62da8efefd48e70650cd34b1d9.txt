@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["*.mov"], "container": "mp4", "output": "output.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["output.mp4"], "target_size_mb": 15}}]}

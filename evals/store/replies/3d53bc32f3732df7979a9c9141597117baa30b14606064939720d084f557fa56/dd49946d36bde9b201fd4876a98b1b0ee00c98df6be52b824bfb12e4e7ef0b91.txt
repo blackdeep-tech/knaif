@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["4K.mp4"], "platform": "youtube", "preview": true, "quality": "visually_good"}}]}

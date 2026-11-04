@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["*.mp4"], "container": "mp4", "output": "all_videos.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["all_videos.mp4"], "crf": 26}}]}

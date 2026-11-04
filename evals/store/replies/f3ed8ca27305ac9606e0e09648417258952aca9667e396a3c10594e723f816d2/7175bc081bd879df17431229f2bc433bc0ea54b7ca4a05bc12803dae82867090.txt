@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "create_thumbnail", "args": {"input": "*.mp4", "output": "*.jpg"}}, {"tool": "convert_video", "args": {"inputs": ["*.mp4"], "container": "gif", "output": "*.gif"}}]}

@@ -187,6 +187,14 @@ def test_a_file_row_still_sees_every_fixture(tmp_path, monkeypatch) -> None:
     [out] = _run(tmp_path, monkeypatch, [_row("clip.mp4")], binary)
     assert binary.calls[0]["cwd_files"] == ["batch", "clip.mp4"]
     assert out.folder_dir is None
+    # The original, for criteria such as `no_larger_than` when the result is elsewhere (a known
+    # folder, a download), as the Python lane gives it (`runner.run_corpus`).
+    assert out.fixture_path == tmp_path / "fixtures" / "clip.mp4"
+
+
+def test_a_row_without_a_fixture_names_none(tmp_path, monkeypatch) -> None:
+    [out] = _run(tmp_path, monkeypatch, [_row(None)], _Binary())
+    assert out.fixture_path is None
 
 
 def test_a_folder_row_reports_how_many_files_failed(tmp_path, monkeypatch) -> None:

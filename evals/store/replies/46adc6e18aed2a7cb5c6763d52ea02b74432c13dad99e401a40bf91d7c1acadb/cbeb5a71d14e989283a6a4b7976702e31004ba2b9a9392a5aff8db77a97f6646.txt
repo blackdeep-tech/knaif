@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "watermark", "args": {"input": "sample.pdf", "text": "CONFIDENTIAL", "position": "center", "output": "sample_confidential.pdf"}}, {"tool": "compress_pdf", "args": {"input": "sample_confidential.pdf", "compress_quality": "balanced"}}]}

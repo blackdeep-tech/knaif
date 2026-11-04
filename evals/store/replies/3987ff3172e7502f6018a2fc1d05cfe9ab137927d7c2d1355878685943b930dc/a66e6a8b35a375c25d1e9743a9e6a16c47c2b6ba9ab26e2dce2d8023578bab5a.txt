@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "remove_pages", "args": {"input": "sample.pdf", "pages": "-1"}}]}

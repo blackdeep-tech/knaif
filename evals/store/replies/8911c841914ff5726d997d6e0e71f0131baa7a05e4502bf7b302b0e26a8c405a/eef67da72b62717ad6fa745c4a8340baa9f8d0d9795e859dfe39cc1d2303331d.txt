@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip.mp4"], "platform": "streaming", "preview": true}}]}

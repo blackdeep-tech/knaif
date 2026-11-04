@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Which file format should I use for the final output? mp4, mkv, webm, gif, or another container?"}}]}

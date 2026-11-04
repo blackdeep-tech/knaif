@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reorder_pages", "args": {"input": "sample.pdf", "order": "reverse(1-2)"}}]}

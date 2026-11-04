@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_speed", "args": {"inputs": ["clip.mp4"], "speed": 2.0, "output": "clip_fast.mp4"}}, {"tool": "resize_video", "args": {"inputs": ["clip_fast.mp4"], "height": 480, "keep_aspect_ratio": true, "output": "clip_fast_480p.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["clip_fast_480p.mp4"]}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "split_video", "args": {"input": "clip.mp4", "every": "10s", "output": "clip_part.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["clip_part.mp4"]}}]}

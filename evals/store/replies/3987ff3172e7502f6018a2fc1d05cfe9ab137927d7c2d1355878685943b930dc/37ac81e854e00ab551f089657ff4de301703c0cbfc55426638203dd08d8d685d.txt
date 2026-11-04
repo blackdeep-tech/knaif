@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "split_pdf", "args": {"input": "sample.pdf", "ranges": "1-2", "output": "sample_p1-2.pdf"}}, {"tool": "reorder_pages", "args": {"input": "sample_p1-2.pdf", "order": "2,1"}}]}

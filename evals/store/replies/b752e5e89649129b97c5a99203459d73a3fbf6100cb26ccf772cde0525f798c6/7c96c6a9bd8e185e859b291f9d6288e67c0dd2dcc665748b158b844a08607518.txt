@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip1.mov"], "container": "mp4", "output": "clip1.mp4"}}, {"tool": "extract_audio", "args": {"inputs": ["clip1.mp4"], "audio_format": "mp3"}}]}

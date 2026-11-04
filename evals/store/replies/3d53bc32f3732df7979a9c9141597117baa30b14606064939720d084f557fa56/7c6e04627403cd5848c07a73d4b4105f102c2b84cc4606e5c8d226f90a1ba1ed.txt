@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "extract_audio", "args": {"inputs": ["*"], "audio_format": "mp3"}}]}

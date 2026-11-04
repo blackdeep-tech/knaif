@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "split_pdf", "args": {"input": "sample.pdf", "ranges": "3"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "extract_text", "args": {"input": "sample.pdf", "output": "sample.txt"}}]}

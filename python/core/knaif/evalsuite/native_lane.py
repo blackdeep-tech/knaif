@@ -40,7 +40,9 @@ in what the number covers, not a difference between the runtimes.
 
 from __future__ import annotations
 
+import contextlib
 import functools
+import hashlib
 import json
 import os
 import re
@@ -555,27 +557,90 @@ def _batch_plan_in(
                 shutil.rmtree(staging)
             staging.mkdir(parents=True)
             env["KNAIF_LLM_RECORD_DIR"] = str(staging.resolve())
-    proc = subprocess.run(
-        argv,
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=env,
-        timeout=lane.timeout_s * max(1, len(utterances)),
+            # What `salvage_stopped_batches` checks if this batch is stopped before it ends.
+            (staging / STOPPED_META).write_text(
+                json.dumps(_stopped_meta(Path(record_dir), lane, expect_device)), encoding="utf-8"
+            )
+    trace_file = staging / STOPPED_TRACE if record_dir is not None and replay_dir is None else None
+    with trace_file.open("w", encoding="utf-8") if trace_file else _no_file() as trace:
+        proc = subprocess.run(
+            argv,
+            cwd=work_dir,
+            stdout=subprocess.PIPE,
+            # A recording batch's trace goes to a file, so a stopped batch still says where its
+            # model ran.
+            stderr=trace if trace is not None else subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=lane.timeout_s * max(1, len(utterances)),
+        )
+    stderr = (trace_file.read_text(encoding="utf-8", errors="replace") if trace_file else "") + (
+        proc.stderr or ""
     )
     lines = [line for line in proc.stdout.splitlines() if line.strip()]
     if proc.returncode != 0 or len(lines) != len(utterances):
         raise RuntimeError(
             f"`plan --batch` returned {len(lines)} plan line(s) for {len(utterances)} utterances "
-            f"(exit {proc.returncode}): {extract_failure(proc.stdout, proc.stderr)}"
+            f"(exit {proc.returncode}): {extract_failure(proc.stdout, stderr)}"
         )
     if expect_device is not None and replay_dir is None:
-        check_placement(proc.stderr, expect_device, "`plan --batch`", required=True)
+        check_placement(stderr, expect_device, "`plan --batch`", required=True)
     if record_dir is not None and replay_dir is None:
         promote_replies(staging, Path(record_dir))
     return [json.loads(line) for line in lines]
+
+
+STOPPED_META = "stopped.json"
+STOPPED_TRACE = "trace.log"
+
+
+@contextlib.contextmanager
+def _no_file():
+    yield None
+
+
+def _stopped_meta(namespace: Path, lane: LaneConfig, device: str | None) -> dict[str, Any]:
+    binary_sha = None
+    if Path(lane.binary).is_file():
+        h = hashlib.sha256()
+        with Path(lane.binary).open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        binary_sha = h.hexdigest()
+    return {"namespace": namespace.name, "binary_sha256": binary_sha, "device": device}
+
+
+def salvage_stopped_batches(
+    lane_sandbox: Path, namespace: Path, lane: LaneConfig, expect_device: str | None
+) -> list[str]:
+    """Keep the replies of a recording batch that was stopped before it ended; the keys kept.
+
+    A stopped batch (the owner's pause) never reached `promote_replies`, so its replies sit in
+    its staging folder. They are promoted only if the stopped process passed what a finished
+    batch passes: the same binary, recording into this namespace, its model on *expect_device*
+    by its own load trace. The binary writes each reply whole (write, then rename), so every
+    `.txt` there is a complete reply; a stopped batch with any doubt is dropped and re-planned.
+    """
+    kept: list[str] = []
+    for staging in sorted(Path(lane_sandbox).glob(".batch*.record")):
+        try:
+            meta = json.loads((staging / STOPPED_META).read_text(encoding="utf-8"))
+            trace = (staging / STOPPED_TRACE).read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            meta, trace = None, ""
+        want = _stopped_meta(namespace, lane, expect_device)
+        ok = want["binary_sha256"] is not None and meta == want
+        if ok and expect_device is not None:
+            try:
+                check_placement(trace, expect_device, "the stopped `plan --batch`", required=True)
+            except PlacementError:
+                ok = False
+        if ok:
+            kept += promote_replies(staging, namespace)
+        shutil.rmtree(staging, ignore_errors=True)
+    return kept
 
 
 def promote_replies(staging: Path, namespace: Path) -> list[str]:
@@ -766,23 +831,27 @@ def _produced_files(
 
     Rewritten counts: an explicit output onto an existing file is a request the tools honour,
     and counting only new files graded it `artifact_missing` (2026-09-24 documents L4).
+
+    On an equal mtime a delivered file comes after a routed intermediate: Linux stamps files from
+    a coarse clock, so a chain's last two writes can share one, and the last file is the result.
     """
-    after = []
+    after: list[tuple[Path, int]] = []  # (file, 1 when delivered to the user, 0 in the scratch)
     for p in work_dir.iterdir():
         if not p.is_file():
             continue
         st = p.stat()
         if before.get(p.name) != (st.st_mtime_ns, st.st_size):
-            after.append(p)
+            after.append((p, 1))
     if scratch_root is not None and scratch_root.is_dir():
         for run in scratch_root.glob("run-*"):
             for p in run.rglob("*"):
                 if p.is_file() and p.relative_to(run).parts[0] not in _SCRATCH_NOT_PRODUCED:
-                    after.append(p)
+                    after.append((p, 0))
     if known_root is not None and known_root.is_dir():
         # Fresh for every row, so whatever is there, the run put there.
-        after.extend(p for p in known_root.rglob("*") if p.is_file())
-    return sorted(after, key=lambda p: p.stat().st_mtime)
+        after.extend((p, 1) for p in known_root.rglob("*") if p.is_file())
+    after.sort(key=lambda item: (item[0].stat().st_mtime_ns, item[1]))
+    return [p for p, _ in after]
 
 
 def run_native_corpus(
@@ -906,8 +975,12 @@ def run_native_corpus(
                     alert=alert,
                     known_dir=known_dir,
                     folder_dir=work_dir if row.is_folder_row else None,
+                    # The row's original (a folder row's folder), as the Python lane gives it:
+                    # `no_larger_than` and the like find it when the result is elsewhere.
                     fixture_path=(
-                        fixture_dir / row.fixture if row.is_folder_row and row.fixture else None
+                        fixture_dir / row.fixture
+                        if row.fixture and (fixture_dir / row.fixture).exists()
+                        else None
                     ),
                     batch_failures=parsed.get("batch_failures"),
                     artifact=parsed["commands"][-1] if parsed["commands"] else None,
