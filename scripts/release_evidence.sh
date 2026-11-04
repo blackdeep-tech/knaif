@@ -535,7 +535,7 @@ stage_daemon() {
       rc=$?
       [ $rc -eq 0 ] && [ "$(wc -l < "$d/$model/$skill.inprocess.jsonl" | tr -d ' ')" = "$n" ] \
         || { failed "daemon $model $skill: the in-process pass failed or is incomplete"; return 1; }
-      [ "$(wc -l < "$d/$model/$skill.daemon.jsonl" 2> /dev/null | tr -d ' ')" = "$n" ] || todo=1
+      [ "$(wc -l 2> /dev/null < "$d/$model/$skill.daemon.jsonl" | tr -d ' ')" = "$n" ] || todo=1
     done
     if [ $todo -ne 0 ]; then
       env -u KNAIF_NO_DAEMON "${ENVS[@]}" "$EXE" daemon start --model "$m" 2>&1 | rel >> "$d/$model/daemon.txt" \

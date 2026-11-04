@@ -409,9 +409,10 @@ def test_a_cell_runs_again_when_what_graded_it_changed(tmp_path: Path, change: s
     assert proc.stdout.splitlines()[-2:] == ["RAN ffmpeg", "RAN ffmpeg"], proc.stderr
 
 
-def _daemon(tmp_path: Path, between: str = "") -> tuple[str, list[str]]:
+def _daemon(tmp_path: Path, between: str = "") -> tuple[str, list[str], str]:
     """`stage_daemon` twice over four utterances with a stub binary; *between* runs after the first
-    (to cut a pass short, as a stop does). Returns the second run's log and every batch it planned.
+    (to cut a pass short, as a stop does). Returns the second run's log, every batch it planned, and
+    the stderr of both runs.
     """
     work = tmp_path / "work"
     (work / "sandbox/fixtures/ffmpeg").mkdir(parents=True)
@@ -447,7 +448,7 @@ cat "$P/result.txt"; cat "$R/COMPLETE"
     proc = _sourced(tmp_path, "linux", body, R=run)
     assert proc.returncode == 0, proc.stderr
     calls = (tmp_path / "calls").read_text(encoding="utf-8").splitlines()
-    return proc.stdout, calls
+    return proc.stdout, calls, proc.stderr
 
 
 @pytest.mark.skipif(BASH is None, reason="bash not available")
@@ -455,7 +456,7 @@ def test_a_stopped_daemon_pass_resumes_after_its_last_complete_line(tmp_path: Pa
     """A stop mid-pass leaves complete lines and maybe half of the next: the half is dropped and
     planning resumes there; the comparison still covers every utterance."""
     cut = 'head -c "$(( $(head -n 2 "$P/ffmpeg.inprocess.jsonl" | wc -c) + 4 ))" "$P/ffmpeg.inprocess.jsonl" > t && mv t "$P/ffmpeg.inprocess.jsonl"; rm "$P/ffmpeg.daemon.jsonl"'
-    out, calls = _daemon(tmp_path, cut)
+    out, calls, _ = _daemon(tmp_path, cut)
     assert calls == ["inu3,u4,", "u1,u2,u3,u4,"]
     assert "failed=0" in out
     assert "4b ffmpeg: IDENTICAL" in out and "(4 lines)" in out
@@ -464,12 +465,19 @@ def test_a_stopped_daemon_pass_resumes_after_its_last_complete_line(tmp_path: Pa
 
 @pytest.mark.skipif(BASH is None, reason="bash not available")
 def test_a_finished_daemon_check_is_not_planned_again(tmp_path: Path) -> None:
-    out, calls = _daemon(tmp_path)
+    out, calls, _ = _daemon(tmp_path)
     assert calls == []
     assert "4b ffmpeg: IDENTICAL" in out
 
 
 @pytest.mark.skipif(BASH is None, reason="bash not available")
 def test_a_daemon_check_starts_over_for_another_binary(tmp_path: Path) -> None:
-    _, calls = _daemon(tmp_path, "EXE_SHA=bin2")
+    _, calls, _ = _daemon(tmp_path, "EXE_SHA=bin2")
     assert calls == ["inu1,u2,u3,u4,", "u1,u2,u3,u4,"]
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_a_daemon_check_from_scratch_prints_no_shell_errors(tmp_path: Path) -> None:
+    """Asking whether a daemon pass is complete before it exists is a question, not an error."""
+    _, _, err = _daemon(tmp_path)
+    assert "No such file" not in err, err
