@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["video.mp4"], "height": 1080, "keep_aspect_ratio": true}}]}

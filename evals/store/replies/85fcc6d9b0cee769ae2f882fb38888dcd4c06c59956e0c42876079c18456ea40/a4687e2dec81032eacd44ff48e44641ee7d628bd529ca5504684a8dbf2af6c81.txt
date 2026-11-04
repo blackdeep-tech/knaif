@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Do you want the first few seconds of clip.mp4, or a single frame?"}}]}

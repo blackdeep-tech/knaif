@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["https://files.knaif.test/ffmpeg/drone.mp4"], "height": 720}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "trim_video", "args": {"inputs": ["https://files.knaif.test/ffmpeg/talk.mp4"], "start": "00:00:02", "end": "00:00:05"}}]}

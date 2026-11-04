@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["https://files.knaif.test/documents/report.pdf", "sample-scanned.pdf"], "output": "merged.pdf"}}]}

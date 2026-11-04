@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reverse_video", "args": {"inputs": ["clip.mp4"], "output": "clip_rev.mp4"}}, {"tool": "resize_video", "args": {"inputs": ["clip_rev.mp4"], "target_resolution": "720p"}}]}

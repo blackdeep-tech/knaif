@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_pdf", "args": {"input": "*.pdf", "compress_quality": "balanced", "output": "small.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "small.pdf"}}]}

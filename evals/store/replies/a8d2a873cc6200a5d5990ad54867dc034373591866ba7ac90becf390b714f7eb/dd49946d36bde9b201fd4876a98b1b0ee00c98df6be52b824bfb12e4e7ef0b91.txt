@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["*.mp4"], "height": 1080, "keep_aspect_ratio": true, "output": "smaller_videos.mp4"}}, {"tool": "prepare_for_platform", "args": {"inputs": ["smaller_videos.mp4"], "platform": "youtube", "preview": true}}]}

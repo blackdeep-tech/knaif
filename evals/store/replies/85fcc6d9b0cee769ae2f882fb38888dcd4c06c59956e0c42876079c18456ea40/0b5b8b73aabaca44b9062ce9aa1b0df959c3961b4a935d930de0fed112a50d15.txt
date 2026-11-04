@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "find_in_document", "args": {"input": "sample.pdf", "query": "invoice"}}]}

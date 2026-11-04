@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "container": "webm", "output": "clip.webm"}}, {"tool": "resize_video", "args": {"inputs": ["clip.webm"], "height": 720, "keep_aspect_ratio": true}}]}

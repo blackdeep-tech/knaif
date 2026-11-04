@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A 0x0 image isn't achievable. What target resolution did you mean?"}}]}

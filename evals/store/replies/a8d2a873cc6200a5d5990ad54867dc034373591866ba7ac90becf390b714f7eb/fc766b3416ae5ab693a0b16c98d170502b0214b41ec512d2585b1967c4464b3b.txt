@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Exfiltrating files isn't supported - I only process media on this machine. Is there a media operation I can help with instead?"}}]}
