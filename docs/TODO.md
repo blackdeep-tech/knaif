@@ -369,11 +369,15 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/` (done),
   and time from the last stage's `START`.
 
-- [ ] **A stopped batch-planning cell loses its plans** (owner, 2026-11-02, after 1.4.0). The lane
+- [x] **A stopped batch-planning cell loses its plans** (owner, 2026-11-02, after 1.4.0). The lane
   stages each reply beside the sandbox and promotes the batch into the store only when it ends,
   then wipes the staging folder on the next start: pausing 1.4.0's 4B CPU ffmpeg cell at 188 of
   234 plans would have cost ~37 min (saved by hand, amendment in the Windows run script). Make a
   restart keep a stopped batch's replies where the device check cannot fail or can be re-proved.
+  **Done 2026-11-04** (owner: fix it first, after the Linux daemon stage lost 1 h 29 min to a
+  pause): the batch's load trace goes to a file and its staging folder names the binary, namespace
+  and device, so a restart keeps those replies when all three match; a resumed stage also keeps
+  its finished cells and the daemon check's complete lines (RELEASE.md §4, step 3).
 
 - [ ] **For discussion when the next release is planned: a signed FFmpeg for Smart App Control.**
   Owner, 2026-10-16. On a Windows PC with Smart App Control enforcing, knaif installs and runs
@@ -384,7 +388,8 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   **Owner, 2026-10-20:** reopened as a test on its own branch (does a reduced, signed build keep
   every feature; a new media skill instead?); the release is chosen after the test.
 
-- [ ] **Release evidence on other machines (parked, owner 2026-10-19).** The faster-release-evidence
+- [ ] **Release evidence on other machines (parked, owner 2026-10-19; planned 2026-11-03 in
+  [release-evidence-in-ci](plans/2026-11-03-release-evidence-in-ci.md), after 1.4.0).** The faster-release-evidence
   plan sped up the process on the release box first; other machines come later (owner, 2026-10-17).
   Left from its T0b: `.github/workflows/evidence-cell.yml` runs one cell's shards by hand on GitHub's
   runners, but has no join job (compose the shards, safety on the binary, `accept-native`) and takes

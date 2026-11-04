@@ -40,7 +40,9 @@ in what the number covers, not a difference between the runtimes.
 
 from __future__ import annotations
 
+import contextlib
 import functools
+import hashlib
 import json
 import os
 import re
@@ -555,27 +557,90 @@ def _batch_plan_in(
                 shutil.rmtree(staging)
             staging.mkdir(parents=True)
             env["KNAIF_LLM_RECORD_DIR"] = str(staging.resolve())
-    proc = subprocess.run(
-        argv,
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=env,
-        timeout=lane.timeout_s * max(1, len(utterances)),
+            # What `salvage_stopped_batches` checks if this batch is stopped before it ends.
+            (staging / STOPPED_META).write_text(
+                json.dumps(_stopped_meta(Path(record_dir), lane, expect_device)), encoding="utf-8"
+            )
+    trace_file = staging / STOPPED_TRACE if record_dir is not None and replay_dir is None else None
+    with trace_file.open("w", encoding="utf-8") if trace_file else _no_file() as trace:
+        proc = subprocess.run(
+            argv,
+            cwd=work_dir,
+            stdout=subprocess.PIPE,
+            # A recording batch's trace goes to a file, so a stopped batch still says where its
+            # model ran.
+            stderr=trace if trace is not None else subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=lane.timeout_s * max(1, len(utterances)),
+        )
+    stderr = (trace_file.read_text(encoding="utf-8", errors="replace") if trace_file else "") + (
+        proc.stderr or ""
     )
     lines = [line for line in proc.stdout.splitlines() if line.strip()]
     if proc.returncode != 0 or len(lines) != len(utterances):
         raise RuntimeError(
             f"`plan --batch` returned {len(lines)} plan line(s) for {len(utterances)} utterances "
-            f"(exit {proc.returncode}): {extract_failure(proc.stdout, proc.stderr)}"
+            f"(exit {proc.returncode}): {extract_failure(proc.stdout, stderr)}"
         )
     if expect_device is not None and replay_dir is None:
-        check_placement(proc.stderr, expect_device, "`plan --batch`", required=True)
+        check_placement(stderr, expect_device, "`plan --batch`", required=True)
     if record_dir is not None and replay_dir is None:
         promote_replies(staging, Path(record_dir))
     return [json.loads(line) for line in lines]
+
+
+STOPPED_META = "stopped.json"
+STOPPED_TRACE = "trace.log"
+
+
+@contextlib.contextmanager
+def _no_file():
+    yield None
+
+
+def _stopped_meta(namespace: Path, lane: LaneConfig, device: str | None) -> dict[str, Any]:
+    binary_sha = None
+    if Path(lane.binary).is_file():
+        h = hashlib.sha256()
+        with Path(lane.binary).open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        binary_sha = h.hexdigest()
+    return {"namespace": namespace.name, "binary_sha256": binary_sha, "device": device}
+
+
+def salvage_stopped_batches(
+    lane_sandbox: Path, namespace: Path, lane: LaneConfig, expect_device: str | None
+) -> list[str]:
+    """Keep the replies of a recording batch that was stopped before it ended; the keys kept.
+
+    A stopped batch (the owner's pause) never reached `promote_replies`, so its replies sit in
+    its staging folder. They are promoted only if the stopped process passed what a finished
+    batch passes: the same binary, recording into this namespace, its model on *expect_device*
+    by its own load trace. The binary writes each reply whole (write, then rename), so every
+    `.txt` there is a complete reply; a stopped batch with any doubt is dropped and re-planned.
+    """
+    kept: list[str] = []
+    for staging in sorted(Path(lane_sandbox).glob(".batch*.record")):
+        try:
+            meta = json.loads((staging / STOPPED_META).read_text(encoding="utf-8"))
+            trace = (staging / STOPPED_TRACE).read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            meta, trace = None, ""
+        want = _stopped_meta(namespace, lane, expect_device)
+        ok = want["binary_sha256"] is not None and meta == want
+        if ok and expect_device is not None:
+            try:
+                check_placement(trace, expect_device, "the stopped `plan --batch`", required=True)
+            except PlacementError:
+                ok = False
+        if ok:
+            kept += promote_replies(staging, namespace)
+        shutil.rmtree(staging, ignore_errors=True)
+    return kept
 
 
 def promote_replies(staging: Path, namespace: Path) -> list[str]:

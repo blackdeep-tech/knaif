@@ -657,6 +657,13 @@ load and reuses model replies the release did not change.
 2. **Run one stage per invocation**, each after the owner approves it with its time budget, never
    two at once on one machine. Exit 0 passed, 1 the stage broke, 2 refused before running, 3 it ran
    with gate misses for the owner. `bash scripts/watch_run.sh <run folder>` follows a stage.
+3. **A stopped stage resumes.** Run the same stage again and it keeps what finished: a cell whose
+   verdict was written by the same binary, model and committed eval code is kept and judged again
+   from that verdict; a cell stopped while planning keeps the replies its batch recorded, if that
+   batch ran the same binary on the cell's device, and plans only the rest (those rows still
+   count as measured); the `daemon` check keeps each pass's complete lines and plans from the next.
+   `FRESH=1` runs everything again. A void stage is still moved aside first, so nothing of it is
+   kept.
 
 | Stage | What it does |
 |---|---|

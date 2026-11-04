@@ -608,6 +608,97 @@ def test_a_reply_that_differs_from_the_stored_one_moves_nothing(tmp_path, monkey
     assert (ns / "k1.txt").read_text(encoding="utf-8") == "stored"
 
 
+class _Stopped(_Recorder):
+    """A recording batch stopped partway: the binary wrote some replies and its load trace, then
+    the whole lane was killed (the owner's pause), so nothing was promoted."""
+
+    def __init__(self, replies: dict[str, str], device: str) -> None:
+        super().__init__("", device)
+        self.replies = replies
+
+    def __call__(self, argv, **kw) -> subprocess.CompletedProcess:
+        staging = Path(kw["env"]["KNAIF_LLM_RECORD_DIR"])
+        kw["stderr"].write(self._trace([str(a) for a in argv]))
+        kw["stderr"].flush()
+        for key, text in self.replies.items():
+            (staging / f"{key}.txt").write_text(text, encoding="utf-8")
+        raise KeyboardInterrupt  # the lane dies with its batch
+
+
+def _stop(tmp_path, monkeypatch, replies, device, ns):
+    lane = _lane(tmp_path)
+    lane.binary.write_bytes(b"bin")
+    monkeypatch.setattr(native_lane.subprocess, "run", _Stopped(replies, device))
+    with pytest.raises(KeyboardInterrupt):
+        batch_plan(lane, "ffmpeg", list(replies) + ["not reached"], fixture_dir=_fixtures(tmp_path),
+                   work_dir=tmp_path / "sb" / ".batch", record_dir=ns,
+                   expect_device="CUDA0")  # fmt: skip
+    return lane
+
+
+def test_replies_a_stopped_batch_recorded_are_kept_when_it_ran_where_expected(
+    tmp_path, monkeypatch
+) -> None:
+    ns = tmp_path / "ns"
+    lane = _stop(tmp_path, monkeypatch, {"k1": "r1", "k2": "r2"}, "CUDA0", ns)
+    kept = native_lane.salvage_stopped_batches(tmp_path / "sb", ns, lane, "CUDA0")
+    assert kept == ["k1", "k2"]
+    assert sorted(p.name for p in ns.glob("*.txt")) == ["k1.txt", "k2.txt"]
+    assert not (tmp_path / "sb" / ".batch.record").exists()
+
+
+def test_replies_of_a_stopped_batch_on_another_device_are_dropped(tmp_path, monkeypatch) -> None:
+    ns = tmp_path / "ns"
+    lane = _stop(tmp_path, monkeypatch, {"k1": "r1"}, "CPU", ns)
+    assert native_lane.salvage_stopped_batches(tmp_path / "sb", ns, lane, "CUDA0") == []
+    assert not list(ns.glob("*.txt"))
+    assert not (tmp_path / "sb" / ".batch.record").exists()
+
+
+@pytest.mark.parametrize("other", ["binary", "namespace", "device"])
+def test_replies_of_a_stopped_batch_for_another_cell_are_dropped(
+    tmp_path, monkeypatch, other
+) -> None:
+    """The lane folder is shared by a model's cells (CUDA and CPU use one lane): a stopped CUDA
+    batch's replies never reach the CPU namespace, nor a rebuilt binary's."""
+    ns = tmp_path / "ns"
+    lane = _stop(tmp_path, monkeypatch, {"k1": "r1"}, "CUDA0", ns)
+    target, device = ns, "CUDA0"
+    if other == "binary":
+        lane.binary.write_bytes(b"rebuilt")
+    elif other == "namespace":
+        target = tmp_path / "other-ns"
+    else:
+        device = "CPU"
+    assert native_lane.salvage_stopped_batches(tmp_path / "sb", target, lane, device) == []
+    assert not list(target.glob("*.txt"))
+
+
+def test_a_store_run_after_a_stop_plans_only_what_the_stopped_batch_did_not(
+    tmp_path, monkeypatch
+) -> None:
+    from knaif.evalsuite import cli
+
+    recorded: set[str] = set()
+    calls, _ = _patch_store(tmp_path, monkeypatch, recorded)
+
+    def salvage(lane_sandbox, namespace, lane, device):
+        recorded.add("trim clip.mp4")
+        (namespace / "kept.txt").write_text("reply", encoding="utf-8")
+        return ["kept"]
+
+    monkeypatch.setattr(native_lane, "salvage_stopped_batches", salvage)
+    board = cli.cmd_native(
+        _native_args(tmp_path, store=str(tmp_path / "store"), save=str(tmp_path / "run"))
+    )
+    kinds = ["replay" if c.get("replay_dir") else "record" for c in calls]
+    assert kinds == ["replay", "replay", "record", "replay"]
+    assert calls[2]["utterances"] == ["convert clip.mp4 to mkv", "cut clip.mp4"]
+    assert board["store"]["measured"] == 3, "a kept reply was measured in this run, not reused"
+    stamps = (calls[0]["replay_dir"] / "recorded.jsonl").read_text(encoding="utf-8")
+    assert '"key": "kept"' in stamps and '"run": "run"' in stamps
+
+
 def test_store_rows_execute_by_replay_and_live_rows_never_see_the_store(
     tmp_path, monkeypatch
 ) -> None:

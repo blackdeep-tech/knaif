@@ -1165,19 +1165,35 @@ def _cmd_native(args: argparse.Namespace) -> dict[str, Any]:
         )
         if measured_keys:
             missing = [k for k in keys if k in measured_keys]
-            print(f"  planning    : {len(missing)} row(s) with the model, recording", flush=True)
-            t0 = time.perf_counter()
             held = {p.name for p in replay_dir.glob("*.txt")}
-            native_lane.batch_plan(
-                lane,
-                args.skill,
-                [by_key[k] for k in missing],
-                folders=[folder_of[k] for k in missing],
-                fixture_dir=fixture_dir,
-                work_dir=lane_sandbox / ".batch",
-                record_dir=replay_dir,
-                expect_device=compute_backend,
+            # A batch stopped in an earlier attempt of this cell left replies behind: keep the
+            # ones that pass what a finished batch passes, and plan only the rest. Those rows
+            # still count as measured: this run's binary planned them.
+            kept = native_lane.salvage_stopped_batches(
+                lane_sandbox, replay_dir, lane, compute_backend
             )
+            if kept:
+                again = _replay(missing)
+                missing = [k for k, env in zip(missing, again, strict=True) if is_replay_miss(env)]
+                print(
+                    f"  store       : kept {len(kept)} reply(ies) a stopped batch recorded",
+                    flush=True,
+                )
+            t0 = time.perf_counter()
+            if missing:
+                print(
+                    f"  planning    : {len(missing)} row(s) with the model, recording", flush=True
+                )
+                native_lane.batch_plan(
+                    lane,
+                    args.skill,
+                    [by_key[k] for k in missing],
+                    folders=[folder_of[k] for k in missing],
+                    fixture_dir=fixture_dir,
+                    work_dir=lane_sandbox / ".batch",
+                    record_dir=replay_dir,
+                    expect_device=compute_backend,
+                )
             timing["plan_batch_s"] = round(time.perf_counter() - t0, 1)
             # Which binary recorded each new reply, and in which run (I9 "reused from <run>").
             new = sorted(p.stem for p in replay_dir.glob("*.txt") if p.name not in held)
@@ -1586,8 +1602,7 @@ def cmd_equivalence(args: argparse.Namespace) -> None:
         }
         if not cell_oses <= set(new_bins):
             refuse(
-                f"cells were measured on {sorted(cell_oses)}; binaries given for "
-                f"{sorted(new_bins)}"
+                f"cells were measured on {sorted(cell_oses)}; binaries given for {sorted(new_bins)}"
             )
         run = Path(args.sample_run)
         sample_run = run.as_posix()

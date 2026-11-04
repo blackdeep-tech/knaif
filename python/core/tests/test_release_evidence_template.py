@@ -365,3 +365,111 @@ def test_the_watcher_counts_a_cell_planning_its_rows(tmp_path: Path) -> None:
     )  # fmt: skip
     assert proc.returncode == 0, proc.stderr
     assert "planning 3 / 4" in proc.stdout
+
+
+# -- a stopped stage resumes: what finished is kept (owner, 2026-11-04) --
+
+
+def _cells(tmp_path: Path, *runs: str) -> subprocess.CompletedProcess:
+    """Run `cell 4b cpu` once per entry of *runs*, each a line of setup; the lane run and the
+    acceptance are stubbed (a NOT ACCEPTED verdict), the judging of a verdict is the script's."""
+    body = 'mkdir -p "$R"; MODELS=4b; SKILLS=ffmpeg; EXE_SHA=bin1; STAGE=cpu\n'
+    body += (
+        'run_cell() { echo "RAN $1" >> "$R/ran"; mkdir -p "$3"; echo "{}" > "$3/${1}_${2}_success.json"; }\n'
+        'accept() { printf "NOT ACCEPTED - 1 of 2\\nrecorded L4 evidence: x\\n" > "$6/${5}_verdict.txt";'
+        ' judge "$1" "$3" "$5" "$6"; }\n'
+        "harness_fp() { echo h1; }; gguf_sha() { echo m1; }\n"
+    )  # fmt: skip
+    for setup in runs:
+        body += f'{setup}\nGATE_MISS=0; cell 4b cpu; echo "miss=$GATE_MISS"\n'
+    body += 'cat "$R/ran"'
+    proc = _sourced(tmp_path, "windows", body)
+    proc.stdout = "\n".join(
+        ln for ln in proc.stdout.splitlines() if ln.startswith(("miss=", "RAN "))
+    )
+    return proc
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_a_cell_that_finished_is_kept_when_its_stage_runs_again(tmp_path: Path) -> None:
+    proc = _cells(tmp_path, "", "")
+    assert proc.stdout.splitlines() == ["miss=1", "miss=1", "RAN ffmpeg"], proc.stderr
+    log = (tmp_path / "run" / "COMPLETE").read_text(encoding="utf-8")
+    assert "cpu 4b cpu ffmpeg: kept, finished in an earlier attempt" in log
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    "change",
+    ["EXE_SHA=bin2", "harness_fp() { echo h2; }", "harness_fp() { :; }", "export FRESH=1"],
+    ids=["another binary", "other eval code", "uncommitted eval code", "FRESH"],
+)
+def test_a_cell_runs_again_when_what_graded_it_changed(tmp_path: Path, change: str) -> None:
+    proc = _cells(tmp_path, "", change)
+    assert proc.stdout.splitlines()[-2:] == ["RAN ffmpeg", "RAN ffmpeg"], proc.stderr
+
+
+def _daemon(tmp_path: Path, between: str = "") -> tuple[str, list[str]]:
+    """`stage_daemon` twice over four utterances with a stub binary; *between* runs after the first
+    (to cut a pass short, as a stop does). Returns the second run's log and every batch it planned.
+    """
+    work = tmp_path / "work"
+    (work / "sandbox/fixtures/ffmpeg").mkdir(parents=True)
+    exe = tmp_path / "knaif"
+    exe.write_text(
+        "#!/usr/bin/env bash\n"
+        'calls="$(dirname "$0")/calls"; n="$(dirname "$0")/served"\n'
+        'case "$1" in\n'
+        '  daemon) [ "$2" = status ] && echo "  requests: $(cat "$n" 2>/dev/null || echo 0)"; exit 0 ;;\n'
+        '  plan) f="${@: -2:1}"; echo "${KNAIF_NO_DAEMON:+in}$(tr "\\n" , < "$f")" >> "$calls"\n'
+        '        while IFS= read -r u; do echo "{\\"u\\": \\"$u\\"}"; done < "$f"\n'
+        '        [ -z "${KNAIF_NO_DAEMON:-}" ] && echo $(( $(cat "$n" 2>/dev/null || echo 0) + $(wc -l < "$f") )) > "$n"\n'
+        "        exit 0 ;;\n"
+        "esac\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    exe.chmod(0o755)
+    run = (tmp_path / "evals/runs/2026-11-02_r140-linux_success").as_posix()
+    body = f"""
+cd '{work.as_posix()}'; mkdir -p "{run}"; R="{run}"
+MODELS=4b; SKILLS=ffmpeg; EXE='{exe.as_posix()}'; EXE_SHA=bin1; STAGE=daemon; ENVS=(X=1)
+regen() {{ :; }}; backend_env() {{ :; }}; gguf_sha() {{ echo m1; }}; gguf() {{ echo m.gguf; }}
+subset_utterances() {{ printf 'u1\\nu2\\nu3\\nu4\\n'; }}
+stage_daemon
+P=evals/parity/2026-11-02_r140-linux-daemon-plan-equality/4b
+[ -d "$P" ] || {{ echo "no $P" >&2; exit 1; }}
+{between}
+: > "$(dirname "$EXE")/calls"; : > "$R/COMPLETE"
+stage_daemon; echo "failed=$FAILED"
+cat "$P/result.txt"; cat "$R/COMPLETE"
+"""
+    proc = _sourced(tmp_path, "linux", body, R=run)
+    assert proc.returncode == 0, proc.stderr
+    calls = (tmp_path / "calls").read_text(encoding="utf-8").splitlines()
+    return proc.stdout, calls
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_a_stopped_daemon_pass_resumes_after_its_last_complete_line(tmp_path: Path) -> None:
+    """A stop mid-pass leaves complete lines and maybe half of the next: the half is dropped and
+    planning resumes there; the comparison still covers every utterance."""
+    cut = 'head -c "$(( $(head -n 2 "$P/ffmpeg.inprocess.jsonl" | wc -c) + 4 ))" "$P/ffmpeg.inprocess.jsonl" > t && mv t "$P/ffmpeg.inprocess.jsonl"; rm "$P/ffmpeg.daemon.jsonl"'
+    out, calls = _daemon(tmp_path, cut)
+    assert calls == ["inu3,u4,", "u1,u2,u3,u4,"]
+    assert "failed=0" in out
+    assert "4b ffmpeg: IDENTICAL" in out and "(4 lines)" in out
+    assert "kept 2 of 4 lines" in out
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_a_finished_daemon_check_is_not_planned_again(tmp_path: Path) -> None:
+    out, calls = _daemon(tmp_path)
+    assert calls == []
+    assert "4b ffmpeg: IDENTICAL" in out
+
+
+@pytest.mark.skipif(BASH is None, reason="bash not available")
+def test_a_daemon_check_starts_over_for_another_binary(tmp_path: Path) -> None:
+    _, calls = _daemon(tmp_path, "EXE_SHA=bin2")
+    assert calls == ["inu1,u2,u3,u4,", "u1,u2,u3,u4,"]
