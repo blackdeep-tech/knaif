@@ -365,6 +365,14 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   owner's rule says. Either the replay goes through the handler's check, or the row gets the
   `no_larger_than` criterion the `compress_result` rows carry; a corpus change, so G2 applies.
 
+- [ ] **The macOS `libpdfium.dylib` declares macOS 13; knaif's floor is 12** (2026-11-04).
+  `check_macho_deps.py --min-os 12.0` fails on it in the 1.4.0 CI zip and in the published 1.3.0
+  zip alike; nothing ran it on the final 1.3.0 files. No clean room had loaded PDFium (the macOS 12
+  room's request is a rotate), so OCR of a PDF and the smallest compress without Ghostscript are
+  unproven on macOS 12. 1.4.0's macOS 12 room runs a smallest compress (it rasterizes through
+  PDFium) to answer it; the Windows room's `fresh_pdfium_loads` passed. Then: a PDFium build that
+  targets 12.0, or the floor raised to 13 for those tools, and the Mach-O check in the release path.
+
 - [ ] **Two scratch folders in one process can share a name** (2026-11-04, after 1.4.0: `native/`
   is frozen). `RunScratch::in_root` (`native/crates/knaif-core/src/scratch.rs`) shifts its counter
   32 bits left and then masks the tag to 32 bits, so the counter is dropped and the tag is the

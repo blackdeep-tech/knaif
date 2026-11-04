@@ -1,0 +1,16 @@
+
+Required symbol versions across 22 binaries — THIS IS THE FLOOR:
+  ld-linux-x86-64.so.2 (GLIBC) GLIBC_2.3
+  libc.so.6 (GLIBC)      GLIBC_2.34
+  libgcc_s.so.1 (GCC)    GCC_4.2.0
+  libgomp.so.1 (GOMP)    GOMP_4.5
+  libgomp.so.1 (OMP)     OMP_1.0
+  libm.so.6 (GLIBC)      GLIBC_2.29
+  libpthread.so.0 (GLIBC) GLIBC_2.3.2
+  libstdc++.so.6 (CXXABI) CXXABI_1.3.13
+  libstdc++.so.6 (GLIBCXX) GLIBCXX_3.4.30
+
+A distro must satisfy EVERY line above, not just the glibc one. Check the claimed
+support table against these, and remember libstdc++/CXXABI move with GCC, not glibc.
+
+  ok  22 binaries: every DT_NEEDED is staged or base-system
