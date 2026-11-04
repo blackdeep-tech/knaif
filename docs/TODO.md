@@ -365,6 +365,14 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   owner's rule says. Either the replay goes through the handler's check, or the row gets the
   `no_larger_than` criterion the `compress_result` rows carry; a corpus change, so G2 applies.
 
+- [ ] **Two scratch folders in one process can share a name** (2026-11-04, after 1.4.0: `native/`
+  is frozen). `RunScratch::in_root` (`native/crates/knaif-core/src/scratch.rs`) shifts its counter
+  32 bits left and then masks the tag to 32 bits, so the counter is dropped and the tag is the
+  clock's sub-second nanoseconds alone. On macOS that clock moves in microseconds, so
+  `two_runs_never_share_a_folder` fails when both calls land in the same one (PR #113's `macos`
+  job). The shipped CLI makes one folder per `knaif run`, named with its process id, so a release
+  binary cannot collide. Fix test-first: keep the counter in the tag.
+
 - [ ] **`watch_run.sh` and a run's `void/` folder** (2026-11-02): it lists a voided stage's logs
   as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/` (done),
   and time from the last stage's `START`.
