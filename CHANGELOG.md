@@ -11,6 +11,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 and `knaif-qwen3-1.7b-v2`). A request can name a file by its link, cover every file in a folder,
 and end with a desktop notification; a run leaves only the results you asked for.
 
+**Measured on the shipped binary.** Every number below comes from the packaged 1.4.0 binary,
+executing each request for real and graded on the files it produced, on the release subset of each
+corpus: 234 ffmpeg and 103 documents requests per cell (one request per tool, outcome and kind, plus
+every chain, edge-case, safety and hard request), complete coverage, the safety gate run on the
+binary over the whole safety corpus. They are not comparable with 1.3.0's numbers, which covered
+the whole corpus. A cell plans its requests with one model load; 30 requests per skill also run
+live, one process each, and must plan the same. Each cell is held to its Python reference on the
+same requests: no request the reference passed may fail, and outcome and knaif score within 0.02.
+
+| Model | OS · backend | ffmpeg outcome / knaif | documents outcome / knaif | Safety gate | Planned / reused ⁴ | Verdict |
+|---|---|---|---|---|---|---|
+| `knaif-qwen3-4b-v2` | Windows · CUDA | 0.953 / 0.988 | 0.961 / 0.989 | 11/11 · 9/9 | 0 / 337 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.953 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 0 / 337 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | Windows · CPU | 0.957 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 148 / 189 | accepted, 1 request reviewed ³ |
+| `knaif-qwen3-4b-v2` | Linux · CUDA | 0.953 / 0.988 | 0.961 / 0.989 | 11/11 · 9/9 | 0 / 337 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | Linux · CPU | 0.962 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 337 / 0 | accepted, 1 request reviewed ³ |
+| `knaif-qwen3-4b-v2` | macOS · Metal | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| `knaif-qwen3-4b-v2` | macOS · CPU | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.923 / 0.982 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 3 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.923 / 0.985 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.923 / 0.976 | 0.913 / 0.992 | 11/11 · 9/9 | 337 / 0 | accepted, 4 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.923 / 0.982 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 3 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Linux · CPU | 0.893 / 0.984 | 0.903 / 0.998 | 11/11 · 9/9 | 337 / 0 | accepted, 8 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | macOS · Metal | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| `knaif-qwen3-1.7b-v2` | macOS · CPU | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+
+Measured 2026-11-02/04 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) and _pending_
+(macOS). The native and Python runtimes agree wherever both planned the same thing, on the release
+subset: 0 port bugs, and on Windows CUDA 2.8% ffmpeg plan disagreement (both models) and 1.9% (4B)
+and 2.9% (1.7B) documents, every difference reviewed; macOS Metal _pending_. Plans through the
+daemon are byte-identical to plans made without it, on Windows and Linux (macOS _pending_). The
+installers were checked in clean machines: _pending_.
+³ Accepted after review: on these requests the binary's result differs from the Python
+reference's, and each was reviewed with both plans and commands. In every ffmpeg cell, "compress
+clip.mp4 to crf18" comes out bigger, so knaif keeps the original, as 1.4.0 means it to; the
+reference grades the bigger file as delivered. The rest are the model's choices, not the port's:
+the 4B puts `mkv` in the wrong place in "convert and make it smaller" and asks; the 1.7B crops
+where the reference letterboxed, writes a malformed plan that both runtimes refuse before anything
+runs, leaves out one of two requested results, and for "upload sample.pdf to <link>" names a tool
+that does not exist, so knaif stops before anything runs. On the Linux CPU the 1.7B also leaves
+out "beep when done" once, gives one tool an argument it does not take (knaif asks), and asks to
+confirm a trim-and-join; its ffmpeg outcome is 0.893 against a 0.8945 floor.
+⁴ Requests whose plan this cell made, and requests whose plan was replayed from a reply recorded
+earlier by a 1.4.0 candidate binary with the same model, prompt and settings: on Windows GPUs the
+first release candidate's (it differs only in `extract_text`'s result line), on Linux CUDA an
+earlier pass of this run that was graded wrongly and run again, on the Windows 4B CPU the replies
+made before a pause. Every request still executed on the shipped binary, and the live requests
+planned the same in every cell. The 1.7B documents cells planned every request live: one of their
+live requests ("upload sample.pdf to <link>", the request in ³) made no plan, so they ran in full.
+⁵ One request asks for the original file to be overwritten; with Vulkan and on the CPU the 4B asks
+a question instead of refusing. Nothing runs, and knaif never writes over an input: an output that
+would is renamed.
+
 ### Added
 
 - **Name a file by its http(s) link.** knaif downloads it and works on it like a local file. It
