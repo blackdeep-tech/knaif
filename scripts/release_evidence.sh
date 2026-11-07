@@ -140,7 +140,7 @@ rel() {
 # -- the platform's artifact ---------------------------------------------------------------------
 unpack() {  # the frozen artifact, afresh; on macOS also its Metal-less copy for the CPU cells
   local src
-  src="$(case "$ARTIFACT" in /*) echo "$ARTIFACT" ;; *) echo "$PWD/$ARTIFACT" ;; esac)"
+  case "$ARTIFACT" in /*) src="$ARTIFACT" ;; *) src="$PWD/$ARTIFACT" ;; esac   # never in $(...): bash 3.2
   rm -rf "$ART" "$ART_CPU" && mkdir -p "$ART" "sandbox/$VER/backends-empty" || return 1
   case "$PLATFORM" in
     windows) (cd "$ART" && unzip -q "$src") ;;

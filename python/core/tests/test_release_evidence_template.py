@@ -50,6 +50,22 @@ def test_the_scripts_parse(script: Path) -> None:
     subprocess.run([BASH, "-n", str(script)], check=True)
 
 
+@pytest.mark.parametrize(
+    "script", [SHARED, TEMPLATE, ROOT / "scripts" / "watch_run.sh"], ids=lambda p: p.name
+)
+def test_no_case_inside_a_command_substitution(script: Path) -> None:
+    # bash 3.2 (macOS's own) takes a case pattern's `)` as the end of `$(...)`, and only when the
+    # line runs: `bash -n` and a newer bash pass it. The 1.4.0 macOS check stopped on one.
+    hits = [
+        f"{script.name}:{n}: {ln.strip()}"
+        for n, ln in enumerate(script.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"\$\(\s*case\b", ln)
+    ]
+    assert (
+        not hits
+    ), "a case inside $(...) breaks bash 3.2; assign in each branch instead:\n" + "\n".join(hits)
+
+
 @pytest.mark.skipif(BASH is None, reason="bash not available")
 def test_an_unfilled_template_refuses_to_run(tmp_path: Path) -> None:
     run = tmp_path / "evals" / "runs" / "2026-01-01_rX-windows_success"
