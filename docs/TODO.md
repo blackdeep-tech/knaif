@@ -381,6 +381,11 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   job). The shipped CLI makes one folder per `knaif run`, named with its process id, so a release
   binary cannot collide. Fix test-first: keep the counter in the tag.
 
+- [ ] **`watch_run.sh` cannot run on a stock Mac** (2026-11-06, found by the Mac's 1.4.0 setup):
+  `scripts/watch_run.sh:131` uses `declare -A`, which macOS's bash 3.2 does not have, though the
+  release scripts are written for 3.2. The Mac watches with `tail -f $R/COMPLETE` meanwhile. Fix
+  without associative arrays and run the watcher's test under bash 3.2.
+
 - [ ] **`watch_run.sh` and a run's `void/` folder** (2026-11-02): it lists a voided stage's logs
   as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/` (done),
   and time from the last stage's `START`.
