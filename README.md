@@ -1,11 +1,39 @@
 <p align="center">
-  <img src="media/knaif-logo-rect.svg" alt="knaif" width="260">
+  <img src="media/knaif-logo-rect.svg" alt="knaif" width="340">
 </p>
 
-# knaif
+<h3 align="center">
+  Talk to your command-line tools in plain language —<br>
+  without letting a language model near your filesystem.
+</h3>
 
-**Talk to your command-line tools in plain language — without letting a language model near
-your filesystem.**
+<p align="center">
+  <a href="https://github.com/blackdeep-tech/knaif/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/blackdeep-tech/knaif?label=release&color=ff5757"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-3b82f6"></a>
+  <a href="#-install"><img alt="Windows, Linux, macOS" src="https://img.shields.io/badge/Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-ready-22c55e"></a>
+  <a href="#-what-it-is"><img alt="Runs on your machine" src="https://img.shields.io/badge/AI-runs%20on%20your%20machine-8b5cf6"></a>
+  <a href="#-measured-against-three-premium-agents"><img alt="Cost per request: $0" src="https://img.shields.io/badge/per%20request-%240-f59e0b"></a>
+  <a href="https://pypi.org/project/knaif/"><img alt="PyPI" src="https://img.shields.io/pypi/v/knaif?label=PyPI&color=0ea5e9"></a>
+</p>
+
+<p align="center">
+  <a href="https://knaif.org/download/"><b>⬇️ Download</b></a> &nbsp;·&nbsp;
+  <a href="https://knaif.org"><b>🌐 knaif.org</b></a> &nbsp;·&nbsp;
+  <a href="https://youtu.be/AZ1lGlUI9j8"><b>▶️ 2-minute video</b></a> &nbsp;·&nbsp;
+  <a href="#-two-ways-to-use-it"><b>🧩 Build with it</b></a> &nbsp;·&nbsp;
+  <a href="#-measured-against-three-premium-agents"><b>📊 Benchmarks</b></a>
+</p>
+
+<p align="center">
+  <img src="media/demo/knaif-tour.gif" alt="A terminal session: knaif resizes clip.mp4 to 720p, turns its first 3 seconds into a GIF, merges two PDFs, and refuses to delete the original video." width="860">
+  <br>
+  <sub>A real session, nothing sped up — knaif 1.4.0 on Linux, NVIDIA RTX 5080, model kept loaded by the daemon.</sub>
+</p>
+
+You say what you want. A **small AI model on your own machine** turns the sentence into a plan,
+**ordinary code checks that plan**, and only then does a real tool — FFmpeg, a PDF library — do the
+work. No account, no API key, no upload, no meter running. Add `--dry-run` to only print the
+command, or `--confirm` to approve each step before it runs.
 
 ```console
 $ knaif run ffmpeg "resize clip.mp4 to 720p"
@@ -13,10 +41,45 @@ running: ffmpeg -y -i clip.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset med
 ✓ clip_resized.mp4
 ```
 
-knaif runs a **local** model. Nothing leaves your machine. Add `--dry-run` to only print the
-command, or `--confirm` to approve each step before it runs.
+|  |  |
+|---|---|
+| 🔒 **Nothing leaves your machine** | The model, your files and your words stay local. It works offline. |
+| 💸 **Free however often you ask** | No subscription, no per-request charge — the millionth run costs what the first did. |
+| 🛡️ **The model can't act** | It only proposes a plan. Code validates every tool, argument and path before anything runs. |
+| 🎯 **Same request, same command** | The command is built by tested code, not improvised, so tomorrow's answer matches today's. |
+| ✋ **It asks before it replaces** | Overwriting a file always needs your yes — enforced in code, not left to the model. |
 
-## What it is
+```mermaid
+flowchart LR
+    A["🗣️ shrink clip.mp4<br/>for WhatsApp"] --> B["🧠 small local model<br/>proposes a JSON plan"]
+    B --> C{"🛡️ deterministic checks<br/>tools · args · paths · safety"}
+    C -- passes --> D["⚙️ FFmpeg / documents<br/>tools run"]
+    C -- unclear --> E["❓ asks what you mean"]
+    C -- unsafe --> F["⛔ rejected"]
+    D --> G["✅ clip_compressed.mp4"]
+    classDef you fill:#fff1f1,stroke:#ff5757,color:#1f232b
+    classDef model fill:#ede9fe,stroke:#8b5cf6,color:#1f232b
+    classDef check fill:#dbeafe,stroke:#3b82f6,color:#1f232b
+    classDef run fill:#dcfce7,stroke:#22c55e,color:#1f232b
+    classDef stop fill:#fef3c7,stroke:#f59e0b,color:#1f232b
+    class A you
+    class B model
+    class C check
+    class D,G run
+    class E,F stop
+```
+
+<details>
+<summary><b>▶️ More in 66 seconds:</b> a whole folder at once, five languages, piping text out, a password, an unclear request and a refused delete</summary>
+<br>
+<p align="center">
+  <img src="media/demo/knaif-more.gif" alt="A terminal session: knaif starts its daemon, previews a compression with --dry-run, compresses every video in a folder, handles video requests in German, French, Spanish and Chinese, pipes a PDF's text into wc, password-protects a PDF, asks what 'make my video better' means, and refuses to delete all videos." width="860">
+  <br>
+  <sub>Same machine and setup as above, nothing sped up.</sub>
+</p>
+</details>
+
+## ✨ What it is
 
 knaif is a **framework for building AI-enhanced applications that run entirely on the
 user's own hardware** — no subscription, no API key, no token meter. It is not itself an
@@ -35,7 +98,7 @@ local model, so the marginal cost of the millionth run is the same as the first:
 on a laptop. Most people ask assistants for a fairly narrow set of things — solving those
 once and distributing the result beats re-deriving them through a datacenter every time.
 
-## Why this instead of asking a chatbot for the command
+## 🤔 Why this instead of asking a chatbot for the command
 
 Because the model never gets to act. It is allowed to produce exactly one thing — a plan:
 
@@ -64,7 +127,13 @@ coding; it targets tools that are genuinely hard to drive by hand — FFmpeg fir
 plain-English request beats remembering the flag order. This means knaif is only as capable
 as its skills. That's the trade.
 
-## Measured against three premium agents
+## 📊 Measured against three premium agents
+
+<p align="center">
+  <img src="media/demo/knaif-vs-claude-code.gif" alt="Side by side on one machine: knaif and Claude Code get the same three requests at the same moment. knaif finishes in 2.0 s, 3.8 s and 1.0 s against 12.5 s, 14.5 s and 32.4 s, and for 'make my video better' both ask what to improve." width="860">
+  <br>
+  <sub>Not the measurement below — a recorded side-by-side on one machine (RTX 5080): knaif 1.4.0 with the model kept loaded, and Claude Code on <code>opus-5.5</code>, given the same requests at the same moment. Click to enlarge.</sub>
+</p>
 
 Eleven real-world ffmpeg requests (measured 2026-07-02 with `knaif-qwen3-4b-v1`, the model then
 shipping), run through knaif and three premium coding agents —
@@ -103,13 +172,42 @@ and knaif's column stays at zero however many times you ask. Method, per-request
 calibration, caveats, and a one-command harness to reproduce all of it:
 **[the full experiment](docs/experiments/2026-07-02-agent-vs-knaif-realworld.md)**.
 
-## Status
+## 📦 Install
 
-**v1.3.0** — knaif runs on macOS (Apple Silicon, with Metal) as well as Windows and Linux, and an
-optional model daemon keeps the model loaded between runs. Same models as 1.2.0
-(`knaif-qwen3-4b-v2`, the default, and `knaif-qwen3-1.7b-v2`). Measured on the shipped binary per
-OS and backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on the
-[model card](https://huggingface.co/blackdeep/knaif).
+| | Download from [knaif.org](https://knaif.org/download/) or [Releases](https://github.com/blackdeep-tech/knaif/releases/latest) | Or with a package manager |
+|---|---|---|
+| 🪟 **Windows** | `setup.exe` (per user, no admin) or a portable `.zip` | [Scoop](https://scoop.sh) — see below |
+| 🍎 **macOS** | a signed and notarized `.pkg`, or a `.zip` | `brew install blackdeep-tech/knaif/knaif` |
+| 🐧 **Linux** | an `.AppImage` (`chmod +x` and run) or a `.tar.gz` | — |
+| 🐍 **Python** | — | `pip install knaif` (the engine and SDK, for building your own) |
+
+**Scoop** (Windows) installs the same signed release `.zip`, puts knaif on your PATH and brings
+FFmpeg with it:
+
+```powershell
+scoop bucket add knaif https://github.com/blackdeep-tech/scoop-knaif
+scoop install knaif/knaif
+```
+
+With Smart App Control on, Windows blocks the 7-Zip Scoop unpacks FFmpeg with; the
+[bucket's README](https://github.com/blackdeep-tech/scoop-knaif#readme) shows how to install knaif on
+its own. Homebrew installs FFmpeg with knaif too.
+
+Then fetch the model once and go:
+
+```console
+$ knaif models pull knaif-qwen3-4b-v2        # ~2.5 GB, verified against a pinned SHA-256
+$ knaif skills deps                          # which supporting tools are still missing
+$ knaif run ffmpeg "make clip.mp4 small enough to email"
+```
+
+## 🚦 Status
+
+**v1.4.0** — name a file by its link, cover every file in a folder in one request, and end with a
+desktop notification ("beep when done"); a run leaves only the results you asked for. Same models
+as 1.2.0 (`knaif-qwen3-4b-v2`, the default, and `knaif-qwen3-1.7b-v2`). Measured on the shipped
+binary per OS and backend before release; the numbers are in the [CHANGELOG](CHANGELOG.md) and on
+the [model card](https://huggingface.co/blackdeep/knaif).
 
 | | |
 |---|---|
@@ -128,11 +226,9 @@ Speed figures live in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md), which record
 machine produced which number — worth reading before you take any latency claim at face
 value.
 
-## Two ways to use it
+## 🧩 Two ways to use it
 
-**As a tool** — the native CLI, a single binary, no Python needed. Download from
-[knaif.org](https://knaif.org/download) or [Releases](https://github.com/blackdeep-tech/knaif/releases)
-(on a Mac, also `brew install blackdeep-tech/knaif/knaif`), then:
+**As a tool** — the native CLI, a single binary, no Python needed ([install](#-install)), then:
 
 ```console
 $ knaif models pull knaif-qwen3-4b-v2        # ~2.5 GB, verified against a pinned SHA-256
@@ -174,7 +270,7 @@ nk.App([add]).run()      # reads sys.argv[1] as a natural-language utterance
 
 Already using `click`? Wrap it: `nk.from_click(cli)`. See [`docs/SDK.md`](docs/SDK.md).
 
-## Hosting a skill from Python
+## 🐍 Hosting a skill from Python
 
 The same engine the CLI uses is available directly. `create_agent()` builds a fully wired
 agent for a skill by name:
@@ -212,7 +308,7 @@ agent = create_agent("my_skill", skills_root="/path/to/your/skills")
 Local inference is optional: mock inference always works, and Ollama needs no build step.
 See [`docs/INFERENCE.md`](docs/INFERENCE.md) for model resolution and backend setup.
 
-## Built-In Skills
+## 🧰 Built-In Skills
 
 These ship in the repository under `skills/` as reference implementations and eval
 fixtures. They are **not** packaged into the wheel — the distributed package is the
@@ -228,7 +324,7 @@ The list below is generated from each skill's `skill.yaml` by
 - `io` *(stale — under rebuild)*: File I/O agent — list, find, move, and delete files within a sandbox.
 <!-- END GENERATED SKILLS -->
 
-## Documentation
+## 📚 Documentation
 
 **Using knaif**
 
@@ -267,21 +363,21 @@ The list below is generated from each skill's `skill.yaml` by
 - [Changelog](CHANGELOG.md) · [Security Policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Active checklist](docs/TODO.md) · [Durable plans](docs/plans/)
 
-## Contributing
+## 🤝 Contributing
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) covers setup and what a PR must pass.
 Security issues go through [`SECURITY.md`](SECURITY.md), never a public issue.
 Found a case where it plans the wrong thing? That's the
 [most useful issue you can file](https://github.com/blackdeep-tech/knaif/issues/new/choose).
 
-## Disclaimer
+## ⚠️ Disclaimer
 
 knaif's plans come from a small AI model and can be wrong: read the plan and the command before you
 confirm, and keep backups, because knaif writes files and can replace existing ones. Supporting
 tools (FFmpeg, LibreOffice, Ghostscript, Tesseract) are third-party software under their own
 licenses. knaif and its models are provided "as is", without warranty, under the license below.
 
-## License
+## ⚖️ License
 
 knaif is built and maintained by **[Blackdeep Technologies](https://blackdeep.tech)**.
 
