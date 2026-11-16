@@ -1,0 +1,56 @@
+---
+// A recorded knaif session as a GIF: the same files the README shows (media/demo/ at the repo
+// root), imported by URL so the build copies them rather than the repo carrying two copies.
+// Under reduced motion the browser picks the still frame beside each GIF instead, because a GIF
+// cannot be paused.
+//
+// Recorded in real time with knaif 1.4.0 on Linux with an NVIDIA RTX 5080, the model kept
+// loaded by the daemon: any caption quoting a time must name that machine.
+interface Props {
+  gif: string;
+  still: string;
+  width: number;
+  height: number;
+  alt: string;
+  caption?: string;
+  eager?: boolean;
+}
+
+const { gif, still, width, height, alt, caption, eager = false } = Astro.props;
+---
+
+<figure class="demo-gif not-content">
+  <picture>
+    <source srcset={still} media="(prefers-reduced-motion: reduce)" />
+    <img
+      src={gif}
+      width={width}
+      height={height}
+      alt={alt}
+      loading={eager ? "eager" : "lazy"}
+      decoding="async"
+    />
+  </picture>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .demo-gif {
+    margin: 1.25rem 0;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.5rem;
+    background: #0d1117;
+  }
+
+  figcaption {
+    margin-top: 0.5rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+  }
+</style>
