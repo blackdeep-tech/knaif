@@ -1,6 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
-import Terminal from "../components/Terminal.astro";
+import ExplainerVideo from "../components/ExplainerVideo.astro";
 import SkillCard from "../components/SkillCard.astro";
 import { skills } from "../lib/catalog";
 import { rel, supported, primaryAsset, mb } from "../lib/release";
@@ -38,11 +38,7 @@ const stable = skills.filter((s) => s.stage === "stable");
   </section>
 
   <section class="demo">
-    <Terminal />
-    <p class="note">
-      A real session. knaif chose the tool and the settings; you saw the command before it
-      ran.
-    </p>
+    <ExplainerVideo />
   </section>
 
   <section>

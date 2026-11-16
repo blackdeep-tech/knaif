@@ -89,7 +89,7 @@
           {
             "artifact": "knaif-<ver>-windows-x64.zip",
             "kind": "portable",
-            "notes": "Unpack anywhere and run; everything it needs ships beside the binary."
+            "notes": "Unpack anywhere and run; everything it needs ships beside the binary. Or with Scoop: scoop bucket add knaif https://github.com/blackdeep-tech/scoop-knaif, then scoop install knaif/knaif"
           }
         ],
         "id": "windows-x64",
