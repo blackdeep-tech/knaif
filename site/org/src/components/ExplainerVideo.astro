@@ -1,0 +1,157 @@
+---
+// The narrated explainer, played in place. Until the visitor presses play this is a still and a
+// link: no request goes to YouTube. Pressing play swaps in YouTube's privacy-enhanced player
+// (youtube-nocookie.com). Without JS, or with a modified click (new tab), the link opens the
+// video on YouTube instead.
+import { explainer, explainerUrl } from "../lib/media";
+
+const embed = `https://www.youtube-nocookie.com/embed/${explainer.youtubeId}?autoplay=1&rel=0&cc_load_policy=1`;
+---
+
+{
+  explainerUrl && (
+    <figure class="explainer">
+      <div class="player" data-player data-embed={embed} data-title={explainer.title}>
+        <a
+          class="still"
+          href={explainerUrl}
+          rel="noopener"
+          aria-label={`Play the video "${explainer.title}" (${explainer.duration})`}
+        >
+          <img src={explainer.poster} width="1920" height="1080" alt="" decoding="async" />
+          <span class="play" aria-hidden="true" />
+          <span class="len" aria-hidden="true">
+            {explainer.duration}
+          </span>
+        </a>
+      </div>
+      <figcaption>
+        <span class="title">{explainer.title}</span> — {explainer.blurb}{" "}
+        <a href={explainerUrl} rel="noopener">
+          Watch on YouTube
+        </a>
+      </figcaption>
+    </figure>
+  )
+}
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-player]").forEach((player) => {
+    const still = player.querySelector<HTMLAnchorElement>("a.still");
+    if (!still) return;
+    still.addEventListener("click", (e) => {
+      // A new-tab or new-window click keeps its meaning: open YouTube.
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      const frame = document.createElement("iframe");
+      frame.src = player.dataset.embed ?? "";
+      frame.title = player.dataset.title ?? "Video";
+      frame.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+      frame.allowFullscreen = true;
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      player.replaceChildren(frame);
+      frame.focus();
+    });
+  });
+</script>
+
+<style>
+  .explainer {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .player {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: #0d1117;
+    box-shadow: 0 1.25rem 3rem -1.5rem rgb(31 35 43 / 0.45);
+  }
+
+  .player:has(.still:hover),
+  .player:has(.still:focus-visible) {
+    border-color: var(--coral);
+  }
+
+  .still {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .still img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .player :global(iframe) {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  /* A coral disc with a dark triangle (the label colour that clears AA on coral), below the
+     poster's taglines rather than centred, where it would cover the logo. */
+  .play {
+    position: absolute;
+    left: 50%;
+    top: 83%;
+    width: 4.75rem;
+    height: 4.75rem;
+    margin: -2.375rem 0 0 -2.375rem;
+    border-radius: 50%;
+    background: var(--coral);
+    box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.35);
+    transition: transform 0.2s ease;
+  }
+
+  .still:hover .play {
+    transform: scale(1.08);
+  }
+
+  .play::after {
+    content: "";
+    position: absolute;
+    left: 1.9rem;
+    top: 1.45rem;
+    border-style: solid;
+    border-width: 0.925rem 0 0.925rem 1.45rem;
+    border-color: transparent transparent transparent var(--on-coral);
+  }
+
+  .len {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: #e8eaed;
+    background: #0d1117;
+    padding: 0.1rem 0.45rem;
+    border-radius: 0.3rem;
+  }
+
+  figcaption {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+
+  .title {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .play {
+      transition: none;
+    }
+  }
+</style>

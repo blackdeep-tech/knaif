@@ -17,7 +17,10 @@ platforms:
       "knaif-<ver>-windows-x64-setup.exe":
         notes: "Inno installer, per-user, no admin required."
       "knaif-<ver>-windows-x64.zip":
-        notes: "Unpack anywhere and run; everything it needs ships beside the binary."
+        notes: >-
+          Unpack anywhere and run; everything it needs ships beside the binary. Or with Scoop:
+          scoop bucket add knaif https://github.com/blackdeep-tech/scoop-knaif, then
+          scoop install knaif/knaif
     warnings:
       # Not a footnote — it is the first thing a Windows user sees, and the checksum
       # (not the absence of a warning) is what proves the download is intact.
