@@ -265,7 +265,8 @@ The list below is generated from each skill's `skill.yaml` by
 
 ## Contributing
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) covers setup and what a PR must pass.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) covers setup and what a PR must pass. Each commit is signed off under the
+[Developer Certificate of Origin](DCO) (`git commit -s`).
 Security issues go through [`SECURITY.md`](SECURITY.md), never a public issue.
 Found a case where it plans the wrong thing? That's the
 [most useful issue you can file](https://github.com/blackdeep-tech/knaif/issues/new/choose).
