@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A URL isn't on this machine - I need the local filename. Should I download it first?"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_document", "args": {"input": "sample.docx", "to_format": "pdf", "output": "sample.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "sample.pdf", "position": "bottom-center"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A 100x speed-up isn't achievable. That would take hours on a normal machine. Is there a speed multiplier you'd like, say 2.0 or 1.5?"}}]}

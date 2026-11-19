@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["*.mp4", "*.mov"], "video_codec": "hevc"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["clip_4k.mp4"], "height": 1080, "keep_aspect_ratio": true, "output": "clip_1080p.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["clip_1080p.mp4"], "crf": 28}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_speed", "args": {"inputs": ["video.mp4"], "speed": 100.0}}]}
