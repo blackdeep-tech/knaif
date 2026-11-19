@@ -688,6 +688,18 @@ the WSL clone and onto the Mac before their stages. The other runs name the Wind
 platform plans its own subset once (one model load per cell) and reuses those replies in later
 releases.
 
+**The remote relay (a machine the owner does not sit at).** From 1.4.0 (owner, 2026-11-19) the Mac's
+remaining work runs as one queue, `evals/runs/<run>/queue.sh` on `scripts/release_queue.sh`, which
+the owner approves once with a budget per step. Each step posts its result to one issue in this
+repo; the queue carries on past every miss the run folder's `accepted.yaml` (or an earlier decision)
+covers, and stops on that issue only for a new miss, a failure or a step that needs the owner. The
+owner answers there with a fenced `knaif-decision` block (`step`, `action: continue | rerun | stop`,
+optional `accept` rules); only the owner's accounts are read, and no answer can make the machine run
+a command of its choosing. The owner's side follows the issue with
+`uv run python -m knaif.evalsuite.relay watch --repo blackdeep-tech/knaif --issue <n>`. Every body
+is scrubbed of local paths and refused if it still names a home directory: the issue is public.
+The queue ends by committing the evidence and opening one PR into the release branch.
+
 **What a cell measures.**
 
 - **The release subset**, `skills/<skill>/data/release_subset.json`: one utterance per tool ×
