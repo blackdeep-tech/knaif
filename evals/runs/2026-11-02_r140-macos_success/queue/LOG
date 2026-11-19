@@ -17,3 +17,15 @@
 2026-11-19 22:07:40 START restore-l3 (budget 5 min)
 2026-11-19 22:07:43 restore-l3: done (exit 0, 0 min), comment 7020839156
 2026-11-19 22:07:43 START commit-evidence (budget 15 min)
+2026-11-19 22:07:48 commit-evidence: done (exit 0, 0 min), comment 7020841218
+2026-11-19 22:07:48 START cleanroom (budget 120 min)
+2026-11-19 22:23:32 cleanroom: waiting (exit 0, 15 min), comment 7021213617
+2026-11-19 22:23:32 cleanroom: waiting for the owner (comment 7021213617)
+2026-11-20 00:24:09 preflight: done in an earlier run, skipped
+2026-11-20 00:24:09 live-metal: done in an earlier run, skipped
+2026-11-20 00:24:09 live-cpu: done in an earlier run, skipped
+2026-11-20 00:24:09 beep-check: done in an earlier run, skipped
+2026-11-20 00:24:09 verdicts: done in an earlier run, skipped
+2026-11-20 00:24:09 restore-l3: done in an earlier run, skipped
+2026-11-20 00:24:09 commit-evidence: done in an earlier run, skipped
+2026-11-20 00:24:09 cleanroom: waiting for the owner (comment 7021213617)
