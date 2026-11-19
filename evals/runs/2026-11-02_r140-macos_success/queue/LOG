@@ -1,0 +1,19 @@
+2026-11-19 20:45:53 START preflight (budget 10 min)
+2026-11-19 20:46:01 preflight: waiting (exit 0, 0 min), comment 7018627666
+2026-11-19 20:46:01 preflight: waiting for the owner (comment 7018627666)
+2026-11-19 20:50:35 open-pr: held by the Mac contributor (marked done by hand; no push, no PR until they say so)
+2026-11-19 20:50:57 preflight: waiting for the owner (comment 7018627666)
+2026-11-19 21:11:06 preflight: the owner says continue
+2026-11-19 21:11:06 START live-metal (budget 30 min)
+2026-11-19 21:14:58 live-metal: done (exit 3, 3 min), comment 7019516113
+2026-11-19 21:14:58 START live-cpu (budget 60 min)
+2026-11-19 21:26:12 live-cpu: done (exit 3, 11 min), comment 7019818746
+2026-11-19 21:26:12 START beep-check (budget 15 min)
+2026-11-19 21:27:21 beep-check: waiting (exit 0, 1 min), comment 7019851578
+2026-11-19 21:27:21 beep-check: waiting for the owner (comment 7019851578)
+2026-11-19 22:07:37 beep-check: the owner says continue
+2026-11-19 22:07:37 START verdicts (budget 5 min)
+2026-11-19 22:07:40 verdicts: done (exit 0, 0 min), comment 7020838027
+2026-11-19 22:07:40 START restore-l3 (budget 5 min)
+2026-11-19 22:07:43 restore-l3: done (exit 0, 0 min), comment 7020839156
+2026-11-19 22:07:43 START commit-evidence (budget 15 min)
