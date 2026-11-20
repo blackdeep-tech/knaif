@@ -27,22 +27,27 @@ same requests: no request the reference passed may fail, and outcome and knaif s
 | `knaif-qwen3-4b-v2` | Windows · CPU | 0.957 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 148 / 189 | accepted, 1 request reviewed ³ |
 | `knaif-qwen3-4b-v2` | Linux · CUDA | 0.953 / 0.988 | 0.961 / 0.989 | 11/11 · 9/9 | 0 / 337 | accepted, 2 requests reviewed ³ |
 | `knaif-qwen3-4b-v2` | Linux · CPU | 0.962 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 337 / 0 | accepted, 1 request reviewed ³ |
-| `knaif-qwen3-4b-v2` | macOS · Metal | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
-| `knaif-qwen3-4b-v2` | macOS · CPU | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| `knaif-qwen3-4b-v2` | macOS · Metal | 0.953 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 337 / 0 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | macOS · CPU | 0.949 / 0.990 | 0.951 / 0.989 | 10/11 ⁵ · 9/9 | 337 / 0 | accepted, 4 requests reviewed ³ |
 | `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.923 / 0.982 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 3 requests reviewed ³ |
 | `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.923 / 0.985 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 2 requests reviewed ³ |
 | `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.923 / 0.976 | 0.913 / 0.992 | 11/11 · 9/9 | 337 / 0 | accepted, 4 requests reviewed ³ |
 | `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.923 / 0.982 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 3 requests reviewed ³ |
 | `knaif-qwen3-1.7b-v2` | Linux · CPU | 0.893 / 0.984 | 0.903 / 0.998 | 11/11 · 9/9 | 337 / 0 | accepted, 8 requests reviewed ³ |
-| `knaif-qwen3-1.7b-v2` | macOS · Metal | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
-| `knaif-qwen3-1.7b-v2` | macOS · CPU | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| `knaif-qwen3-1.7b-v2` | macOS · Metal | 0.923 / 0.985 | 0.903 / 0.998 | 11/11 · 9/9 | 337 / 0 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | macOS · CPU | 0.910 / 0.985 | 0.913 / 0.992 | 11/11 · 9/9 | 103 / 234 | accepted, 4 requests reviewed ³ |
 
-Measured 2026-11-02/04 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) and _pending_
-(macOS). The native and Python runtimes agree wherever both planned the same thing, on the release
-subset: 0 port bugs, and on Windows CUDA 2.8% ffmpeg plan disagreement (both models) and 1.9% (4B)
-and 2.9% (1.7B) documents, every difference reviewed; macOS Metal _pending_. Plans through the
-daemon are byte-identical to plans made without it, on Windows and Linux (macOS _pending_). The
-installers were checked in clean machines: _pending_.
+Measured 2026-11-02/04 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) and 2026-11-18/19
+on an Apple M1 Pro (macOS 27.2). The native and Python runtimes agree wherever both planned the same
+thing, on the release subset: 0 port bugs, and on Windows CUDA 2.8% ffmpeg plan disagreement (both
+models) and 1.9% (4B) and 2.9% (1.7B) documents, every difference reviewed; on macOS Metal 0.5%
+ffmpeg (4B) and none otherwise. Plans through the daemon are byte-identical to plans made without
+it, on Windows, Linux and macOS. The installers were checked in clean machines: in Windows Sandbox
+from the published 1.3.0 installer up (the upgrade, reinstall and uninstall over a running daemon,
+a fresh install with real requests), on macOS 12 VMs with no developer tools (the quarantined zip,
+the package with the network off, the upgrade from 1.3.0 and the uninstaller, and Metal from a fresh
+account on a Mac), and the Linux builds on the oldest Ubuntu they support. The bundled PDFium loads
+and rasterizes on Windows and on macOS 12.
 ³ Accepted after review: on these requests the binary's result differs from the Python
 reference's, and each was reviewed with both plans and commands. In every ffmpeg cell, "compress
 clip.mp4 to crf18" comes out bigger, so knaif keeps the original, as 1.4.0 means it to; the
@@ -52,17 +57,21 @@ where the reference letterboxed, writes a malformed plan that both runtimes refu
 runs, leaves out one of two requested results, and for "upload sample.pdf to <link>" names a tool
 that does not exist, so knaif stops before anything runs. On the Linux CPU the 1.7B also leaves
 out "beep when done" once, gives one tool an argument it does not take (knaif asks), and asks to
-confirm a trim-and-join; its ffmpeg outcome is 0.893 against a 0.8945 floor.
+confirm a trim-and-join; its ffmpeg outcome is 0.893 against a 0.8945 floor. On the macOS CPU the
+1.7B does the first two of those as well, and the 4B asks instead of planning twice (compress and
+prepare for a platform; inspect a PDF by its link) and answers "beep" with a malformed plan that
+both runtimes refuse before anything runs.
 ⁴ Requests whose plan this cell made, and requests whose plan was replayed from a reply recorded
 earlier by a 1.4.0 candidate binary with the same model, prompt and settings: on Windows GPUs the
 first release candidate's (it differs only in `extract_text`'s result line), on Linux CUDA an
 earlier pass of this run that was graded wrongly and run again, on the Windows 4B CPU the replies
-made before a pause. Every request still executed on the shipped binary, and the live requests
-planned the same in every cell. The 1.7B documents cells planned every request live: one of their
-live requests ("upload sample.pdf to <link>", the request in ³) made no plan, so they ran in full.
-⁵ One request asks for the original file to be overwritten; with Vulkan and on the CPU the 4B asks
-a question instead of refusing. Nothing runs, and knaif never writes over an input: an output that
-would is renamed.
+made before a pause, on the macOS 1.7B CPU the replies made before the disk filled up. Every
+request still executed on the shipped binary, and the live requests planned the same in every
+cell. The 1.7B documents cells planned every request live: one of their live requests ("upload
+sample.pdf to <link>", the request in ³) made no plan, so they ran in full.
+⁵ One request asks for the original file to be overwritten; with Vulkan, Metal and on the CPU the
+4B asks a question instead of refusing. Nothing runs, and knaif never writes over an input: an
+output that would is renamed.
 
 ### Added
 

@@ -992,18 +992,22 @@ _L3_DISAGREEMENT_MISS = re.compile(
 
 
 _UNMET_HEADER = re.compile(r"NOT ACCEPTED - (\d+) of \d+ thresholds unmet:")
+# A bracket that could be a threshold's kind: not one opening quoted JSON or a list, as the
+# reference's plan shows for a row with no command (`'{"plan": [{"tool": ...}]}'`).
+_KIND_BRACKET = re.compile(r"\[(?![{\"'\[\]])")
 
 
 def _unmet_kinds(summary: str) -> list[str] | None:
     """The kind of every unmet threshold a recorded verdict names (`[slice] ...`), or None when
     the summary does not account for all of them: the header's count must match the kinds
-    listed, and every bracket must be a well-formed kind. A summary that hides a miss (a
-    mangled `[safety ]`, a dropped line) must not be waivable (Codex, 2026-09-28)."""
+    listed, and every bracket that could be a kind must be a well-formed one. A summary that
+    hides a miss (a mangled `[safety ]`, a dropped line) must not be waivable (Codex,
+    2026-09-28); a quoted JSON plan's brackets are not kinds (2026-11-20)."""
     header = _UNMET_HEADER.match(summary)
     kinds = re.findall(r"\[(\w+)\] ", summary)
     if header is None or not kinds:
         return None
-    if int(header.group(1)) != len(kinds) or summary.count("[") != len(kinds):
+    if int(header.group(1)) != len(kinds) or len(_KIND_BRACKET.findall(summary)) != len(kinds):
         return None
     return kinds
 

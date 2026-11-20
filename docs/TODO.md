@@ -372,6 +372,11 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   unproven on macOS 12. 1.4.0's macOS 12 room runs a smallest compress (it rasterizes through
   PDFium) to answer it; the Windows room's `fresh_pdfium_loads` passed. Then: a PDFium build that
   targets 12.0, or the floor raised to 13 for those tools, and the Mach-O check in the release path.
+  **Answered 2026-11-19:** in 1.4.0's macOS 12 VM the smallest compress loaded PDFium and
+  rasterized (2.2 KB → 114.5 KB, so knaif kept the original), exit 0
+  (`evals/runs/2026-11-02_r140-macos_success/cleanroom/run1-zip/pdfium-macos12.log`). It works on
+  12 today; what is left is the library's declared floor, which a later macOS or PDFium could make
+  binding.
 
 - [ ] **Two scratch folders in one process can share a name** (2026-11-04, after 1.4.0: `native/`
   is frozen). `RunScratch::in_root` (`native/crates/knaif-core/src/scratch.rs`) shifts its counter
@@ -384,7 +389,31 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 - [ ] **`watch_run.sh` cannot run on a stock Mac** (2026-11-06, found by the Mac's 1.4.0 setup):
   `scripts/watch_run.sh:131` uses `declare -A`, which macOS's bash 3.2 does not have, though the
   release scripts are written for 3.2. The Mac watches with `tail -f $R/COMPLETE` meanwhile. Fix
-  without associative arrays and run the watcher's test under bash 3.2.
+  without associative arrays and run the watcher's test under bash 3.2. It also needs GNU tools
+  (2026-11-20, the Mac's pre-push hook): `stat -c` (lines 50, 58, 159), `find -printf` (61, 178)
+  and `date -d` (77), which macOS ships in their BSD form, so even Homebrew's bash 5 fails at line
+  185. Until then the Mac's push deselects its two tests (owner); CI on Linux runs them.
+
+- [ ] **Golden CLI outputs compare byte counts that depend on the machine** (2026-11-20, after
+  1.4.0: `contracts/` is frozen). `contracts/parity/cli_output_cases.json` masks times as `<t>` but
+  not sizes: "a document inspected" expects the generated `sample.pdf` at 2227 bytes (2221 on the
+  Mac), and the two ffmpeg batch cases expect 436.8 KB from this box's ffmpeg (Homebrew's 8.1.1
+  writes other bytes). Mask sizes the way times are masked, in both runtimes' tests. Until then the
+  Mac's pre-push hook deselects the three (owner); CI on Linux runs them.
+
+- [ ] **The release queue's first run, what to fix** (2026-11-20, from 1.4.0's Mac run on #120).
+  In `evals/runs/<run>/queue.sh` and `scripts/release_queue.sh` / `relay.py`: the `SHA256SUMS`
+  check must accept `<sha> *<name>` (the release writes the `*`; preflight failed on a good file);
+  `reply-check --recorded` must take the retry a failed parse makes (two replies, not one); a
+  preflight that the program running the queue may reach the VMs (macOS Local Network privacy
+  dropped every connection until it ran from Terminal); run the queue under `caffeinate -i` (the
+  Mac slept with the clean room waiting); and a supported way to hold `open-pr` until the
+  contributor confirms (done by hand with `queue/done/open-pr`).
+
+- [ ] **DCO: write the rule down, and sign our own commits** (2026-11-20). The owner chose a DCO
+  sign-off with no CLA (2026-11-17), but `CONTRIBUTING.md` says nothing about it and there is no
+  `dco.yml`; the DCO app passes the owner's unsigned commits (it seems to exempt org members). Add
+  the rule to `CONTRIBUTING.md`, and have the commit-prompt block use `git commit -s`.
 
 - [ ] **`watch_run.sh` and a run's `void/` folder** (2026-11-02): it lists a voided stage's logs
   as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/` (done),
