@@ -1,0 +1,24 @@
+ok knaif
+ok libggml-base.0.26.0.dylib
+ok libggml-base.0.dylib
+ok libggml-base.dylib
+ok libggml.0.26.0.dylib
+ok libggml.0.dylib
+ok libggml.dylib
+ok libllama-common.0.6.0.dylib
+ok libllama-common.0.dylib
+ok libllama-common.dylib
+ok libllama.0.6.0.dylib
+ok libllama.0.dylib
+ok libllama.dylib
+ok libpdfium.dylib
+ok libggml-cpu-apple_m1.so
+ok libggml-cpu-apple_m2_m3.so
+ok libggml-cpu-apple_m4.so
+ok libggml-metal.so
+Authority=Developer ID Application: Blackdeep Technologies Ltd OOD (8YJ4KKV9SJ)
+Authority=Developer ID Certification Authority
+Authority=Apple Root CA
+Timestamp=2 Nov 2026 at 17:45:38
+TeamIdentifier=8YJ4KKV9SJ
+Runtime Version=15.5.0

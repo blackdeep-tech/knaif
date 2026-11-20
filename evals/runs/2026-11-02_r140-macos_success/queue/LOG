@@ -29,3 +29,19 @@
 2026-11-20 00:24:09 restore-l3: done in an earlier run, skipped
 2026-11-20 00:24:09 commit-evidence: done in an earlier run, skipped
 2026-11-20 00:24:09 cleanroom: waiting for the owner (comment 7021213617)
+2026-11-20 09:33:03 queue stopped by the Mac contributor (Mac hibernating); cleanroom still waits on comment 7021213617
+2026-11-20 13:25:24 preflight: done in an earlier run, skipped
+2026-11-20 13:25:24 live-metal: done in an earlier run, skipped
+2026-11-20 13:25:24 live-cpu: done in an earlier run, skipped
+2026-11-20 13:25:24 beep-check: done in an earlier run, skipped
+2026-11-20 13:25:24 verdicts: done in an earlier run, skipped
+2026-11-20 13:25:24 restore-l3: done in an earlier run, skipped
+2026-11-20 13:25:24 commit-evidence: done in an earlier run, skipped
+2026-11-20 13:25:24 cleanroom: waiting for the owner (comment 7021213617)
+2026-11-20 13:25:25 cleanroom: the owner says rerun
+2026-11-20 13:25:25 START cleanroom (budget 120 min, again)
+2026-11-20 14:13:20 cleanroom: done (exit 0, 47 min), comment 7039249900
+2026-11-20 14:13:20 START metal-fresh-account (budget 60 min)
+2026-11-20 14:13:26 metal-fresh-account: waiting for /Users/Shared/knaif-metal-check/summary.txt (manual)
+2026-11-20 14:39:28 metal-fresh-account: done (exit 0, 26 min), comment 7039761044
+2026-11-20 14:39:28 START commit-cleanroom (budget 10 min)

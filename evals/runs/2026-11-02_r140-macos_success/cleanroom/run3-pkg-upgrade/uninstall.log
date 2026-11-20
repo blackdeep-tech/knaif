@@ -1,0 +1,8 @@
+knaif daemon is not running.
+removed /usr/local/bin/knaif
+removed /usr/local/knaif
+forgot receipt tech.blackdeep.knaif.core
+forgot receipt tech.blackdeep.knaif.skill.documents
+forgot receipt tech.blackdeep.knaif.skill.ffmpeg
+kept ~/.knaif (downloaded models): remove it with --purge, or by hand
+knaif is uninstalled. Homebrew tools stay installed: brew uninstall <name> to remove one.
