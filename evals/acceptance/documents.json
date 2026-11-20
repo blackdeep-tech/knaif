@@ -541,6 +541,28 @@
             "kind": "subset",
             "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
             "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-19",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02, extended to macOS 2026-11-19 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|macos|mtl",
+            "run": "evals/runs/2026-11-02_r140-macos_success/1.7b/metal/live/documents_r140-mac-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+            }
           }
         },
         "knaif-qwen3-4b-v2|macos|cpu": {
@@ -577,6 +599,28 @@
             "measured": 103,
             "reused": 0,
             "namespace": "e4476c3fc13b05cdf590a717cad9ad39cb086aea96e40400fdaa6e4b10c74ddd"
+          },
+          "owner_exception": {
+            "date": "2026-11-19",
+            "reason": "documents_url_004 (the macOS CPU only): a per-row difference the owner accepted with both plans and commands (I3), 2026-11-19 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_004#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: inspect_document -> '{\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\"}}]}'; binary: clarify -> None",
+            "cell": "knaif-qwen3-4b-v2|macos|cpu",
+            "run": "evals/runs/2026-11-02_r140-macos_success/4b/cpu/documents_r140-mac-cpu-4b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+            }
           }
         },
         "knaif-qwen3-1.7b-v2|macos|cpu": {
@@ -607,6 +651,28 @@
             "kind": "subset",
             "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
             "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-19",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02, extended to macOS 2026-11-19 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|macos|cpu",
+            "run": "evals/runs/2026-11-02_r140-macos_success/1.7b/cpu/live/documents_r140-mac-cpu-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+            }
           }
         }
       }
