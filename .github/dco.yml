@@ -1,0 +1,7 @@
+# Configuration for the DCO GitHub app (https://github.com/dcoapp/app), which checks that every
+# commit in a pull request carries a Signed-off-by line matching its author (CONTRIBUTING.md,
+# "Licence"). Members of the organisation are exempt; outside contributors sign off.
+require:
+  members: false
+allowRemediationCommits:
+  individual: true
