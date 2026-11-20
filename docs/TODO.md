@@ -410,10 +410,10 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   Mac slept with the clean room waiting); and a supported way to hold `open-pr` until the
   contributor confirms (done by hand with `queue/done/open-pr`).
 
-- [ ] **DCO: write the rule down, and sign our own commits** (2026-11-20). The owner chose a DCO
-  sign-off with no CLA (2026-11-17), but `CONTRIBUTING.md` says nothing about it and there is no
-  `dco.yml`; the DCO app passes the owner's unsigned commits (it seems to exempt org members). Add
-  the rule to `CONTRIBUTING.md`, and have the commit-prompt block use `git commit -s`.
+- [x] **DCO: write the rule down, and sign our own commits** (2026-11-20). **Done 2026-11-20:** the
+  rule was already on `main` (#119: `CONTRIBUTING.md`, `DCO`, `.github/dco.yml`, organisation
+  members exempt by design), merged into `release/1.4.0`; our own commits are now signed off by
+  the `dco-signoff` prepare-commit-msg hook (`scripts/add_signoff.py`), no `-s` needed.
 
 - [ ] **`watch_run.sh` and a run's `void/` folder** (2026-11-02): it lists a voided stage's logs
   as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/` (done),

@@ -6,6 +6,17 @@ the repository is laid out.
 By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md). For security
 issues, **do not open a public issue** — follow [SECURITY.md](SECURITY.md).
 
+## What we accept
+
+- **Skills are welcome.** A new skill, or a change to one, is the best way to contribute. Every
+  skill comes in under [Apache-2.0](LICENSE); a skill under any other licence is not accepted.
+- **The core is maintained by Blackdeep Technologies Ltd.** The core is everything outside
+  `skills/`: the runtimes, contracts, toolkits, installers and tooling. For anything there, open
+  an issue first. Small fixes may be accepted as pull requests; larger changes are made by the
+  maintainers.
+
+Every commit in a pull request is signed off; see [Licence](#licence).
+
 ## There is no CI yet
 
 **Run the checks locally.** CI lands after the v1.0.0 release, so until then a green
@@ -360,6 +371,24 @@ Architecture overview: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Native ru
 
 ## Licence
 
-Contributions are licensed under [Apache-2.0](LICENSE), matching the project. If you add a
-dependency, run `just licenses-all` and commit the regenerated reports — both trees are
-**permissive-only**, and the Python generator fails on copyleft.
+Contributions are licensed under [Apache-2.0](LICENSE), matching the project; you keep your
+copyright.
+
+Every commit in a pull request is signed off under the
+[Developer Certificate of Origin](DCO) (DCO 1.1): a statement that you wrote the change, or
+otherwise have the right to submit it under the project's licence. Sign off with `git commit -s`,
+which adds a line to the commit message:
+
+```text
+Signed-off-by: Alice Example <alice@example.com>
+```
+
+The e-mail must match the commit's author; a GitHub noreply address is fine. A DCO check on the
+pull request reports any commit without it. To fix one, amend it (`git commit --amend -s`), or
+sign off several with `git rebase --signoff origin/main`, then force-push your branch.
+
+Maintainers: when you squash-merge an outside pull request, keep its `Signed-off-by` lines in the
+squash commit message, so the sign-off survives on `main`.
+
+If you add a dependency, run `just licenses-all` and commit the regenerated reports — both trees
+are **permissive-only**, and the Python generator fails on copyleft.

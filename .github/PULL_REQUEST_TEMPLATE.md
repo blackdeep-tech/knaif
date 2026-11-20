@@ -9,6 +9,7 @@
 
 - [ ] `just check` passes (Python + native)
 - [ ] Ran on: Windows x64 / Linux x64 / both <!-- delete the rest -->
+- [ ] Every commit is signed off (`git commit -s`; see CONTRIBUTING.md -> Licence)
 
 ## Judgement calls
 
