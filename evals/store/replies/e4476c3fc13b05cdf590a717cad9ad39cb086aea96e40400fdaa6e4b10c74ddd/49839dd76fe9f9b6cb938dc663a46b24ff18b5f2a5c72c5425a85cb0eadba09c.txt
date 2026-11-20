@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "trim_video", "args": {"input": "clip.mp4", "start": "00:00:00", "end": "00:00:06", "output": "clip_trimmed.mp4"}}, {"tool": "resize_video", "args": {"inputs": ["clip_trimmed.mp4"], "height": 540, "keep_aspect_ratio": true, "output": "clip_540p.mp4"}}, {"tool": "strip_audio", "args": {"inputs": ["clip_540p.mp4"]}}]}

@@ -1,0 +1,14 @@
+Metal from a fresh standard account: 27.2, Apple M1 Pro
+quarantine on bin/knaif: 0083;Safari
+== cold
+ggml_metal_device_init: GPU name:   MTL0 (Apple M1 Pro)
+load_tensors: offloaded 37/37 layers to GPU
+✓ wrote sample-rotated.pdf
+real 14.50
+exit 0
+== warm
+ggml_metal_device_init: GPU name:   MTL0 (Apple M1 Pro)
+load_tensors: offloaded 37/37 layers to GPU
+✓ wrote sample-rotated-1.pdf
+real 3.95
+exit 0

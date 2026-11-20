@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["transport.ts"], "container": "mp4"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Which file should I encode, and what container should I convert it to?"}}]}

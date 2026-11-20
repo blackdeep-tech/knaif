@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["videos/*.mp4"], "target_size_mb": 15}}, {"tool": "prepare_for_platform", "args": {"inputs": ["videos/*.mp4"], "platform": "whatsapp", "quality": "visually_good"}}]}

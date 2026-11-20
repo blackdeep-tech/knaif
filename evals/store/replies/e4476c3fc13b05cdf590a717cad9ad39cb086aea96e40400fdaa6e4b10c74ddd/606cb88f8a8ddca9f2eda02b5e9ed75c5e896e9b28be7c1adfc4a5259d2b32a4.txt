@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "create_thumbnail", "args": {"input": "clip.mp4", "at_time": "00:00:02", "image_format": "jpeg", "output": "clip_mp4_2s.jpg"}}, {"tool": "create_thumbnail", "args": {"input": "clip.mov", "at_time": "00:00:03", "image_format": "jpeg", "output": "clip_mov_3s.jpg"}}]}

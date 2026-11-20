@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "ocr_document", "args": {"input": "sample-scanned.pdf", "language": "eng"}}]}

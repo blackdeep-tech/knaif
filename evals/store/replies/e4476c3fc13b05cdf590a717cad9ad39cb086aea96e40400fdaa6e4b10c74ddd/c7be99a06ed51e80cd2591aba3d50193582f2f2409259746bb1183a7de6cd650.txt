@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_volume", "args": {"inputs": ["clip.mp4"], "level": "-3dB", "output": "clip_volumed.mp4"}}, {"tool": "resize_video", "args": {"inputs": ["clip_volumed.mp4"], "height": 480, "keep_aspect_ratio": true}}]}

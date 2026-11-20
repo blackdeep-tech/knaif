@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "rotate_video", "args": {"inputs": ["clip.mp4"], "angle": 90, "output": "clip_rotated.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["clip_rotated.mp4"]}}]}

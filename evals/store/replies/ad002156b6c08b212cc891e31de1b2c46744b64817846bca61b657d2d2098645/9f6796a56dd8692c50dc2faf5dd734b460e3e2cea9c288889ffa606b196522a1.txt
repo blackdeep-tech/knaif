@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "add_page_numbers", "args": {"input": "sample.pdf", "position": "bottom-right"}}]}

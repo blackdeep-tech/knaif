@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "What settings should I use?"}}]}

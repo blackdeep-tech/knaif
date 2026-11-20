@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "By how many degrees should I rotate it (90, 180, or 270)?"}}]}

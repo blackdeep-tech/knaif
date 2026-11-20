@@ -1,0 +1,9 @@
+pdfium/knaif-1.4.0-macos-arm64/bin/libpdfium.dylib
+xcode-select: error: no developer tools were found at '/Applications/Xcode.app', and no install could be requested (perhaps no UI is present), please install manually from 'developer.apple.com'.
+⚠  No GPU backend is active — running on CPU. Inference will be slow (the first request can take a minute or more).
+compress (rasterize — removes selectable text)
+⚠ sample-compressed.pdf: couldn't make it smaller — kept it as it was
+  not smaller (2.2 KB → 114.5 KB)
+exit 0
+-rw-r--r--  1 admin  staff  2221 20 Nov 03:39 sample-compressed.pdf
+-rw-r--r--  1 admin  staff  2221 20 Nov 03:39 sample.pdf

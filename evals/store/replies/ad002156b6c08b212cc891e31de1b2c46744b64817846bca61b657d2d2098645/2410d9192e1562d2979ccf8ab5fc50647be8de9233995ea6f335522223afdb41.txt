@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mp4"], "container": "mkv", "output": "clip.mkv"}}, {"tool": "resize_video", "args": {"inputs": ["clip.mkv"], "height": 1080, "keep_aspect_ratio": true}}]}

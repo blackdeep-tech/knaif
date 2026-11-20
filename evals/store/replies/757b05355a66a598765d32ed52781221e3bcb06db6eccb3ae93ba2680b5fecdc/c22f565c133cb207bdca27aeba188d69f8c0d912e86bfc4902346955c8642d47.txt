@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "What password should I use to protect sample.pdf?"}}]}
