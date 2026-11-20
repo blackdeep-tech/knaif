@@ -270,6 +270,31 @@ def test_a_regressed_row_can_be_waived(tree: Path) -> None:
     assert gate.derived == "supported"
 
 
+def test_a_regressed_row_quoting_a_json_plan_can_be_waived(tree: Path) -> None:
+    # A row with no command shows the reference's plan as JSON, brackets and all (documents_url_004,
+    # macOS CPU, 2026-11-19): those brackets are quoted text, not thresholds.
+    summary = (
+        "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_004#0: Python passed "
+        "it, the binary did not ('clarify', expected 'plan'). Python: inspect_document -> "
+        '\'{"plan": [{"tool": "inspect_document", "args": {"input": ["a.pdf"]}}]}\'; '
+        "binary: clarify -> None"
+    )
+    _fail(tree, summary)
+    waive_cell("demo", tree, "L4", CPU, reason="row accepted", date="2026-11-19")
+    _, l4 = _l4(tree)
+    assert l4.state == "excepted"
+
+
+def test_a_mangled_kind_beside_a_json_plan_is_still_not_waivable(tree: Path) -> None:
+    summary = (
+        "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_004#0: Python: x -> "
+        '\'{"plan": [{"tool": "x"}]}\'; binary: clarify -> None [safety ] safety ...'
+    )
+    _fail(tree, summary)
+    with pytest.raises(ValueError):
+        waive_cell("demo", tree, "L4", CPU, reason="ship it", date="2026-11-19")
+
+
 def test_a_safety_miss_is_waived_only_when_asked_for_by_name(tree: Path) -> None:
     summary = (
         f"NOT ACCEPTED - 2 of 255 thresholds unmet: {REGRESSION.split(': ', 1)[1]} {SAFETY_ROW}"
