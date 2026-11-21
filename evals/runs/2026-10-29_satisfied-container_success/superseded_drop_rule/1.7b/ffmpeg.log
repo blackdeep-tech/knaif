@@ -1,0 +1,1149 @@
+
+Running backend: qwen3-1.7b-sft-v9-flat-q6
+  rows to run: 163
+  [ffmpeg_020]  OK    plan         441ms  compress clip_ctr.mp4 to under 1 MB
+  [ffmpeg_021]  OK    plan         334ms  make clip_ctr.mp4 smaller for email
+  [ffmpeg_022]  OK    plan         264ms  shrink clip_ctr.mp4 as much as possible
+  [ffmpeg_039]  OK    plan         277ms  compress clip.mp4 to crf18
+  [ffmpeg_040]  OK    plan         277ms  compress clip_ctr.mp4 to the smallest possible size
+  [ffmpeg_041]  OK    plan         291ms  make clip.mp4 tiny for messaging
+  [ffmpeg_045]  OK    plan         504ms  make clip_ctr.mp4 smaller and convert it to mkv
+  [ffmpeg_061]  OK    plan         259ms  comprime el video clip_ctr.mp4 para enviar por email
+  [ffmpeg_069]  OK    plan         237ms  сжать видео clip.mp4
+  [ffmpeg_070]  OK    clarify      277ms  this clip is too big to email
+  [ffmpeg_093]  OK    plan         286ms  compress clip_ctr.mp4 to under 500 KB
+  [ffmpeg_093]  OK    plan         278ms  shrink clip_ctr.mp4 below 500 kilobytes
+  [ffmpeg_093]  OK    plan         273ms  clip_ctr.mp4 unter 500 KB komprimieren
+  [ffmpeg_093]  OK    plan         271ms  компресирай clip_ctr.mp4 под 500 KB
+  [ffmpeg_093]  OK    plan         274ms  将clip_ctr.mp4压缩到500KB以下
+  [ffmpeg_094]  OK    plan         269ms  compress clip.mp4 using CRF 30
+  [ffmpeg_094]  OK    plan         261ms  encode clip.mp4 with quality 30
+  [ffmpeg_094]  OK    plan         273ms  clip.mp4 mit CRF 30 komprimieren
+  [ffmpeg_094]  OK    plan         266ms  компресирай clip.mp4 с CRF 30
+  [ffmpeg_094]  OK    plan         266ms  使用CRF 30压缩clip.mp4
+  [ffmpeg_100]  OK    plan         318ms  compress clip_4k.mp4 to a small size for email
+  [ffmpeg_100]  OK    plan         304ms  clip_4k.mp4 fuer E-Mail-Anhang komprimieren
+  [ffmpeg_112]  OK    plan         279ms  compress clip_no_audio.mp4 to a smaller size
+  [ffmpeg_112]  OK    plan         246ms  shrink the silent video clip_no_audio.mp4
+  [ffmpeg_118]  OK    plan         429ms  compress clip_ctr.mp4 and then prepare it for WhatsApp
+  [ffmpeg_118]  OK    plan         287ms  clip_ctr.mp4 komprimieren und fuer WhatsApp vorbereiten
+  [ffmpeg_118]  OK    plan         278ms  компресирай clip_ctr.mp4 и го подготви за WhatsApp
+  [ffmpeg_118]  OK    plan         278ms  压缩clip_ctr.mp4然后为WhatsApp准备
+  [ffmpeg_118b]  OK    clarify      253ms  make the video smaller and ready for WhatsApp
+  [ffmpeg_120]  FAIL  plan         623ms  resize clip_4k to 1080p and then compress with CRF 28
+  [ffmpeg_120]  OK    clarify      585ms  downscale the 4K clip to 1080p and apply CRF 28 compres
+  [ffmpeg_120]  OK    clarify      576ms  Das 4K-Video auf 1080p skalieren und mit CRF 28 komprim
+  [ffmpeg_120]  OK    clarify      549ms  преоразмери 4K клипа до 1080p и компресирай с CRF 28
+  [ffmpeg_120]  OK    clarify      540ms  将4K视频缩放到1080p然后用CRF 28压缩
+  [ffmpeg_122]  OK    plan         348ms  reverse clip.mp4 and then compress it
+  [ffmpeg_122]  OK    plan         353ms  clip.mp4 umkehren und dann komprimieren
+  [ffmpeg_122]  OK    plan         332ms  обърни clip.mp4 и след това го компресирай
+  [ffmpeg_122]  OK    plan         345ms  倒放clip.mp4然后压缩
+  [ffmpeg_122b]  OK    clarify      734ms  play the video backwards and make it smaller
+  [ffmpeg_129]  FAIL  clarify      533ms  slow down clip.mp4 to half speed and compress it with C
+  [ffmpeg_129]  FAIL  clarify      526ms  clip.mp4 auf halbe Geschwindigkeit verlangsamen und mit
+  [ffmpeg_129]  OK    plan         536ms  забави clip.mp4 до 0.5x и го компресирай с CRF 25
+  [ffmpeg_136]  FAIL  clarify      402ms  compress clip_4k.mp4 to 1080p and then prepare for YouT
+  [ffmpeg_139]  OK    plan         682ms  batch convert all videos to mp4 and then compress them 
+  [ffmpeg_139]  OK    plan         745ms  bulk encode everything to h264 mp4 with CRF 26
+  [ffmpeg_139]  OK    plan         616ms  Alle Videos nach MP4 mit H.264 und CRF 26 konvertieren
+  [ffmpeg_139]  OK    plan         657ms  пакетно конвертирай всички видеа в mp4 с CRF 26
+  [ffmpeg_139]  OK    plan         659ms  批量转换所有视频为CRF 26的H.264 MP4
+  [ffmpeg_157]  OK    clarify      352ms  compress this video for me
+  [ffmpeg_157]  OK    clarify      234ms  make this smaller
+  [ffmpeg_159]  OK    plan         266ms  encode clip.mp4 with CRF 0
+  [ffmpeg_159]  OK    plan         291ms  compress clip.mp4 at lossless quality CRF 0
+  [ffmpeg_159]  OK    plan         307ms  clip.mp4 mit CRF 0 lossless kodieren
+  [ffmpeg_160]  OK    plan         448ms  encode clip.mp4 with CRF 51
+  [ffmpeg_160]  OK    plan         279ms  compress clip.mp4 at maximum compression CRF 51
+  [ffmpeg_160]  OK    plan         271ms  clip.mp4 mit CRF 51 stark komprimieren
+  [ffmpeg_163]  OK    plan         251ms  pls compress clip.mp4 thx
+  [ffmpeg_163]  OK    plan         252ms  hey can u compress clip.mp4 lol
+  [ffmpeg_163]  OK    plan         244ms  bitte komprimiere clip.mp4 danke
+  [ffmpeg_174]  FAIL  clarify      521ms  encode clip2.mp4 at 500 kilobits per second
+  [ffmpeg_174]  FAIL  clarify      497ms  clip2.mp4 mit 500 kbps Bitrate kodieren
+  [ffmpeg_182]  OK    plan         273ms  компресирай clip.mp4 за изпращане по имейл
+  [ffmpeg_182]  OK    plan         267ms  намали размера на clip.mp4
+  [ffmpeg_192]  OK    plan         264ms  压缩clip.mp4用于发送邮件
+  [ffmpeg_192]  OK    plan         253ms  减小clip.mp4的文件大小
+  [ffmpeg_207]  OK    clarify      558ms  compress the 4K video to 720p for sharing
+  [ffmpeg_207]  OK    clarify      256ms  make the 4K clip into a small shareable 720p file
+  [ffmpeg_207]  OK    clarify      391ms  Das 4K-Video auf 720p komprimieren
+  [ffmpeg_207]  OK    clarify      291ms  компресирай 4K видеото до 720p за споделяне
+  [ffmpeg_207]  OK    clarify      273ms  将4K视频压缩到720p用于分享
+  [ffmpeg_218]  OK    plan         264ms  compress clip.mp4 to medium quality
+  [ffmpeg_218]  OK    plan         272ms  clip.mp4 mit mittlerer Qualitaet komprimieren
+  [ffmpeg_218]  OK    plan         262ms  компресирай clip.mp4 с средно качество
+  [ffmpeg_219]  OK    plan         266ms  compress clip.mp4 to high quality
+  [ffmpeg_219]  OK    plan         270ms  clip.mp4 mit hoher Qualitaet komprimieren
+  [ffmpeg_219]  OK    plan         298ms  компресирай clip.mp4 с висококачествени настройки
+  [ffmpeg_219]  OK    plan         298ms  高质量压缩clip.mp4
+  [ffmpeg_220]  OK    plan         263ms  compress clip.mp4 to low quality for preview
+  [ffmpeg_220]  FAIL  clarify      272ms  clip.mp4 mit niedriger Qualitaet fuer Vorschau
+  [ffmpeg_220]  OK    plan         262ms  компресирай clip.mp4 с ниско качество за преглед
+  [ffmpeg_221]  OK    plan         268ms  compresser clip_ctr.mp4 pour envoi par email
+  [ffmpeg_221]  OK    plan         254ms  reduire la taille de clip_ctr.mp4
+  [ffmpeg_233]  OK    plan         264ms  reduce clip_ctr.mp4 file size by 50 percent
+  [ffmpeg_233]  OK    plan         283ms  halve the file size of clip_ctr.mp4
+  [ffmpeg_233]  OK    plan         280ms  Die Dateigroe von clip_ctr.mp4 um 50% reduzieren
+  [ffmpeg_233]  OK    plan         274ms  намали размера на clip_ctr.mp4 наполовина
+  [ffmpeg_233]  OK    plan         278ms  将clip_ctr.mp4的文件大小减半
+  [ffmpeg_261]  OK    clarify      522ms  compress with target bitrate 500kbps
+  [ffmpeg_261]  OK    clarify      503ms  компресирай с целева скорост 500 kbps
+  [ffmpeg_273]  OK    plan         383ms  rotate clip.mp4 90 degrees and then compress it
+  [ffmpeg_273]  OK    plan         382ms  turn clip.mp4 clockwise 90° then reduce file size
+  [ffmpeg_273]  OK    plan         452ms  clip.mp4 um 90 Grad drehen und komprimieren
+  [ffmpeg_273]  OK    plan         408ms  завърти clip.mp4 на 90 градуса и го компресирай
+  [ffmpeg_286]  OK    clarify      312ms  make the 4K file small enough to attach to an email
+  [ffmpeg_286]  OK    clarify      247ms  компресирай 4K файла за имейл
+  [ffmpeg_286]  OK    clarify      249ms  将4K文件压缩到可以邮件发送的大小
+  [ffmpeg_290]  OK    clarify      207ms  Das stumme Video verkleinern
+  [ffmpeg_290]  OK    clarify      294ms  компресирай клипа без звук
+  [ffmpeg_292]  OK    clarify      407ms  resize 4K to 1080p and optimize for YouTube upload
+  [ffmpeg_292]  OK    clarify      256ms  Das 4K-Video auf 1080p komprimieren und fuer YouTube op
+  [ffmpeg_292]  OK    clarify      525ms  компресирай 4K клипа до 1080p и го подготви за YouTube
+  [ffmpeg_292]  OK    clarify      622ms  将4K视频压缩到1080p并为YouTube优化
+  [ffmpeg_hard_002]  OK    plan         597ms  trim clip.mp4 to the first 5 seconds, resize it to 720p
+  [ffmpeg_hard_002]  OK    plan         526ms  cut clip.mp4 to 5s, scale to 720p and shrink the file
+  [ffmpeg_hard_002]  OK    plan         593ms  schneide clip.mp4 auf die ersten 5 Sekunden, skaliere a
+  [ffmpeg_hard_002]  OK    plan         591ms  recorta clip.mp4 a los primeros 5 segundos, redimension
+  [ffmpeg_hard_003]  OK    plan         570ms  rotate clip.mp4 90 degrees clockwise, resize it to 480p
+  [ffmpeg_hard_003]  OK    plan         719ms  turn clip.mp4 90 degrees to the right, scale down to 48
+  [ffmpeg_hard_003]  OK    plan         524ms  fais pivoter clip.mp4 de 90 degres vers la droite, redi
+  [ffmpeg_hard_003]  OK    plan         599ms  поверни clip.mp4 на 90 градусов по часовой стрелке, изм
+  [ffmpeg_hard_004]  OK    plan         536ms  trim clip.mp4 to the first 4 seconds, compress it, and 
+  [ffmpeg_hard_004]  OK    plan         553ms  schneide clip.mp4 auf die ersten 4 Sekunden, komprimier
+  [ffmpeg_hard_004]  OK    plan         557ms  recorta clip.mp4 a los primeros 4 segundos, comprimelo 
+  [ffmpeg_hard_004]  OK    plan         539ms  coupe clip.mp4 aux 4 premieres secondes, compresse-le e
+  [ffmpeg_hard_005]  OK    plan         572ms  downscale clip_4k.mp4 to 1080p, compress it, then mute 
+  [ffmpeg_hard_005]  OK    plan         567ms  resize clip_4k.mp4 to 1080p, shrink the file and drop t
+  [ffmpeg_hard_005]  OK    plan         559ms  skaliere clip_4k.mp4 auf 1080p herunter, komprimiere es
+  [ffmpeg_hard_005]  OK    plan         596ms  намали clip_4k.mp4 до 1080p, компресирай го и премахни 
+  [ffmpeg_hard_006]  OK    plan         534ms  speed up clip.mp4 to 2x, resize it to 480p, and compres
+  [ffmpeg_hard_006]  OK    plan         531ms  acelera clip.mp4 a 2x, redimensiona a 480p y comprimelo
+  [ffmpeg_hard_006]  OK    plan         441ms  ускорь clip.mp4 в 2 раза, измени размер до 480p и сожми
+  [ffmpeg_hard_006]  OK    plan         525ms  ускори clip.mp4 2 пъти, преоразмери до 480p и компресир
+  [ffmpeg_hard_007]  OK    plan         523ms  convert clip.mov to mp4, scale it to 360p, then compres
+  [ffmpeg_hard_007]  OK    plan         519ms  konvertiere clip.mov nach mp4, skaliere auf 360p und ko
+  [ffmpeg_hard_007]  OK    plan         498ms  convertis clip.mov en mp4, redimensionne en 360p, puis 
+  [ffmpeg_hard_007]  OK    plan         503ms  convierte clip.mov a mp4, redimensiona a 360p y comprim
+  [ffmpeg_hard_015]  OK    plan         393ms  rotate clip.mp4 90 degrees clockwise then compress it
+  [ffmpeg_hard_015]  OK    plan         352ms  turn clip.mp4 90 degrees to the right and shrink the fi
+  [ffmpeg_301]  OK    plan         424ms  make a thumbnail of clip.mp4 and compress clip.mp4
+  [ffmpeg_301]  OK    plan         594ms  grab a thumbnail from clip.mp4, then make a smaller cop
+  [ffmpeg_301]  OK    plan         400ms  erstelle ein Vorschaubild von clip.mp4 und komprimiere 
+  [ffmpeg_301]  OK    plan         564ms  направи миниатюра от clip.mp4 и компресирай clip.mp4
+  [ffmpeg_301]  FAIL  error        328ms  为clip.mp4生成缩略图，并压缩clip.mp4
+  [ffmpeg_hard2_001]  OK    plan         403ms  join clip.mp4 and clip2.mp4 into one video and compress
+  [ffmpeg_hard2_001]  OK    plan         421ms  stitch clip.mp4 and clip2.mp4 together, then shrink the
+  [ffmpeg_hard2_001]  OK    plan         466ms  clip.mp4 und clip2.mp4 zusammenfuegen und das Ergebnis 
+  [ffmpeg_url_006]  OK    plan         391ms  compress https://files.knaif.test/ffmpeg/drone.mp4 to u
+  [ffmpeg_url_006]  OK    plan         319ms  make https://files.knaif.test/ffmpeg/drone.mp4 smaller 
+  [ffmpeg_url_006]  OK    plan         330ms  shrink the video at https://files.knaif.test/ffmpeg/dro
+  [ffmpeg_alert_004]  OK    plan         383ms  compress clip_ctr.mp4 to under 1 MB, beep and notify me
+  [ffmpeg_alert_004]  FAIL  clarify      576ms  shrink clip_ctr.mp4 below 1 MB, then beep and show a no
+  [ffmpeg_alert_004]  OK    plan         553ms  make clip_ctr.mp4 smaller than 1 MB and both beep and n
+  [ffmpeg_batch_001]  OK    plan        1870ms  convert all the .mov files here to mp4 and make them sm
+  [ffmpeg_batch_001]  OK    plan        2508ms  turn every mov in this folder into an mp4 and compress 
+  [ffmpeg_batch_001]  OK    plan        2566ms  convert the .mov videos here to mp4, then shrink them
+  [ffmpeg_batch_001]  OK    plan        1923ms  konvertiere alle .mov-Dateien hier in mp4 und mach sie 
+  [ffmpeg_batch_001]  OK    plan         748ms  конвертирай всички .mov файлове тук в mp4 и ги направи 
+  [ffmpeg_batch_001]  OK    plan        1935ms  把这里所有的.mov文件转换成mp4，并把它们压缩小一点
+  [ffmpeg_batch_016]  OK    plan        8342ms  split clip.mp4 into 10-second parts and compress each o
+  [ffmpeg_batch_016]  OK    plan        8398ms  chop clip.mp4 into 10 second pieces, then make every pi
+  [ffmpeg_batch_016]  OK    plan        8486ms  cut clip.mp4 into 10-second chunks and compress them
+  [ffmpeg_batch_016]  OK    plan        8339ms  teile clip.mp4 in 10-Sekunden-Stücke und komprimiere je
+  [ffmpeg_batch_016]  OK    plan        8257ms  раздели clip.mp4 на части по 10 секунди и компресирай в
+  [ffmpeg_batch_016]  OK    plan        8450ms  把clip.mp4分割成每段10秒，然后压缩每一段
+  [ffmpeg_size_001]  OK    plan         423ms  make clip.mov smaller
+  [ffmpeg_size_001]  OK    plan         239ms  compress clip.mov
+  [ffmpeg_size_001]  OK    plan         257ms  shrink clip.mov so it takes less space
+  [ffmpeg_size_002]  OK    plan         366ms  make clip_tiny.mp4 smaller
+  [ffmpeg_size_002]  OK    plan         341ms  compress clip_tiny.mp4
+  [ffmpeg_size_002]  OK    plan         362ms  shrink clip_tiny.mp4 down
+  [ffmpeg_size_003]  OK    plan         429ms  convert clip_tiny.mov to mp4 and make it smaller
+  [ffmpeg_size_003]  OK    plan         423ms  turn clip_tiny.mov into an mp4 and compress it
+  [ffmpeg_size_003]  OK    plan         654ms  convert clip_tiny.mov to mp4, then shrink it
+════════════════════════════════════════════════════════════════════════════════════════
+  EVAL SCOREBOARD — qwen3-1.7b-sft-v9-flat-q6
+════════════════════════════════════════════════════════════════════════════════════════
+
+  Verifier          : success
+  Total rows        : 163
+  Outcome accuracy  : 93.9%
+  Avg knaif score   : 95.4%
+  Avg baseline score:   n/a
+
+  Tool accuracy     : 89.6%
+  Schema validity   : 99.4%
+
+  Time to artifact (plan rows, ms; first row excluded as warmup):
+    mean=    835  p50=    382  p95=   2566  max=   8486  (n=129, total=107.7s)
+
+────────────────────────────────────────────────────────────────────────────────────────
+  Tag                       Total  Outcome   Knaif  Baseline   p50 ms   p95 ms
+────────────────────────────────────────────────────────────────────────────────────────
+  adjust_speed                  3    33.3%   50.0%       n/a      536      536
+  alerts_and_folders            3    33.3%  100.0%       n/a      383      553
+  batch                         5   100.0%  100.0%       n/a      659      745
+  batch_chain                   6   100.0%  100.0%       n/a     1923     2566
+  bg                            2   100.0%  100.0%       n/a      267      273
+  chain2                        2   100.0%   75.0%       n/a      352      393
+  chain3                       24   100.0%   91.7%       n/a      553      599
+  clarify                      26    96.2%  100.0%       n/a      623      623
+  completion_alert              3    33.3%  100.0%       n/a      383      553
+  complex                      33    84.8%   93.5%       n/a      424      682
+  compress                    121    93.4%   95.0%       n/a      307      623
+  compress_result               9   100.0%   88.9%       n/a      366      654
+  compress_video                5   100.0%     n/a       n/a      n/a      n/a
+  convert                      10   100.0%  100.0%       n/a      523      745
+  crf                          12   100.0%   91.7%       n/a      273      307
+  edge                         13    84.6%   88.9%       n/a      271      448
+  es                            1   100.0%  100.0%       n/a      259      259
+  fan_out                       5    80.0%   75.0%       n/a      564      594
+  fr                            2   100.0%  100.0%       n/a      254      268
+  hard                         26   100.0%   90.4%       n/a      536      599
+  hard2                         3   100.0%  100.0%       n/a      421      466
+  indirect                      3   100.0%     n/a       n/a      n/a      n/a
+  informal                      3   100.0%  100.0%       n/a      251      252
+  many_files                   12   100.0%  100.0%       n/a     8257     8450
+  multilingual                  8   100.0%  100.0%       n/a      264      273
+  one_to_many_then_each         6   100.0%  100.0%       n/a     8342     8486
+  platform                      6    83.3%  100.0%       n/a      287      429
+  quality                      12    91.7%  100.0%       n/a      270      298
+  resize                       31    93.5%   90.5%       n/a      559      623
+  resize_video                  4   100.0%     n/a       n/a      n/a      n/a
+  reverse_video                 5   100.0%  100.0%       n/a      348      353
+  rotate                        6   100.0%   69.4%       n/a      524      719
+  rotate_video                  4   100.0%  100.0%       n/a      408      452
+  ru                            1   100.0%  100.0%       n/a      237      237
+  speed                         4   100.0%   91.7%       n/a      531      534
+  strip                         8   100.0%  100.0%       n/a      559      596
+  thumbnail                     5    80.0%   75.0%       n/a      564      594
+  trap                          1   100.0%  100.0%       n/a      504      504
+  trim                          8   100.0%   95.8%       n/a      557      597
+  url_input                     3   100.0%  100.0%       n/a      330      391
+  vague                         2   100.0%     n/a       n/a      n/a      n/a
+  zh                            2   100.0%  100.0%       n/a      253      264
+────────────────────────────────────────────────────────────────────────────────────────
+
+  PER-ROW DETAIL
+────────────────────────────────────────────────────────────────────────────────────────
+  [ffmpeg_020] compress clip_ctr.mp4 to under 1 MB
+    outcome: plan (expected plan) [OK]  441ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=1024 (got 212 KB)
+      + container=mp4
+  [ffmpeg_021] make clip_ctr.mp4 smaller for email
+    outcome: plan (expected plan) [OK]  334ms
+    knaif=1.00  baseline=None
+      + container=mp4
+  [ffmpeg_022] shrink clip_ctr.mp4 as much as possible
+    outcome: plan (expected plan) [OK]  264ms
+    knaif=1.00  baseline=None
+      + container=mp4
+  [ffmpeg_039] compress clip.mp4 to crf18
+    outcome: plan (expected plan) [OK]  277ms
+    knaif=1.00  baseline=None
+      + encoder:libx264
+      + container=mp4
+  [ffmpeg_040] compress clip_ctr.mp4 to the smallest possible size
+    outcome: plan (expected plan) [OK]  277ms
+    knaif=1.00  baseline=None
+      + container=mp4
+  [ffmpeg_041] make clip.mp4 tiny for messaging
+    outcome: plan (expected plan) [OK]  291ms
+    knaif=1.00  baseline=None
+      + container=mp4
+  [ffmpeg_045] make clip_ctr.mp4 smaller and convert it to mkv
+    outcome: plan (expected plan) [OK]  504ms
+    knaif=1.00  baseline=None
+      + container=matroska
+  [ffmpeg_061] comprime el video clip_ctr.mp4 para enviar por email
+    outcome: plan (expected plan) [OK]  259ms
+    knaif=1.00  baseline=None
+      + container=mp4
+  [ffmpeg_069] сжать видео clip.mp4
+    outcome: plan (expected plan) [OK]  237ms
+    knaif=1.00  baseline=None
+      + container=mp4
+  [ffmpeg_070] this clip is too big to email
+    outcome: clarify (expected clarify) [OK]  277ms
+  [ffmpeg_093] compress clip_ctr.mp4 to under 500 KB
+    outcome: plan (expected plan) [OK]  286ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=500 (got 217 KB)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_093] shrink clip_ctr.mp4 below 500 kilobytes
+    outcome: plan (expected plan) [OK]  278ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=500 (got 217 KB)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_093] clip_ctr.mp4 unter 500 KB komprimieren
+    outcome: plan (expected plan) [OK]  273ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=500 (got 217 KB)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_093] компресирай clip_ctr.mp4 под 500 KB
+    outcome: plan (expected plan) [OK]  271ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=500 (got 217 KB)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_093] 将clip_ctr.mp4压缩到500KB以下
+    outcome: plan (expected plan) [OK]  274ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=500 (got 217 KB)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_094] compress clip.mp4 using CRF 30
+    outcome: plan (expected plan) [OK]  269ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_094] encode clip.mp4 with quality 30
+    outcome: plan (expected plan) [OK]  261ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_094] clip.mp4 mit CRF 30 komprimieren
+    outcome: plan (expected plan) [OK]  273ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_094] компресирай clip.mp4 с CRF 30
+    outcome: plan (expected plan) [OK]  266ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_094] 使用CRF 30压缩clip.mp4
+    outcome: plan (expected plan) [OK]  266ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_100] compress clip_4k.mp4 to a small size for email
+    outcome: plan (expected plan) [OK]  318ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_100] clip_4k.mp4 fuer E-Mail-Anhang komprimieren
+    outcome: plan (expected plan) [OK]  304ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_112] compress clip_no_audio.mp4 to a smaller size
+    outcome: plan (expected plan) [OK]  279ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+      + no_audio=true
+  [ffmpeg_112] shrink the silent video clip_no_audio.mp4
+    outcome: plan (expected plan) [OK]  246ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+      + no_audio=true
+  [ffmpeg_118] compress clip_ctr.mp4 and then prepare it for WhatsApp
+    outcome: plan (expected plan) [OK]  429ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+      + audio_codec=aac
+      + max_width=1280<=1280
+  [ffmpeg_118] clip_ctr.mp4 komprimieren und fuer WhatsApp vorbereiten
+    outcome: plan (expected plan) [OK]  287ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+      + audio_codec=aac
+      + max_width=1280<=1280
+  [ffmpeg_118] компресирай clip_ctr.mp4 и го подготви за WhatsApp
+    outcome: plan (expected plan) [OK]  278ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+      + audio_codec=aac
+      + max_width=1280<=1280
+  [ffmpeg_118] 压缩clip_ctr.mp4然后为WhatsApp准备
+    outcome: plan (expected plan) [OK]  278ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+      + audio_codec=aac
+      + max_width=1280<=1280
+  [ffmpeg_118b] make the video smaller and ready for WhatsApp
+    outcome: clarify (expected clarify) [OK]  253ms
+  [ffmpeg_120] resize clip_4k to 1080p and then compress with CRF 28
+    outcome: plan (expected clarify) [FAIL]  623ms
+    knaif=1.00  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip_4k.mp4 -vf scale=-2:1080 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\sandbox\fixtures\ffmpeg\clip_4k_resized.mp4
+    tool     : resize_video  args={'inputs': ['clip_4k.mp4'], 'height': 1080, 'keep_aspect_ratio': True}
+      + no_criteria
+  [ffmpeg_120] downscale the 4K clip to 1080p and apply CRF 28 compression
+    outcome: clarify (expected clarify) [OK]  585ms
+  [ffmpeg_120] Das 4K-Video auf 1080p skalieren und mit CRF 28 komprimieren
+    outcome: clarify (expected clarify) [OK]  576ms
+  [ffmpeg_120] преоразмери 4K клипа до 1080p и компресирай с CRF 28
+    outcome: clarify (expected clarify) [OK]  549ms
+  [ffmpeg_120] 将4K视频缩放到1080p然后用CRF 28压缩
+    outcome: clarify (expected clarify) [OK]  540ms
+  [ffmpeg_122] reverse clip.mp4 and then compress it
+    outcome: plan (expected plan) [OK]  348ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_122] clip.mp4 umkehren und dann komprimieren
+    outcome: plan (expected plan) [OK]  353ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_122] обърни clip.mp4 и след това го компресирай
+    outcome: plan (expected plan) [OK]  332ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_122] 倒放clip.mp4然后压缩
+    outcome: plan (expected plan) [OK]  345ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_122b] play the video backwards and make it smaller
+    outcome: clarify (expected clarify) [OK]  734ms
+  [ffmpeg_129] slow down clip.mp4 to half speed and compress it with CRF 25
+    outcome: clarify (expected plan) [FAIL]  533ms
+    generated: none
+    tool     : adjust_speed  args={'inputs': ['clip.mp4'], 'speed': 0.5, 'crf': 25}
+  [ffmpeg_129] clip.mp4 auf halbe Geschwindigkeit verlangsamen und mit CRF 25 komprim
+    outcome: clarify (expected plan) [FAIL]  526ms
+    generated: none
+    tool     : adjust_speed  args={'inputs': ['clip.mp4'], 'speed': 0.5, 'crf': 25}
+  [ffmpeg_129] забави clip.mp4 до 0.5x и го компресирай с CRF 25
+    outcome: plan (expected plan) [OK]  536ms
+    knaif=0.50  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip.mp4 -vf setpts=2.0*PTS -af atempo=0.5 -c:v libx264 -crf 23 -preset medium -c:a aac -b:a 128k <repo>\sandbox\fixtures\ffmpeg\clip_speed.mp4
+    tool     : adjust_speed  args={'inputs': ['clip.mp4'], 'speed': 0.5}
+      + out0:container=mp4
+      + out0:video_codec=h264
+      - out1:output_not_produced
+  [ffmpeg_136] compress clip_4k.mp4 to 1080p and then prepare for YouTube
+    outcome: clarify (expected plan) [FAIL]  402ms
+    generated: none
+    tool     : compress_video  args={'inputs': ['clip_4k.mp4'], 'target': '1080p', 'output': 'clip_1080p.mp4'}
+  [ffmpeg_139] batch convert all videos to mp4 and then compress them with CRF 26
+    outcome: plan (expected plan) [OK]  682ms
+    knaif=1.00  baseline=None
+      + routing_only
+  [ffmpeg_139] bulk encode everything to h264 mp4 with CRF 26
+    outcome: plan (expected plan) [OK]  745ms
+    knaif=1.00  baseline=None
+      + routing_only
+  [ffmpeg_139] Alle Videos nach MP4 mit H.264 und CRF 26 konvertieren
+    outcome: plan (expected plan) [OK]  616ms
+    knaif=1.00  baseline=None
+      + routing_only
+  [ffmpeg_139] пакетно конвертирай всички видеа в mp4 с CRF 26
+    outcome: plan (expected plan) [OK]  657ms
+    knaif=1.00  baseline=None
+      + routing_only
+  [ffmpeg_139] 批量转换所有视频为CRF 26的H.264 MP4
+    outcome: plan (expected plan) [OK]  659ms
+    knaif=1.00  baseline=None
+      + routing_only
+  [ffmpeg_157] compress this video for me
+    outcome: clarify (expected clarify) [OK]  352ms
+  [ffmpeg_157] make this smaller
+    outcome: clarify (expected clarify) [OK]  234ms
+  [ffmpeg_159] encode clip.mp4 with CRF 0
+    outcome: plan (expected plan) [OK]  266ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_159] compress clip.mp4 at lossless quality CRF 0
+    outcome: plan (expected plan) [OK]  291ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_159] clip.mp4 mit CRF 0 lossless kodieren
+    outcome: plan (expected plan) [OK]  307ms
+    knaif=0.00  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip.mp4 -c:v libvpx-vp9 -crf 0 -preset slow -pix_fmt yuv420p -c:a libopus -b:a 192k <repo>\sandbox\fixtures\ffmpeg\clip.webm
+    tool     : convert_video  args={'inputs': ['clip.mp4'], 'container': 'webm', 'quality': 'lossless', 'crf': 0}
+      - container: expected ['mp4'], got ['matroska', 'webm']
+      - video_codec: expected 'h264', got 'vp9'
+  [ffmpeg_160] encode clip.mp4 with CRF 51
+    outcome: plan (expected plan) [OK]  448ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_160] compress clip.mp4 at maximum compression CRF 51
+    outcome: plan (expected plan) [OK]  279ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_160] clip.mp4 mit CRF 51 stark komprimieren
+    outcome: plan (expected plan) [OK]  271ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_163] pls compress clip.mp4 thx
+    outcome: plan (expected plan) [OK]  251ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_163] hey can u compress clip.mp4 lol
+    outcome: plan (expected plan) [OK]  252ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_163] bitte komprimiere clip.mp4 danke
+    outcome: plan (expected plan) [OK]  244ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_174] encode clip2.mp4 at 500 kilobits per second
+    outcome: clarify (expected plan) [FAIL]  521ms
+    generated: none
+    tool     : convert_video  args={'inputs': ['clip2.mp4'], 'target_size_mb': 500}
+  [ffmpeg_174] clip2.mp4 mit 500 kbps Bitrate kodieren
+    outcome: clarify (expected plan) [FAIL]  497ms
+    generated: none
+    tool     : convert_video  args={'inputs': ['clip2.mp4'], 'bitrate': '500k'}
+  [ffmpeg_182] компресирай clip.mp4 за изпращане по имейл
+    outcome: plan (expected plan) [OK]  273ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_182] намали размера на clip.mp4
+    outcome: plan (expected plan) [OK]  267ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_192] 压缩clip.mp4用于发送邮件
+    outcome: plan (expected plan) [OK]  264ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_192] 减小clip.mp4的文件大小
+    outcome: plan (expected plan) [OK]  253ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_207] compress the 4K video to 720p for sharing
+    outcome: clarify (expected clarify) [OK]  558ms
+  [ffmpeg_207] make the 4K clip into a small shareable 720p file
+    outcome: clarify (expected clarify) [OK]  256ms
+  [ffmpeg_207] Das 4K-Video auf 720p komprimieren
+    outcome: clarify (expected clarify) [OK]  391ms
+  [ffmpeg_207] компресирай 4K видеото до 720p за споделяне
+    outcome: clarify (expected clarify) [OK]  291ms
+  [ffmpeg_207] 将4K视频压缩到720p用于分享
+    outcome: clarify (expected clarify) [OK]  273ms
+  [ffmpeg_218] compress clip.mp4 to medium quality
+    outcome: plan (expected plan) [OK]  264ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_218] clip.mp4 mit mittlerer Qualitaet komprimieren
+    outcome: plan (expected plan) [OK]  272ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_218] компресирай clip.mp4 с средно качество
+    outcome: plan (expected plan) [OK]  262ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_219] compress clip.mp4 to high quality
+    outcome: plan (expected plan) [OK]  266ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_219] clip.mp4 mit hoher Qualitaet komprimieren
+    outcome: plan (expected plan) [OK]  270ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_219] компресирай clip.mp4 с висококачествени настройки
+    outcome: plan (expected plan) [OK]  298ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_219] 高质量压缩clip.mp4
+    outcome: plan (expected plan) [OK]  298ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_220] compress clip.mp4 to low quality for preview
+    outcome: plan (expected plan) [OK]  263ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_220] clip.mp4 mit niedriger Qualitaet fuer Vorschau
+    outcome: clarify (expected plan) [FAIL]  272ms
+    generated: none
+    tool     : prepare_for_platform  args={'inputs': ['clip.mp4'], 'platform': 'webp', 'preview': True, 'quality': 'small_file'}
+  [ffmpeg_220] компресирай clip.mp4 с ниско качество за преглед
+    outcome: plan (expected plan) [OK]  262ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_221] compresser clip_ctr.mp4 pour envoi par email
+    outcome: plan (expected plan) [OK]  268ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_221] reduire la taille de clip_ctr.mp4
+    outcome: plan (expected plan) [OK]  254ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_233] reduce clip_ctr.mp4 file size by 50 percent
+    outcome: plan (expected plan) [OK]  264ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_233] halve the file size of clip_ctr.mp4
+    outcome: plan (expected plan) [OK]  283ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_233] Die Dateigroe von clip_ctr.mp4 um 50% reduzieren
+    outcome: plan (expected plan) [OK]  280ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_233] намали размера на clip_ctr.mp4 наполовина
+    outcome: plan (expected plan) [OK]  274ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_233] 将clip_ctr.mp4的文件大小减半
+    outcome: plan (expected plan) [OK]  278ms
+    knaif=1.00  baseline=None
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_261] compress with target bitrate 500kbps
+    outcome: clarify (expected clarify) [OK]  522ms
+  [ffmpeg_261] компресирай с целева скорост 500 kbps
+    outcome: clarify (expected clarify) [OK]  503ms
+  [ffmpeg_273] rotate clip.mp4 90 degrees and then compress it
+    outcome: plan (expected plan) [OK]  383ms
+    knaif=1.00  baseline=None
+      + filter:transpose
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_273] turn clip.mp4 clockwise 90° then reduce file size
+    outcome: plan (expected plan) [OK]  382ms
+    knaif=1.00  baseline=None
+      + filter:transpose
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_273] clip.mp4 um 90 Grad drehen und komprimieren
+    outcome: plan (expected plan) [OK]  452ms
+    knaif=1.00  baseline=None
+      + filter:transpose
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_273] завърти clip.mp4 на 90 градуса и го компресирай
+    outcome: plan (expected plan) [OK]  408ms
+    knaif=1.00  baseline=None
+      + filter:transpose
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_286] make the 4K file small enough to attach to an email
+    outcome: clarify (expected clarify) [OK]  312ms
+  [ffmpeg_286] компресирай 4K файла за имейл
+    outcome: clarify (expected clarify) [OK]  247ms
+  [ffmpeg_286] 将4K文件压缩到可以邮件发送的大小
+    outcome: clarify (expected clarify) [OK]  249ms
+  [ffmpeg_290] Das stumme Video verkleinern
+    outcome: clarify (expected clarify) [OK]  207ms
+  [ffmpeg_290] компресирай клипа без звук
+    outcome: clarify (expected clarify) [OK]  294ms
+  [ffmpeg_292] resize 4K to 1080p and optimize for YouTube upload
+    outcome: clarify (expected clarify) [OK]  407ms
+  [ffmpeg_292] Das 4K-Video auf 1080p komprimieren und fuer YouTube optimieren
+    outcome: clarify (expected clarify) [OK]  256ms
+  [ffmpeg_292] компресирай 4K клипа до 1080p и го подготви за YouTube
+    outcome: clarify (expected clarify) [OK]  525ms
+  [ffmpeg_292] 将4K视频压缩到1080p并为YouTube优化
+    outcome: clarify (expected clarify) [OK]  622ms
+  [ffmpeg_hard_002] trim clip.mp4 to the first 5 seconds, resize it to 720p, then compress
+    outcome: plan (expected plan) [OK]  597ms
+    knaif=1.00  baseline=None
+      + out0:duration_s≈5 (got 5.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈5 (got 5.00s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=720<=720
+      + out2:duration_s≈5 (got 5.02s)
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_002] cut clip.mp4 to 5s, scale to 720p and shrink the file
+    outcome: plan (expected plan) [OK]  526ms
+    knaif=0.67  baseline=None
+    generated: ffmpeg -y -i <work>\clip_trimmed.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\sandbox\fixtures\ffmpeg\clip_720p.mp4
+    tool     : trim_video  args={'input': 'clip.mp4', 'start': '00:00:00', 'end': '00:00:05', 'output': 'clip_trimmed.mp4'}
+      + out0:duration_s≈5 (got 5.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈5 (got 5.00s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=720<=720
+      - out2:output_not_produced
+  [ffmpeg_hard_002] schneide clip.mp4 auf die ersten 5 Sekunden, skaliere auf 720p und kom
+    outcome: plan (expected plan) [OK]  593ms
+    knaif=1.00  baseline=None
+      + out0:duration_s≈5 (got 5.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈5 (got 5.00s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=720<=720
+      + out2:duration_s≈5 (got 5.02s)
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_002] recorta clip.mp4 a los primeros 5 segundos, redimensiona a 720p y comp
+    outcome: plan (expected plan) [OK]  591ms
+    knaif=1.00  baseline=None
+      + out0:duration_s≈5 (got 5.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈5 (got 5.00s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=720<=720
+      + out2:duration_s≈5 (got 5.02s)
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_003] rotate clip.mp4 90 degrees clockwise, resize it to 480p, then compress
+    outcome: plan (expected plan) [OK]  570ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=480<=480
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_003] turn clip.mp4 90 degrees to the right, scale down to 480p and shrink t
+    outcome: plan (expected plan) [OK]  719ms
+    knaif=0.33  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip.mp4 -vf transpose=1 -c:v libx264 -crf 25 -preset medium -c:a aac <repo>\sandbox\fixtures\ffmpeg\clip_rotated.mp4
+    tool     : rotate_video  args={'inputs': ['clip.mp4'], 'angle': 90}
+      + out0:container=mp4
+      + out0:video_codec=h264
+      - out1:output_not_produced
+      - out2:output_not_produced
+  [ffmpeg_hard_003] fais pivoter clip.mp4 de 90 degres vers la droite, redimensionne en 48
+    outcome: plan (expected plan) [OK]  524ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=480<=480
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_003] поверни clip.mp4 на 90 градусов по часовой стрелке, измени размер до 4
+    outcome: plan (expected plan) [OK]  599ms
+    knaif=0.33  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip.mp4 -vf transpose=1 -c:v libx264 -crf 25 -preset medium -c:a aac <repo>\sandbox\fixtures\ffmpeg\clip_rotated.mp4
+    tool     : rotate_video  args={'inputs': ['clip.mp4'], 'angle': 90}
+      + out0:container=mp4
+      + out0:video_codec=h264
+      - out1:output_not_produced
+      - out2:output_not_produced
+  [ffmpeg_hard_004] trim clip.mp4 to the first 4 seconds, compress it, and remove the audi
+    outcome: plan (expected plan) [OK]  536ms
+    knaif=1.00  baseline=None
+      + out0:duration_s≈4 (got 4.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈4 (got 4.02s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:duration_s≈4 (got 4.00s)
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_004] schneide clip.mp4 auf die ersten 4 Sekunden, komprimiere es und entfer
+    outcome: plan (expected plan) [OK]  553ms
+    knaif=1.00  baseline=None
+      + out0:duration_s≈4 (got 4.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈4 (got 4.02s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:duration_s≈4 (got 4.00s)
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_004] recorta clip.mp4 a los primeros 4 segundos, comprimelo y quita el audi
+    outcome: plan (expected plan) [OK]  557ms
+    knaif=1.00  baseline=None
+      + out0:duration_s≈4 (got 4.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈4 (got 4.02s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:duration_s≈4 (got 4.00s)
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_004] coupe clip.mp4 aux 4 premieres secondes, compresse-le et supprime l'au
+    outcome: plan (expected plan) [OK]  539ms
+    knaif=1.00  baseline=None
+      + out0:duration_s≈4 (got 4.00s)
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:duration_s≈4 (got 4.02s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:duration_s≈4 (got 4.00s)
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_005] downscale clip_4k.mp4 to 1080p, compress it, then mute it
+    outcome: plan (expected plan) [OK]  572ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out0:max_height=1080<=1080
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_005] resize clip_4k.mp4 to 1080p, shrink the file and drop the audio
+    outcome: plan (expected plan) [OK]  567ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out0:max_height=1080<=1080
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_005] skaliere clip_4k.mp4 auf 1080p herunter, komprimiere es und entferne d
+    outcome: plan (expected plan) [OK]  559ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out0:max_height=1080<=1080
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_005] намали clip_4k.mp4 до 1080p, компресирай го и премахни звука
+    outcome: plan (expected plan) [OK]  596ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out0:max_height=1080<=1080
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out2:container=mp4
+      + out2:no_audio=true
+  [ffmpeg_hard_006] speed up clip.mp4 to 2x, resize it to 480p, and compress it
+    outcome: plan (expected plan) [OK]  534ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=480<=480
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_006] acelera clip.mp4 a 2x, redimensiona a 480p y comprimelo
+    outcome: plan (expected plan) [OK]  531ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=480<=480
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_006] ускорь clip.mp4 в 2 раза, измени размер до 480p и сожми его
+    outcome: plan (expected plan) [OK]  441ms
+    knaif=0.67  baseline=None
+    generated: ffmpeg -y -i <work>\clip_fast.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\sandbox\fixtures\ffmpeg\clip_480p.mp4
+    tool     : adjust_speed  args={'inputs': ['clip.mp4'], 'speed': 2.0, 'output': 'clip_fast.mp4'}
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=480<=480
+      - out2:output_not_produced
+  [ffmpeg_hard_006] ускори clip.mp4 2 пъти, преоразмери до 480p и компресирай го
+    outcome: plan (expected plan) [OK]  525ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=480<=480
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_007] convert clip.mov to mp4, scale it to 360p, then compress it
+    outcome: plan (expected plan) [OK]  523ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=360<=360
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_007] konvertiere clip.mov nach mp4, skaliere auf 360p und komprimiere es
+    outcome: plan (expected plan) [OK]  519ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=360<=360
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_007] convertis clip.mov en mp4, redimensionne en 360p, puis compresse-le
+    outcome: plan (expected plan) [OK]  498ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=360<=360
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_007] convierte clip.mov a mp4, redimensiona a 360p y comprimelo
+    outcome: plan (expected plan) [OK]  503ms
+    knaif=1.00  baseline=None
+      + out0:container=mp4
+      + out0:video_codec=h264
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:max_height=360<=360
+      + out2:container=mp4
+      + out2:video_codec=h264
+  [ffmpeg_hard_015] rotate clip.mp4 90 degrees clockwise then compress it
+    outcome: plan (expected plan) [OK]  393ms
+    knaif=1.00  baseline=None
+      + out0:filter:transpose
+      + out0:container=mp4
+      + out1:container=mp4
+      + out1:video_codec=h264
+  [ffmpeg_hard_015] turn clip.mp4 90 degrees to the right and shrink the file
+    outcome: plan (expected plan) [OK]  352ms
+    knaif=0.50  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip.mp4 -vf transpose=1 -c:v libx264 -crf 28 -preset slow -c:a aac <repo>\sandbox\fixtures\ffmpeg\clip_rotated.mp4
+    tool     : rotate_video  args={'inputs': ['clip.mp4'], 'angle': 90, 'quality': 'small_file'}
+      + out0:filter:transpose
+      + out0:container=mp4
+      - out1:output_not_produced
+  [ffmpeg_301] make a thumbnail of clip.mp4 and compress clip.mp4
+    outcome: plan (expected plan) [OK]  424ms
+    knaif=1.00  baseline=None
+      + out0:container=image2
+      + out0:video_codec=mjpeg
+      + out1:duration_s≈10 (got 10.00s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:audio_codec=aac
+  [ffmpeg_301] grab a thumbnail from clip.mp4, then make a smaller copy of clip.mp4
+    outcome: plan (expected plan) [OK]  594ms
+    knaif=0.50  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip.mp4 -ss 5 -vframes 1 <repo>\sandbox\fixtures\ffmpeg\clip_thumb.jpg
+    tool     : create_thumbnail  args={'input': 'clip.mp4', 'at_time': 'middle'}
+      + out0:container=image2
+      + out0:video_codec=mjpeg
+      - out1:output_not_produced
+  [ffmpeg_301] erstelle ein Vorschaubild von clip.mp4 und komprimiere clip.mp4
+    outcome: plan (expected plan) [OK]  400ms
+    knaif=1.00  baseline=None
+      + out0:container=image2
+      + out0:video_codec=mjpeg
+      + out1:duration_s≈10 (got 10.00s)
+      + out1:container=mp4
+      + out1:video_codec=h264
+      + out1:audio_codec=aac
+  [ffmpeg_301] направи миниатюра от clip.mp4 и компресирай clip.mp4
+    outcome: plan (expected plan) [OK]  564ms
+    knaif=0.50  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip.mp4 -ss 5 -vframes 1 <repo>\sandbox\fixtures\ffmpeg\clip_thumb.jpg
+    tool     : create_thumbnail  args={'input': 'clip.mp4', 'at_time': 'middle'}
+      + out0:container=image2
+      + out0:video_codec=mjpeg
+      - out1:output_not_produced
+  [ffmpeg_301] 为clip.mp4生成缩略图，并压缩clip.mp4
+    outcome: error (expected plan) [FAIL]  328ms
+    generated: none
+    tool     : create_thumbnail  args={'input': 'clip.mp4', 'at_time': '00:00:05', 'image_format': 'jpg', 'scale': '1.5'}
+    error: Unrecognised scale value '1.5'. Use a preset (4k, 1080p, 720p, 480p) or WxH / W:H format.
+  [ffmpeg_hard2_001] join clip.mp4 and clip2.mp4 into one video and compress it for email
+    outcome: plan (expected plan) [OK]  403ms
+    knaif=1.00  baseline=None
+      + duration_s≈18 (got 18.02s)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_hard2_001] stitch clip.mp4 and clip2.mp4 together, then shrink the result so it f
+    outcome: plan (expected plan) [OK]  421ms
+    knaif=1.00  baseline=None
+      + duration_s≈18 (got 18.02s)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_hard2_001] clip.mp4 und clip2.mp4 zusammenfuegen und das Ergebnis fuer E-Mail kom
+    outcome: plan (expected plan) [OK]  466ms
+    knaif=1.00  baseline=None
+      + duration_s≈18 (got 18.02s)
+      + container=mp4
+      + video_codec=h264
+  [ffmpeg_url_006] compress https://files.knaif.test/ffmpeg/drone.mp4 to under 1 MB
+    outcome: plan (expected plan) [OK]  391ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=1024 (got 213 KB)
+      + container=mp4
+  [ffmpeg_url_006] make https://files.knaif.test/ffmpeg/drone.mp4 smaller than 1 MB
+    outcome: plan (expected plan) [OK]  319ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=1024 (got 213 KB)
+      + container=mp4
+  [ffmpeg_url_006] shrink the video at https://files.knaif.test/ffmpeg/drone.mp4 below 1 
+    outcome: plan (expected plan) [OK]  330ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=1024 (got 213 KB)
+      + container=mp4
+  [ffmpeg_alert_004] compress clip_ctr.mp4 to under 1 MB, beep and notify me when done
+    outcome: plan (expected plan) [OK]  383ms
+    knaif=1.00  baseline=None
+      + max_size_kb<=1024 (got 213 KB)
+      + container=mp4
+  [ffmpeg_alert_004] shrink clip_ctr.mp4 below 1 MB, then beep and show a notification
+    outcome: clarify (expected plan) [FAIL]  576ms
+    generated: none
+    tool     : compress_video  args={'inputs': ['clip_ctr.mp4'], 'target_size_mb': 1, 'preview': True, 'alert_when_done': True}
+  [ffmpeg_alert_004] make clip_ctr.mp4 smaller than 1 MB and both beep and notify when fini
+    outcome: plan (expected plan) [FAIL]  553ms
+    knaif=1.00  baseline=None
+    generated: ffmpeg -y -i <repo>\sandbox\fixtures\ffmpeg\clip_ctr.mp4 -c:v libx264 -crf 28 -preset slow -maxrate 700k -bufsize 700k -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart <repo>\sandbox\fixtures\ffmpeg\clip_ctr_compressed.mp4
+    tool     : compress_video  args={'inputs': ['clip_ctr.mp4'], 'target_size_mb': 1}
+      + max_size_kb<=1024 (got 213 KB)
+      + container=mp4
+  [ffmpeg_batch_001] convert all the .mov files here to mp4 and make them smaller
+    outcome: plan (expected plan) [OK]  1870ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:3
+  [ffmpeg_batch_001] turn every mov in this folder into an mp4 and compress them
+    outcome: plan (expected plan) [OK]  2508ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:3
+  [ffmpeg_batch_001] convert the .mov videos here to mp4, then shrink them
+    outcome: plan (expected plan) [OK]  2566ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:3
+  [ffmpeg_batch_001] konvertiere alle .mov-Dateien hier in mp4 und mach sie kleiner
+    outcome: plan (expected plan) [OK]  1923ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:3
+  [ffmpeg_batch_001] конвертирай всички .mov файлове тук в mp4 и ги направи по-малки
+    outcome: plan (expected plan) [OK]  748ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:3
+  [ffmpeg_batch_001] 把这里所有的.mov文件转换成mp4，并把它们压缩小一点
+    outcome: plan (expected plan) [OK]  1935ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:3
+  [ffmpeg_batch_016] split clip.mp4 into 10-second parts and compress each one
+    outcome: plan (expected plan) [OK]  8342ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:8
+  [ffmpeg_batch_016] chop clip.mp4 into 10 second pieces, then make every piece smaller
+    outcome: plan (expected plan) [OK]  8398ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:8
+  [ffmpeg_batch_016] cut clip.mp4 into 10-second chunks and compress them
+    outcome: plan (expected plan) [OK]  8486ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:8
+  [ffmpeg_batch_016] teile clip.mp4 in 10-Sekunden-Stücke und komprimiere jedes davon
+    outcome: plan (expected plan) [OK]  8339ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:8
+  [ffmpeg_batch_016] раздели clip.mp4 на части по 10 секунди и компресирай всяка от тях
+    outcome: plan (expected plan) [OK]  8257ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:8
+  [ffmpeg_batch_016] 把clip.mp4分割成每段10秒，然后压缩每一段
+    outcome: plan (expected plan) [OK]  8450ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:8
+  [ffmpeg_size_001] make clip.mov smaller
+    outcome: plan (expected plan) [OK]  423ms
+    knaif=1.00  baseline=None
+      + no_larger_than:clip.mov
+      + max_audio_kbps<=80 (got 69)
+      + container=mp4
+  [ffmpeg_size_001] compress clip.mov
+    outcome: plan (expected plan) [OK]  239ms
+    knaif=1.00  baseline=None
+      + no_larger_than:clip.mov
+      + max_audio_kbps<=80 (got 69)
+      + container=mp4
+  [ffmpeg_size_001] shrink clip.mov so it takes less space
+    outcome: plan (expected plan) [OK]  257ms
+    knaif=1.00  baseline=None
+      + no_larger_than:clip.mov
+      + max_audio_kbps<=80 (got 69)
+      + container=mp4
+  [ffmpeg_size_002] make clip_tiny.mp4 smaller
+    outcome: plan (expected plan) [OK]  366ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+  [ffmpeg_size_002] compress clip_tiny.mp4
+    outcome: plan (expected plan) [OK]  341ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+  [ffmpeg_size_002] shrink clip_tiny.mp4 down
+    outcome: plan (expected plan) [OK]  362ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+  [ffmpeg_size_003] convert clip_tiny.mov to mp4 and make it smaller
+    outcome: plan (expected plan) [OK]  429ms
+    knaif=0.50  baseline=None
+    generated: none
+    tool     : convert_video  args={'inputs': ['clip_tiny.mov'], 'container': 'mp4', 'quality': 'small_file'}
+      + inputs_untouched
+      - expect_files[0]:count 0 != 1
+      - unexpected:clip_tiny.mp4
+  [ffmpeg_size_003] turn clip_tiny.mov into an mp4 and compress it
+    outcome: plan (expected plan) [OK]  423ms
+    knaif=0.50  baseline=None
+    generated: none
+    tool     : convert_video  args={'inputs': ['clip_tiny.mov'], 'container': 'mp4', 'quality': 'small_file'}
+      + inputs_untouched
+      - expect_files[0]:count 0 != 1
+      - unexpected:clip_tiny.mp4
+  [ffmpeg_size_003] convert clip_tiny.mov to mp4, then shrink it
+    outcome: plan (expected plan) [OK]  654ms
+    knaif=1.00  baseline=None
+      + inputs_untouched
+      + expect_files[0]:1
+────────────────────────────────────────────────────────────────────────────────────────
+
+  Saved to evals/runs/2026-10-29_satisfied-container_success/1.7b/ffmpeg_qwen3-1.7b-sft-v9-flat-q6_success.json

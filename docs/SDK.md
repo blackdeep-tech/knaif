@@ -205,7 +205,7 @@ Three capabilities were scoped out deliberately, not overlooked. They are record
 so you can tell "considered and deferred" from "missing".
 
 **Dev-authored intents (`@nk.intent`).** v1 ships **flat commands only** — one command
-maps to one knaif `Step`. This keeps the decorator front door symmetric with
+maps to one knaif `Handler`. This keeps the decorator front door symmetric with
 `nk.from_click()`, which cannot produce macros from a `click.Group`. For multi-step work,
 either write the compound operation as ordinary Python inside one command, or let the
 model compose several atomic commands using `$var` binding between plan steps. A

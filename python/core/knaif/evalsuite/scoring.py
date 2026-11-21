@@ -26,12 +26,14 @@ See `docs/plans/2026-09-10-skill-quality-lifecycle.md` (L4d).
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
 from knaif.evaluator import compute_metrics
 
 from .corpus import CorpusRow
+from .folder_rows import grade_folder
 from .outcomes import POLICY_VERSION, is_capability_gap
 from .protocols import Verifier, VerifyResult
 from .runner import AgentOutput
@@ -118,8 +120,56 @@ def _mark_warmup(rows: list[dict[str, Any]]) -> None:
         rows[0]["is_warmup"] = True
 
 
+# Arg keys that name what a step reads. A known folder counts only where the plan writes.
+_INPUT_ARG_KEYS = frozenset({"inputs", "input", "files", "base", "append", "src", "path"})
+
+
+def plan_names_folder(plan: dict[str, Any], folder: str) -> bool:
+    """True when a step of *plan* writes into the known *folder* (``knaif.known_folders``):
+    an output arg such as ``Downloads``, ``Downloads/clip.mp4`` or ``~/Downloads/clip.mp4``."""
+    from knaif.known_folders import named_folder
+
+    for step in plan.get("plan") or []:
+        if not isinstance(step, dict):
+            continue
+        for key, value in (step.get("args") or {}).items():
+            if key in _INPUT_ARG_KEYS:
+                continue
+            for item in value if isinstance(value, list) else [value]:
+                if isinstance(item, str) and named_folder(item) == folder:
+                    return True
+    return False
+
+
 def _outcome_correct(output: AgentOutput, row: CorpusRow) -> bool:
-    return output.outcome == row.expected_outcome
+    """The outcome, and on rows that name them, the alert and the known folder.
+
+    A row without ``expected_alert`` expects no alert: an alert there is a false alert. A row
+    and an output that carry neither score exactly as before.
+    """
+    if output.outcome != row.expected_outcome:
+        return False
+    if bool(getattr(output, "alert", False)) != row.expected_alert:
+        return False
+    if row.expected_folder and output.outcome == "plan":
+        if not plan_names_folder(output.plan or {}, row.expected_folder):
+            return False
+        known_dir = getattr(output, "known_dir", None)
+        if known_dir is not None:
+            return _delivered_into(output, row.expected_folder, Path(known_dir))
+    return True
+
+
+def _delivered_into(output: AgentOutput, folder: str, known_dir: Path) -> bool:
+    """True when an executed row's graded file is in *folder*, as the row's replay redirected
+    it (``<row>.known/Downloads``): named by the plan is not enough once the plan ran."""
+    from knaif.known_folders import ROOT_ENV, resolve
+
+    target = resolve(folder, env={ROOT_ENV: str(known_dir)}).resolve()
+    paths = list(getattr(output, "artifact_paths", None) or [])
+    if not paths and getattr(output, "artifact_path", None) is not None:
+        paths = [output.artifact_path]
+    return any(target in Path(p).resolve().parents for p in paths)
 
 
 def _intent_result(output: AgentOutput, row: CorpusRow) -> dict[str, Any]:
@@ -149,6 +199,34 @@ def _intent_result(output: AgentOutput, row: CorpusRow) -> dict[str, Any]:
         # is to say whether the JSON was well-formed. Both are schema failures.
         "schema_valid": output.outcome not in ("error", "parse_error"),
     }
+
+
+def _grade_folder_row(
+    output: AgentOutput, row: CorpusRow, verifier: Verifier, sandbox_dir: Path
+) -> VerifyResult:
+    """Grade a folder row on its folder, each produced file through the skill's *verifier*.
+
+    The verifier sees the real output with only its artifact swapped for one file, so a check
+    that reads the plan or the execution results still finds them.
+    """
+
+    def check(path: Path, criteria: dict[str, Any]) -> VerifyResult:
+        one = dataclasses.replace(
+            output, artifact=None, artifact_path=path, artifact_paths=[path], artifact_commands=[]
+        )
+        return verifier(one, criteria, sandbox_dir)  # type: ignore[call-arg, arg-type]
+
+    assert output.folder_dir is not None and output.fixture_path is not None
+    try:
+        return grade_folder(
+            row,
+            output.folder_dir,
+            output.fixture_path,
+            check,
+            failures=getattr(output, "batch_failures", None),
+        )
+    except Exception as exc:  # noqa: BLE001
+        return VerifyResult(score=0.0, failed=[str(exc)], verifier_kind="folder")
 
 
 def score_corpus(
@@ -187,8 +265,16 @@ def score_corpus(
         knaif_result: VerifyResult | None = None
         row_outputs = getattr(row, "outputs", None)
         grade_outputs = verifiers.get("grade_outputs")
+        folder_dir = getattr(output, "folder_dir", None)
         if output.outcome == "plan":
-            if row_outputs and grade_outputs and verifier_name in _EXECUTING_VERIFIERS:
+            if (
+                folder_dir is not None
+                and row.is_folder_row
+                and verifier is not None
+                and verifier_name in _EXECUTING_VERIFIERS
+            ):
+                knaif_result = _grade_folder_row(output, row, verifier, sandbox_dir)
+            elif row_outputs and grade_outputs and verifier_name in _EXECUTING_VERIFIERS:
                 try:
                     knaif_result = grade_outputs(output.artifact_paths, row_outputs, sandbox_dir)  # type: ignore[call-arg, arg-type]
                 except Exception as exc:  # noqa: BLE001
@@ -220,6 +306,9 @@ def score_corpus(
                 "error": output.error,
                 "artifact": output.artifact,
                 "plan": output.plan,
+                "model_plan": getattr(output, "model_plan", None),
+                "alert": bool(getattr(output, "alert", False)),
+                "expected_alert": row.expected_alert,
                 "knaif_score": knaif_result.score if knaif_result else None,
                 "knaif_matched": knaif_result.matched if knaif_result else [],
                 "knaif_failed": knaif_result.failed if knaif_result else [],
@@ -293,7 +382,7 @@ def aggregate_scored_rows(
 
     run_coverage, unattempted = _coverage_aggregate(scored_rows)
 
-    return {
+    board: dict[str, Any] = {
         "verifier": verifier_name,
         "scoring_policy": POLICY_VERSION,
         "total": n,
@@ -309,6 +398,24 @@ def aggregate_scored_rows(
         "intent_metrics": compute_metrics(intent_rows) if intent_rows else {},
         "by_tag": tag_summary,
         "rows": scored_rows,
+    }
+    alerts = _alert_counts(scored_rows)
+    if alerts is not None:
+        board["alerts"] = alerts
+    return board
+
+
+def _alert_counts(rows: list[dict[str, Any]]) -> dict[str, int] | None:
+    """How the alerts went, or None for a run where no row expected or got one (so a
+    scoreboard from before the alert existed keeps its exact shape)."""
+    if not any(r.get("expected_alert") or r.get("alert") for r in rows):
+        return None
+    expected = [r for r in rows if r.get("expected_alert")]
+    return {
+        "expected": len(expected),
+        "correct": sum(1 for r in expected if r.get("alert")),
+        "missed": sum(1 for r in expected if not r.get("alert")),
+        "false": sum(1 for r in rows if r.get("alert") and not r.get("expected_alert")),
     }
 
 
@@ -358,6 +465,9 @@ def score_corpus_output_diff(
                 "artifact": output.artifact,
                 "artifact_path": str(output.artifact_path) if output.artifact_path else None,
                 "plan": output.plan,
+                "model_plan": getattr(output, "model_plan", None),
+                "alert": bool(getattr(output, "alert", False)),
+                "expected_alert": row.expected_alert,
                 "knaif_score": knaif_result.score if knaif_result else None,
                 "knaif_matched": knaif_result.matched if knaif_result else [],
                 "knaif_failed": knaif_result.failed if knaif_result else [],

@@ -1,0 +1,11 @@
+ M contracts/parity/planner_cases.json
+ M docs/ARCHITECTURE.md
+ M docs/TOOL_SCHEMA.md
+ M native/crates/knaif-core/src/planner.rs
+ M native/crates/knaif-core/src/registry.rs
+ M python/core/knaif/planner.py
+ M python/core/knaif/registry.py
+ M python/core/tests/test_planner.py
+ M python/core/tests/test_registry.py
+ M skills/ffmpeg/SPEC.md
+ M skills/ffmpeg/tools.yaml

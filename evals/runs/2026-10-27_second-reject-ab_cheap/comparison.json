@@ -1,0 +1,606 @@
+{
+  "arms": {
+    "A-without": "no second reject example",
+    "B-with": "Shrink the movies stored at the top of the C: drive.",
+    "C-reworded": "Convert the clips in the Windows system folder. (adopted)"
+  },
+  "verifier": "cheap",
+  "comparisons": {
+    "B-with": [
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval",
+        "rows": 332,
+        "outcome_accuracy": {
+          "A": 0.954954954954955,
+          "B-with": 0.9519519519519519
+        },
+        "avg_knaif_score": {
+          "A": 0.9911504424778761,
+          "B-with": 0.9911111111111112
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_136",
+            "utterance_idx": 0,
+            "utterance": "compress clip_4k.mp4 to 1080p and then prepare for YouTube",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "B-with": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval_url",
+        "rows": 13,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "B-with": 0.9285714285714286
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_url_014",
+            "utterance_idx": 0,
+            "utterance": "upload clip.mp4 to https://files.knaif.test/upload",
+            "expected": "clarify",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "B-with": {
+              "outcome": "reject",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval_alert",
+        "rows": 9,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "grade_changes": []
+      },
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval_batch",
+        "rows": 17,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "grade_changes": []
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval",
+        "rows": 332,
+        "outcome_accuracy": {
+          "A": 0.93993993993994,
+          "B-with": 0.93993993993994
+        },
+        "avg_knaif_score": {
+          "A": 0.997737556561086,
+          "B-with": 0.9954954954954955
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_079",
+            "utterance_idx": 0,
+            "utterance": "make a boomerang effect on clip.mp4",
+            "expected": "plan",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "B-with": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_086",
+            "utterance_idx": 0,
+            "utterance": "upscale clip.mp4 to 4K",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "B-with": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          },
+          {
+            "id": "ffmpeg_123",
+            "utterance_idx": 0,
+            "utterance": "speed up clip.mp4 by 2x and strip the audio",
+            "expected": "plan",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "B-with": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_136",
+            "utterance_idx": 0,
+            "utterance": "compress clip_4k.mp4 to 1080p and then prepare for YouTube",
+            "expected": "plan",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "B-with": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_150",
+            "utterance_idx": 0,
+            "utterance": "process all files on the server not just my sandbox",
+            "expected": "reject",
+            "A": {
+              "outcome": "reject",
+              "knaif_score": null
+            },
+            "B-with": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          },
+          {
+            "id": "ffmpeg_167",
+            "utterance_idx": 0,
+            "utterance": "transcode clip.mp4 to h264 even though it is already h264",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "B-with": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          },
+          {
+            "id": "ffmpeg_295",
+            "utterance_idx": 0,
+            "utterance": "resize clip.mp4 to exactly 1080x1920",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "B-with": {
+              "outcome": "plan",
+              "knaif_score": 0.5
+            },
+            "verdict": "worse"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval_url",
+        "rows": 13,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "grade_changes": []
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval_alert",
+        "rows": 9,
+        "outcome_accuracy": {
+          "A": 0.4,
+          "B-with": 0.6
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_alert_002",
+            "utterance_idx": 0,
+            "utterance": "trim clip.mp4 to the first 5 seconds and notify me when it's done",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "B-with": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_both_001",
+            "utterance_idx": 0,
+            "utterance": "convert clip.mp4 to webm, save it to Downloads and beep when done",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "B-with": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval_batch",
+        "rows": 17,
+        "outcome_accuracy": {
+          "A": 0.9444444444444444,
+          "B-with": 0.9444444444444444
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "B-with": 1.0
+        },
+        "grade_changes": []
+      }
+    ],
+    "C-reworded": [
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval",
+        "rows": 332,
+        "outcome_accuracy": {
+          "A": 0.954954954954955,
+          "C-reworded": 0.9579579579579579
+        },
+        "avg_knaif_score": {
+          "A": 0.9911504424778761,
+          "C-reworded": 0.9889867841409692
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_090",
+            "utterance_idx": 0,
+            "utterance": "generate a poster image from clip.mp4",
+            "expected": "plan",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_237",
+            "utterance_idx": 0,
+            "utterance": "extract a 4K frame from clip_4k.mp4 at 2 seconds",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 0.5
+            },
+            "verdict": "worse"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval_url",
+        "rows": 13,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "C-reworded": 0.9285714285714286
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_url_014",
+            "utterance_idx": 0,
+            "utterance": "upload clip.mp4 to https://files.knaif.test/upload",
+            "expected": "clarify",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "C-reworded": {
+              "outcome": "reject",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval_alert",
+        "rows": 9,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "grade_changes": []
+      },
+      {
+        "model": "qwen3-4b-sft-v4-flat-q4",
+        "corpus": "eval_batch",
+        "rows": 17,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "grade_changes": []
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval",
+        "rows": 332,
+        "outcome_accuracy": {
+          "A": 0.93993993993994,
+          "C-reworded": 0.93993993993994
+        },
+        "avg_knaif_score": {
+          "A": 0.997737556561086,
+          "C-reworded": 0.9954954954954955
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_079",
+            "utterance_idx": 0,
+            "utterance": "make a boomerang effect on clip.mp4",
+            "expected": "plan",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_123",
+            "utterance_idx": 0,
+            "utterance": "speed up clip.mp4 by 2x and strip the audio",
+            "expected": "plan",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_167",
+            "utterance_idx": 0,
+            "utterance": "transcode clip.mp4 to h264 even though it is already h264",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "C-reworded": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          },
+          {
+            "id": "ffmpeg_244",
+            "utterance_idx": 0,
+            "utterance": "stitch clip.mov and clip.mp4 using the second clip's resolution",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 0.5
+            },
+            "verdict": "worse"
+          },
+          {
+            "id": "ffmpeg_272",
+            "utterance_idx": 0,
+            "utterance": "adjust the audio levels in clip.mp4",
+            "expected": "clarify",
+            "A": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "worse"
+          },
+          {
+            "id": "ffmpeg_291",
+            "utterance_idx": 0,
+            "utterance": "change the silent clip to mkv and scale to 1080p",
+            "expected": "clarify",
+            "A": {
+              "outcome": "parse_error",
+              "knaif_score": null
+            },
+            "C-reworded": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_hard2_006",
+            "utterance_idx": 0,
+            "utterance": "double the speed of clip.mp4 and keep only the first 3 seconds of the result",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "C-reworded": {
+              "outcome": "clarify",
+              "knaif_score": null
+            },
+            "verdict": "worse"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval_url",
+        "rows": 13,
+        "outcome_accuracy": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "grade_changes": []
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval_alert",
+        "rows": 9,
+        "outcome_accuracy": {
+          "A": 0.4,
+          "C-reworded": 0.7
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "grade_changes": [
+          {
+            "id": "ffmpeg_alert_002",
+            "utterance_idx": 0,
+            "utterance": "trim clip.mp4 to the first 5 seconds and notify me when it's done",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_both_001",
+            "utterance_idx": 0,
+            "utterance": "convert clip.mp4 to webm, save it to Downloads and beep when done",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          },
+          {
+            "id": "ffmpeg_folder_003",
+            "utterance_idx": 0,
+            "utterance": "grab a thumbnail from clip.mp4 at 3 seconds and put it on the Desktop",
+            "expected": "plan",
+            "A": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "C-reworded": {
+              "outcome": "plan",
+              "knaif_score": 1.0
+            },
+            "verdict": "better"
+          }
+        ]
+      },
+      {
+        "model": "qwen3-1.7b-sft-v9-flat-q6",
+        "corpus": "eval_batch",
+        "rows": 17,
+        "outcome_accuracy": {
+          "A": 0.9444444444444444,
+          "C-reworded": 0.9444444444444444
+        },
+        "avg_knaif_score": {
+          "A": 1.0,
+          "C-reworded": 1.0
+        },
+        "grade_changes": []
+      }
+    ]
+  }
+}

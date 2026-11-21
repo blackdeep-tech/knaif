@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_speed", "args": {"inputs": ["clip.mp4"], "speed": 2.0, "output": "fast_clip.mp4"}}, {"tool": "strip_audio", "args": {"inputs": ["fast_clip.mp4"]}}]}

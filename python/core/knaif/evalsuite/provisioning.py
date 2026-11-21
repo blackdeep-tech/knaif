@@ -60,6 +60,10 @@ def provision_row_dir(fixture_dir: Path | str, row_dir: Path | str, *, fresh: bo
             f"row dir {row_dir} is inside the fixture dir {fixture_dir}: provisioning would "
             "copy a row's outputs into every later row's inventory"
         )
+    if fresh:
+        shutil.rmtree(row_scratch_dir(row_dir), ignore_errors=True)
+        shutil.rmtree(row_known_dir(row_dir), ignore_errors=True)
+        row_alert_sink(row_dir).unlink(missing_ok=True)
     if fresh and row_dir.exists():
         # Row directories are deterministic (`<id>__<idx>`) and failed ones are deliberately
         # kept, so overlaying onto whatever is there lets an intermediate from an earlier run
@@ -76,6 +80,33 @@ def provision_row_dir(fixture_dir: Path | str, row_dir: Path | str, *, fresh: bo
     return count
 
 
+def row_scratch_dir(row_dir: Path | str) -> Path:
+    """Where a row's run-scratch files go during a replay: ``<row>.work`` beside the row.
+
+    Beside, not inside: the row folder stands for the user's folder, which must end up holding
+    only the inputs and the deliverables. See ``chain.resolve_command``.
+    """
+    row_dir = Path(row_dir)
+    return row_dir.with_name(row_dir.name + ".work")
+
+
+def row_known_dir(row_dir: Path | str) -> Path:
+    """Where a row's known folders are during a replay: ``<row>.known`` beside the row.
+
+    ``KNAIF_KNOWN_FOLDERS_ROOT`` points here, so "save it in Downloads" lands in
+    ``<row>.known/Downloads`` and never in the user's own folder. Beside the row, like
+    :func:`row_scratch_dir`: the row folder stands for the folder the user ran knaif in.
+    """
+    row_dir = Path(row_dir)
+    return row_dir.with_name(row_dir.name + ".known")
+
+
+def row_alert_sink(row_dir: Path | str) -> Path:
+    """Where a row's alerts are recorded during a replay (``KNAIF_OS_SINK``), beside the row."""
+    row_dir = Path(row_dir)
+    return row_dir.with_name(row_dir.name + ".alerts.jsonl")
+
+
 def cleanup_row_dir(row_dir: Path | str, *, keep: bool = False) -> None:
     """Remove a graded row's work directory. Kept on failure, for debugging.
 
@@ -86,6 +117,9 @@ def cleanup_row_dir(row_dir: Path | str, *, keep: bool = False) -> None:
     if keep:
         return
     shutil.rmtree(Path(row_dir), ignore_errors=True)
+    shutil.rmtree(row_scratch_dir(row_dir), ignore_errors=True)
+    shutil.rmtree(row_known_dir(row_dir), ignore_errors=True)
+    row_alert_sink(row_dir).unlink(missing_ok=True)
 
 
 def fixture_content_hashes(fixture_dir: Path | str) -> dict[str, str]:

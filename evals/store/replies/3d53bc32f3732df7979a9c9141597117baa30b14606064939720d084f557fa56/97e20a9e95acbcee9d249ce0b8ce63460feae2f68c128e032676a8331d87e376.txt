@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_pdf", "args": {"input": "https://files.knaif.test/documents/report.pdf", "compress_quality": "balanced"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "inspect_document", "args": {"input": "https://files.knaif.test/documents/report.pdf"}}]}

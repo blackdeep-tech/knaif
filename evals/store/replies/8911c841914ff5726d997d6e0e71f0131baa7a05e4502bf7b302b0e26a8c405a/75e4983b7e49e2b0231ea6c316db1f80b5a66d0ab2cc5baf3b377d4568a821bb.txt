@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A lossless copy isn't achievable - that would require infinite storage. Should I instead prepare a high-quality version?"}}]}

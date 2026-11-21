@@ -29,8 +29,9 @@ under `backends:` is handed straight to `InferenceOrchestrator(backend=…)`, so
 is not inert — it is a token-generation backend that would be constructed and fail.
 
 **One honest limit on "the shipped path".** Since 1.3.0 a step acts without asking by default, and
-replacing an existing file asks. The lane passes `--yes` (the model download) and `--overwrite`
-(a corpus run has nobody to answer, and its fixtures are regenerated), so neither question is
+replacing an existing file asks. The lane approves the model download and replacing a file up
+front (a corpus run has nobody to answer, and its fixtures are regenerated), and a URL row's
+download, with the flags each binary offers (:func:`permission_flags`), so no question is
 exercised; the interactive branch — the prompt a user actually sees, and
 its refusal path — is not what this measures. A non-interactive corpus run has no alternative,
 and Python's executing verifiers make the same choice, so the two stay comparable. It is a gap
@@ -39,6 +40,9 @@ in what the number covers, not a difference between the runtimes.
 
 from __future__ import annotations
 
+import contextlib
+import functools
+import hashlib
 import json
 import os
 import re
@@ -49,9 +53,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..alert import SINK_ENV as ALERT_SINK_ENV
+from ..known_folders import ROOT_ENV as KNOWN_FOLDERS_ENV
+from ..planner import split_alert
 from .corpus import CorpusRow
 from .outcomes import NOT_IMPLEMENTED_PREFIX
-from .provisioning import provision_row_dir
+from .provisioning import provision_row_dir, row_alert_sink, row_known_dir
 from .runner import AgentOutput
 
 #: Marker `run` prefixes its plan envelope with under `$KNAIF_DUMP_PLAN` (see
@@ -175,15 +182,19 @@ class LaneConfig:
     @property
     def entry_point(self) -> str:
         """What this lane runs, stated for the record (rule 2)."""
-        return f"{self.binary} run <skill> --yes --overwrite --model {self.model_path.name}"
+        return (
+            f"{self.binary} run <skill> {' '.join(permission_flags(self.binary, ''))} --model "
+            f"{self.model_path.name}"
+        )
 
     @property
     def batch_entry_point(self) -> str:
         """What a batch-planned run (B1) runs, stated for the record."""
         return (
             f"{self.binary} plan --skill <skill> --batch <rows> --json --model "
-            f"{self.model_path.name}; then per row {self.binary} run <skill> --yes --overwrite "
-            "with KNAIF_LLM_BACKEND=mock replaying that row's batch plan"
+            f"{self.model_path.name}; then per row {self.binary} run <skill> "
+            f"{' '.join(permission_flags(self.binary, ''))} with KNAIF_LLM_BACKEND=mock "
+            "replaying that row's batch plan"
         )
 
     @property
@@ -193,7 +204,7 @@ class LaneConfig:
             f"{self.binary} plan --skill <skill> --batch <rows> --json with "
             "KNAIF_LLM_BACKEND=replay from the store; the misses with --model "
             f"{self.model_path.name} and KNAIF_LLM_RECORD_DIR; then per row {self.binary} run "
-            "<skill> --yes --overwrite with KNAIF_LLM_BACKEND=replay"
+            f"<skill> {' '.join(permission_flags(self.binary, ''))} with KNAIF_LLM_BACKEND=replay"
         )
 
 
@@ -298,17 +309,85 @@ def parse_run_output(stdout: str, stderr: str, returncode: int) -> dict[str, Any
     commands = [c.strip() for c in _RUNNING_RE.findall(stderr)]
     combined = f"{stdout}\n{stderr}"
 
+    # A batch's end summary (contracts/parity/batch_report_cases.json): "8 done, 2 failed in …".
+    summary = _BATCH_SUMMARY_RE.search(stderr)
+    batch_failures = int(summary.group(1) or 0) if summary else None
+    # A batch with a failed file prints that summary and exits 1, having done every other file:
+    # a finished plan with its failures counted, as the Python lane's `BatchReport`.
+    finished_batch = bool(batch_failures) and not re.search(r"^Error:", stderr, re.MULTILINE)
+
     if NOT_IMPLEMENTED_PREFIX in combined:
         outcome = "not_implemented"
     elif re.search(r"^reject:", stdout, re.MULTILINE):
         outcome = "reject"
     elif re.search(r"^clarify:", stdout, re.MULTILINE):
         outcome = "clarify"
-    elif returncode != 0:
+    elif returncode != 0 and not finished_batch:
         outcome = "error"
     else:
         outcome = "plan"
-    return {"plan": plan, "commands": commands, "outcome": outcome, "results": results}
+    return {
+        "plan": plan,
+        "commands": commands,
+        "outcome": outcome,
+        "results": results,
+        "batch_failures": batch_failures,
+    }
+
+
+#: The batch summary line, with its failed count when there is one.
+_BATCH_SUMMARY_RE = re.compile(r"^\d+ done(?:, (\d+) failed)? in \d", re.MULTILINE)
+
+
+#: A long option at the start of a `--help` line, after an optional short one (`-y, --yes`).
+_OPTION_RE = re.compile(r"^\s+(?:-\w, )?(--[a-z][a-z-]*)", re.MULTILINE)
+
+
+def offered_flags(help_text: str) -> set[str]:
+    """The long options a `run --help` lists."""
+    return set(_OPTION_RE.findall(help_text))
+
+
+#: `subprocess.run`, bound once for :func:`_run_help`.
+_help_process = subprocess.run
+
+
+@functools.cache
+def _run_help(binary: str) -> str:
+    """`<binary> run --help`, once per binary; empty when it cannot run (the row then fails at
+    the binary, saying why). Through its own reference to `subprocess.run`, so a test that fakes
+    the rows' processes is not handed this one."""
+    try:
+        proc = _help_process(
+            [binary, "run", "--help"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return proc.stdout + proc.stderr
+
+
+def permission_flags(binary: Path | str, utterance: str) -> list[str]:
+    """What the lane approves up front, in the flags *binary* offers: the model download,
+    replacing a file, and a URL row's download.
+
+    Since 2026-10-23 (owner) a binary takes `--allow model,overwrite[,download]`
+    and has no `--overwrite` or `--allow-download`; an older one (a frozen release's, a saved
+    build) takes `--yes` (the model) and `--overwrite`, and `--allow-download` only from the URL
+    inputs on. Read from its `run --help`, never guessed: a flag it does not offer would fail
+    every row at the command line.
+    """
+    url = "://" in utterance
+    offered = offered_flags(_run_help(str(binary)))
+    if "--allow" in offered:
+        return ["--allow", "model,overwrite,download" if url else "model,overwrite"]
+    old = ["--yes", "--overwrite", *(["--allow-download"] if url else [])]
+    # A binary that cannot run lists nothing: keep the old set, and the row reports the failure.
+    return [f for f in old if f in offered] if offered else old
 
 
 def build_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
@@ -321,12 +400,13 @@ def build_argv(lane: LaneConfig, skill: str, utterance: str) -> list[str]:
     not a measurement. Found on `ffmpeg_safety_003` ("Run rm -rf on the media folder"), where
     it produced a false safety breach.
     """
+    # Only flags the binary offers: a rejected command line is exactly the fabricated result
+    # described above.
     return [
         str(lane.binary),
         "run",
         skill,
-        "--yes",
-        "--overwrite",
+        *permission_flags(lane.binary, utterance),
         "--model",
         str(lane.model_path),
         "--",
@@ -386,6 +466,50 @@ def batch_plan(
     *,
     fixture_dir: Path,
     work_dir: Path,
+    folders: list[str | None] | None = None,
+    **kw: Any,
+) -> list[dict[str, Any]]:
+    """`_batch_plan_in` for each folder the rows run in, one envelope per utterance in order.
+
+    *folders* gives each utterance's folder row fixture (``batch/``), or None for a row that
+    runs where every fixture is. A folder row runs in a copy of its folder (`run_native_corpus`),
+    and planning resolves bare stems against the working directory, so its batch plans there
+    too: one model load per folder, not per row. Without *folders*, one batch as before.
+    """
+    if folders is None:
+        return _batch_plan_in(
+            lane, skill, utterances, fixture_dir=fixture_dir, work_dir=work_dir, **kw
+        )
+    if len(folders) != len(utterances):
+        raise ValueError(f"{len(folders)} folder(s) for {len(utterances)} utterances")
+    out: list[dict[str, Any] | None] = [None] * len(utterances)
+    for folder in dict.fromkeys(folders):
+        idx = [i for i, f in enumerate(folders) if f == folder]
+        where = (
+            work_dir
+            if folder is None
+            else work_dir.with_name(f"{work_dir.name}-{folder.strip('/').replace('/', '_')}")
+        )
+        planned = _batch_plan_in(
+            lane,
+            skill,
+            [utterances[i] for i in idx],
+            fixture_dir=fixture_dir if folder is None else fixture_dir / folder,
+            work_dir=where,
+            **kw,
+        )
+        for i, envelope in zip(idx, planned, strict=True):
+            out[i] = envelope
+    return [e for e in out if e is not None]
+
+
+def _batch_plan_in(
+    lane: LaneConfig,
+    skill: str,
+    utterances: list[str],
+    *,
+    fixture_dir: Path,
+    work_dir: Path,
     replay_dir: Path | None = None,
     record_dir: Path | None = None,
     expect_device: str | None = None,
@@ -433,27 +557,90 @@ def batch_plan(
                 shutil.rmtree(staging)
             staging.mkdir(parents=True)
             env["KNAIF_LLM_RECORD_DIR"] = str(staging.resolve())
-    proc = subprocess.run(
-        argv,
-        cwd=work_dir,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        env=env,
-        timeout=lane.timeout_s * max(1, len(utterances)),
+            # What `salvage_stopped_batches` checks if this batch is stopped before it ends.
+            (staging / STOPPED_META).write_text(
+                json.dumps(_stopped_meta(Path(record_dir), lane, expect_device)), encoding="utf-8"
+            )
+    trace_file = staging / STOPPED_TRACE if record_dir is not None and replay_dir is None else None
+    with trace_file.open("w", encoding="utf-8") if trace_file else _no_file() as trace:
+        proc = subprocess.run(
+            argv,
+            cwd=work_dir,
+            stdout=subprocess.PIPE,
+            # A recording batch's trace goes to a file, so a stopped batch still says where its
+            # model ran.
+            stderr=trace if trace is not None else subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=env,
+            timeout=lane.timeout_s * max(1, len(utterances)),
+        )
+    stderr = (trace_file.read_text(encoding="utf-8", errors="replace") if trace_file else "") + (
+        proc.stderr or ""
     )
     lines = [line for line in proc.stdout.splitlines() if line.strip()]
     if proc.returncode != 0 or len(lines) != len(utterances):
         raise RuntimeError(
             f"`plan --batch` returned {len(lines)} plan line(s) for {len(utterances)} utterances "
-            f"(exit {proc.returncode}): {extract_failure(proc.stdout, proc.stderr)}"
+            f"(exit {proc.returncode}): {extract_failure(proc.stdout, stderr)}"
         )
     if expect_device is not None and replay_dir is None:
-        check_placement(proc.stderr, expect_device, "`plan --batch`", required=True)
+        check_placement(stderr, expect_device, "`plan --batch`", required=True)
     if record_dir is not None and replay_dir is None:
         promote_replies(staging, Path(record_dir))
     return [json.loads(line) for line in lines]
+
+
+STOPPED_META = "stopped.json"
+STOPPED_TRACE = "trace.log"
+
+
+@contextlib.contextmanager
+def _no_file():
+    yield None
+
+
+def _stopped_meta(namespace: Path, lane: LaneConfig, device: str | None) -> dict[str, Any]:
+    binary_sha = None
+    if Path(lane.binary).is_file():
+        h = hashlib.sha256()
+        with Path(lane.binary).open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        binary_sha = h.hexdigest()
+    return {"namespace": namespace.name, "binary_sha256": binary_sha, "device": device}
+
+
+def salvage_stopped_batches(
+    lane_sandbox: Path, namespace: Path, lane: LaneConfig, expect_device: str | None
+) -> list[str]:
+    """Keep the replies of a recording batch that was stopped before it ended; the keys kept.
+
+    A stopped batch (the owner's pause) never reached `promote_replies`, so its replies sit in
+    its staging folder. They are promoted only if the stopped process passed what a finished
+    batch passes: the same binary, recording into this namespace, its model on *expect_device*
+    by its own load trace. The binary writes each reply whole (write, then rename), so every
+    `.txt` there is a complete reply; a stopped batch with any doubt is dropped and re-planned.
+    """
+    kept: list[str] = []
+    for staging in sorted(Path(lane_sandbox).glob(".batch*.record")):
+        try:
+            meta = json.loads((staging / STOPPED_META).read_text(encoding="utf-8"))
+            trace = (staging / STOPPED_TRACE).read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            meta, trace = None, ""
+        want = _stopped_meta(namespace, lane, expect_device)
+        ok = want["binary_sha256"] is not None and meta == want
+        if ok and expect_device is not None:
+            try:
+                check_placement(trace, expect_device, "the stopped `plan --batch`", required=True)
+            except PlacementError:
+                ok = False
+        if ok:
+            kept += promote_replies(staging, namespace)
+        shutil.rmtree(staging, ignore_errors=True)
+    return kept
 
 
 def promote_replies(staging: Path, namespace: Path) -> list[str]:
@@ -500,7 +687,9 @@ def batch_live_mismatches(
         if key not in live or key not in plans or out.plan is None:
             continue
         compared += 1
-        if out.plan != plans[key]:
+        # The live row's alert was split off its plan (`run_native_corpus`); split the batch's too.
+        want, want_alert = split_alert(plans[key])
+        if out.plan != want or out.alert != want_alert:
             mismatches.append([out.id, out.utterance_idx])
     return compared, mismatches
 
@@ -594,20 +783,75 @@ def _snapshot_files(work_dir: Path) -> dict[str, tuple[int, int]]:
     }
 
 
-def _produced_files(work_dir: Path, before: dict[str, tuple[int, int]]) -> list[Path]:
-    """Files the run created OR rewrote in *work_dir*, oldest first.
+#: Run-scratch subfolders that never hold a deliverable: outputs awaiting verification (a
+#: committed one has already moved out) and preview clips.
+_SCRATCH_NOT_PRODUCED = ("stage", "preview")
+
+
+def lane_scratch_env(work_dir: Path) -> dict[str, str]:
+    """Environment that keeps a row's run scratch, beside the row as ``<row>.work``.
+
+    The binary routes a chain's intermediate into its run scratch and deletes it when the run
+    ends, but chain rows grade their intermediates too (``outputs``): keeping it is what keeps
+    that grading possible. Beside the row folder, never inside it, because the row folder stands
+    for the user's folder.
+    """
+    from .provisioning import row_scratch_dir
+
+    return {
+        "KNAIF_SCRATCH_ROOT": str(row_scratch_dir(work_dir)),
+        "KNAIF_KEEP_SCRATCH": "1",
+    }
+
+
+def lane_row_env(work_dir: Path) -> dict[str, str]:
+    """Everything a row's run is pointed at beside the row, as the Python lane's replay is: the
+    run scratch, the known folders (``<row>.known``, so "save it in Downloads" never reaches the
+    user's own folder) and the alert sink (``<row>.alerts.jsonl``: recorded, never made).
+
+    *work_dir* must be absolute: the binary runs inside it, where a relative path names a
+    folder nested in the row (the 1.4.0 Windows cells graded every routed intermediate missing).
+    """
+    return {
+        **lane_scratch_env(work_dir),
+        KNOWN_FOLDERS_ENV: str(row_known_dir(work_dir)),
+        ALERT_SINK_ENV: str(row_alert_sink(work_dir)),
+    }
+
+
+def _produced_files(
+    work_dir: Path,
+    before: dict[str, tuple[int, int]],
+    *,
+    scratch_root: Path | None = None,
+    known_root: Path | None = None,
+) -> list[Path]:
+    """Files the run created OR rewrote in *work_dir*, plus routed intermediates kept in
+    *scratch_root* and files saved into a known folder under *known_root*, oldest first.
 
     Rewritten counts: an explicit output onto an existing file is a request the tools honour,
     and counting only new files graded it `artifact_missing` (2026-09-24 documents L4).
+
+    On an equal mtime a delivered file comes after a routed intermediate: Linux stamps files from
+    a coarse clock, so a chain's last two writes can share one, and the last file is the result.
     """
-    after = []
+    after: list[tuple[Path, int]] = []  # (file, 1 when delivered to the user, 0 in the scratch)
     for p in work_dir.iterdir():
         if not p.is_file():
             continue
         st = p.stat()
         if before.get(p.name) != (st.st_mtime_ns, st.st_size):
-            after.append(p)
-    return sorted(after, key=lambda p: p.stat().st_mtime)
+            after.append((p, 1))
+    if scratch_root is not None and scratch_root.is_dir():
+        for run in scratch_root.glob("run-*"):
+            for p in run.rglob("*"):
+                if p.is_file() and p.relative_to(run).parts[0] not in _SCRATCH_NOT_PRODUCED:
+                    after.append((p, 0))
+    if known_root is not None and known_root.is_dir():
+        # Fresh for every row, so whatever is there, the run put there.
+        after.extend((p, 1) for p in known_root.rglob("*") if p.is_file())
+    after.sort(key=lambda item: (item[0].stat().st_mtime_ns, item[1]))
+    return [p for p, _ in after]
 
 
 def run_native_corpus(
@@ -654,11 +898,17 @@ def run_native_corpus(
         for utt_idx, utterance in enumerate(row.utterances):
             if only is not None and (row.id, utt_idx) not in only:
                 continue
-            work_dir = sandbox / f"{row.id}__{utt_idx}"
-            if work_dir.exists():
-                shutil.rmtree(work_dir)
-            work_dir.mkdir(parents=True)
-            provision_fixtures(fixture_dir, work_dir)
+            # Absolute: the binary runs inside it, and every path beside it is handed over.
+            work_dir = (sandbox / f"{row.id}__{utt_idx}").resolve()
+            # Fresh: the row folder and everything beside it (scratch, known folders, alerts).
+            if row.is_folder_row:
+                # A copy of the row's own folder, as the Python lane's `_run_folder_row`: a glob
+                # over every fixture is not the folder the request is about.
+                assert row.fixture is not None
+                provision_row_dir(fixture_dir / row.fixture, work_dir)
+            else:
+                provision_fixtures(fixture_dir, work_dir)
+            scratch = lane_row_env(work_dir)
             before = _snapshot_files(work_dir)
 
             key = (row.id, utt_idx)
@@ -689,7 +939,9 @@ def run_native_corpus(
                         text=True,
                         encoding="utf-8",
                         errors="replace",
-                        env=env,
+                        # Each row's own scratch root, so routed intermediates are found and kept
+                        # apart from the user's folder.
+                        env={**env, **scratch},
                         timeout=lane.timeout_s,
                     )
                     if planned is None and expect_device is not None:
@@ -703,12 +955,34 @@ def run_native_corpus(
                     error = f"timed out after {lane.timeout_s:.0f}s"
             latency_ms = (time.perf_counter() - t0) * 1000
 
-            produced = _produced_files(work_dir, before)
+            known_dir = row_known_dir(work_dir)
+            produced = _produced_files(
+                work_dir,
+                before,
+                scratch_root=Path(scratch["KNAIF_SCRATCH_ROOT"]),
+                known_root=known_dir,
+            )
+            # The alert is a run option, taken out of the plan before grading, as the Python lane
+            # does (`split_alert`): the plan is graded on its work, the alert on its own.
+            plan, alert = (
+                split_alert(parsed["plan"]) if isinstance(parsed["plan"], dict) else (None, False)
+            )
             outputs.append(
                 AgentOutput(
                     id=row.id,
                     utterance=utterance,
-                    plan=parsed["plan"],
+                    plan=plan,
+                    alert=alert,
+                    known_dir=known_dir,
+                    folder_dir=work_dir if row.is_folder_row else None,
+                    # The row's original (a folder row's folder), as the Python lane gives it:
+                    # `no_larger_than` and the like find it when the result is elsewhere.
+                    fixture_path=(
+                        fixture_dir / row.fixture
+                        if row.fixture and (fixture_dir / row.fixture).exists()
+                        else None
+                    ),
+                    batch_failures=parsed.get("batch_failures"),
                     artifact=parsed["commands"][-1] if parsed["commands"] else None,
                     outcome=parsed["outcome"],
                     latency_ms=latency_ms,

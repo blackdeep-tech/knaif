@@ -23,10 +23,24 @@ ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = ROOT.parent
 
 from knaif import CommandAgent  # noqa: E402
+from knaif.orchestrator import with_no_think  # noqa: E402
 from knaif.registry import retrieve_tools  # noqa: E402
 
 SKILLS = ["ffmpeg", "documents"]
 OUT = ROOT / "training" / "union_chat.jsonl"
+
+
+def chat_row(skill: str, system_msg: str, user_msg: str, plan: dict) -> dict:
+    """One training row: the system turn exactly as served (with `/no_think`, which inference
+    appends while thinking is off), the user turn, and the plan as the assistant's answer."""
+    return {
+        "skill": skill,
+        "messages": [
+            {"role": "system", "content": with_no_think(system_msg)},
+            {"role": "user", "content": user_msg},
+            {"role": "assistant", "content": json.dumps(plan, ensure_ascii=False)},
+        ],
+    }
 
 
 def parse_weight_map(spec: str) -> dict[str, int]:
@@ -138,14 +152,7 @@ def main() -> None:
                 # Sanity: the plan must still validate (the train.jsonl is pre-validated,
                 # but re-checking guards against a stale file).
                 agent.validate_plan(plan)
-                row = {
-                    "skill": skill,
-                    "messages": [
-                        {"role": "system", "content": system_msg},
-                        {"role": "user", "content": user_msg},
-                        {"role": "assistant", "content": json.dumps(plan, ensure_ascii=False)},
-                    ],
-                }
+                row = chat_row(skill, system_msg, user_msg, plan)
                 reps = repetition_count(skill, tags, skill_weights, tag_weights)
                 rows.extend(row for _ in range(reps))
                 n += 1
@@ -163,9 +170,31 @@ def main() -> None:
                 print(f"  extra {path}: {file_n} source rows -> {file_expanded} expanded rows")
         print(f"{skill}: {n} source rows -> {expanded} expanded rows")
 
+    # The prompt every row carries is the served one, and it has a generation: refuse to build on
+    # a prompt that changed without a bump (FINE_TUNING.md §4.11), and record the generation
+    # beside the dataset so the model's `trained_for` has a source.
+    from knaif.prompt_generation import declared, fingerprint
+
+    generation = declared()
+    now = fingerprint(skills)
+    if now != generation.fingerprint and set(skills) == set(SKILLS):
+        raise SystemExit(
+            f"the served prompt does not match prompt generation {generation.generation}: run "
+            "python/core/tests/test_prompt_generation.py for what to bump before building"
+        )
     out_path.write_text(
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8"
     )
+    meta = out_path.with_name(out_path.stem + ".meta.json")
+    meta.write_text(
+        json.dumps(
+            {"prompt_generation": generation.generation, "fingerprint": now, "skills": skills},
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    print(f"prompt generation {generation.generation} -> {meta}")
     print("\nsummary by skill:")
     for skill in skills:
         print(f"  {skill}: {source_by_skill[skill]} source -> {expanded_by_skill[skill]} expanded")

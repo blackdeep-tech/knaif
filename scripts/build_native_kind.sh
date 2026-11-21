@@ -47,7 +47,7 @@ echo "building '$KIND' into target/$PROFILE/"
 
 # PDFium beside the exe, as the packaged artifact has it, so a dev build does OCR with the library
 # users get and no $KNAIF_PDFIUM_PATH. Staged BEFORE the build because every branch below ends in
-# `exec cargo`; it needs nothing from the build. Every functional kind builds with `pdfium`.
+# a cargo build; it needs nothing from the build. Every functional kind builds with `pdfium`.
 if [ "$KIND" != base ]; then
   case "$OS-$(uname -m)" in
     windows-x86_64) PDFIUM_PLATFORM=win-x64 ;;
@@ -107,6 +107,46 @@ fi
 cargo_args=(build --profile "$PROFILE" -p knaif-cli)
 [ -n "$FEATS" ] && cargo_args+=(--features "$FEATS")
 
+# llama-cpp-sys-2's build.rs links its core libs (llama, ggml, ...) beside the exe only when that
+# name is ABSENT, so after a llama.cpp bump the new exe runs against the previous version's libs
+# (the 1.4.0 refresh found 0.1.160 binaries beside 0.1.150 DLLs). Ask cargo which out dir this
+# build used — its JSON messages name it even for a cached build script, unlike any mtime — and
+# replace every staged lib that differs from that dir's copy. package.sh copies from the out dir
+# itself, so artifacts never had the problem; running target/<profile>/knaif directly did.
+tmpdir="$(mktemp -d)" || exit 1
+trap 'rm -rf "$tmpdir"' EXIT
+[ -n "$FEATS" ] && cargo_args+=(--message-format=json-render-diagnostics)
+
+restage_core_libs() {
+  local out src dst n=0
+  out="$(grep '"reason":"build-script-executed"' "$tmpdir/cargo.json" |
+    grep '"package_id":"[^"]*llama-cpp-sys-2' |
+    sed -nE 's/.*"out_dir":"([^"]+)".*/\1/p' | tail -1 | sed 's/\\\\/\\/g')"
+  [ -n "$out" ] && [ "$OS" = windows ] && out="$(cygpath -u "$out")"
+  if [ -z "$out" ] || [ ! -d "$out" ]; then
+    echo "  staged libs: cargo named no llama-cpp-sys-2 out dir; left as they are"
+    return 0
+  fi
+  for src in "$out"/bin/* "$out"/lib/*; do
+    [ -f "$src" ] && [ ! -L "$src" ] || continue
+    dst="target/$PROFILE/$(basename "$src")"
+    [ -f "$dst" ] && [ ! -L "$dst" ] || continue
+    cmp -s "$src" "$dst" && continue
+    rm -f "$dst" && cp -p "$src" "$dst"
+    n=$((n + 1))
+  done
+  echo "  staged libs: $n replaced from ${out#"$ROOT"/}"
+}
+
+# A llama kind's build: JSON messages to a file (diagnostics still render on the terminal), then
+# the staged libs. `base` links no llama.cpp, so it is plain cargo.
+run_cargo() {
+  [ -n "$FEATS" ] || exec cargo "${cargo_args[@]}"
+  cargo "${cargo_args[@]}" > "$tmpdir/cargo.json"
+  restage_core_libs
+  exit 0
+}
+
 if [ "$OS" != windows ]; then
   : "${CMAKE_GENERATOR:=Ninja}"
   export CMAKE_GENERATOR
@@ -121,7 +161,7 @@ if [ "$OS" != windows ]; then
     done <<< "$hygiene"
     echo "  path hygiene: cargo home and checkout remapped (Rust, C/C++)"
   fi
-  exec cargo "${cargo_args[@]}"
+  run_cargo
 fi
 
 # ---------------------------------------------------------------- Windows
@@ -143,12 +183,12 @@ echo "  path hygiene: cargo home and checkout remapped (Rust, C/C++, CUDA)"
 # Only the llama kinds compile C++ and therefore need MSVC and cmake. A `base` build is pure Rust,
 # and rustc locates the MSVC linker by itself, so there is nothing to enter for.
 if [ -z "$FEATS" ]; then
-  exec cargo "${cargo_args[@]}"
+  run_cargo
 fi
 
 if command -v cl.exe >/dev/null 2>&1; then
   echo "  MSVC: already on PATH"
-  exec cargo "${cargo_args[@]}"
+  run_cargo
 fi
 
 # No cl.exe. Find Visual Studio and run the build inside its environment instead of failing with
@@ -187,8 +227,6 @@ echo "  MSVC: not on PATH — entering $vs_name via VsDevCmd.bat"
 # VsDevCmd only sets the environment for the process it runs in, so the build has to happen inside
 # that same cmd invocation. A generated batch file keeps the quoting honest: paths here contain
 # spaces, and cargo's arguments must survive both cmd and the shell that wrote them.
-tmpdir="$(mktemp -d)" || exit 1
-trap 'rm -rf "$tmpdir"' EXIT
 bat="$tmpdir/build.bat"
 
 {
@@ -204,7 +242,9 @@ bat="$tmpdir/build.bat"
   echo "cd /d \"$(cygpath -w "$ROOT")\""
   printf 'cargo'
   printf ' %s' "${cargo_args[@]}"
-  printf '\n'
+  printf ' > "%s"\n' "$(cygpath -w "$tmpdir/cargo.json")"
+  echo "exit /b %ERRORLEVEL%"
 } > "$bat"
 
 cmd //c "$(cygpath -w "$bat")"
+restage_core_libs

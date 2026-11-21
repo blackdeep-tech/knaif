@@ -1,0 +1,6 @@
+163 row(s) in both (163 in a, 1066 in b)
+  162 / 163 same grade
+  163 / 163 same plan
+  163 / 163 same command
+  grade differs: ffmpeg_size_003[0]  a={'outcome': 'plan', 'correct': True, 'score': 1.0}  b={'outcome': 'clarify', 'correct': False, 'score': None}
+  saved to evals\runs\2026-10-29_satisfied-container_success\comparison\4b_ffmpeg.json

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip.mov"], "container": "mp4", "output": "clip.mp4"}}, {"tool": "resize_video", "args": {"inputs": ["clip.mp4"], "height": 360, "keep_aspect_ratio": true, "output": "clip_360p.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["clip_360p.mp4"]}}]}

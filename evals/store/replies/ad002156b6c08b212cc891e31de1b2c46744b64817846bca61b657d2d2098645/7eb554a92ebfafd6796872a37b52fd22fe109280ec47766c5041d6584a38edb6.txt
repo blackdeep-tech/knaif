@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "trim_video", "args": {"input": "4K_clip.mp4", "start": "00:00:00", "end": "00:00:02", "output": "4K_clip_trimmed.mp4"}}, {"tool": "convert_video", "args": {"inputs": ["4K_clip_trimmed.mp4"], "container": "webm"}}]}

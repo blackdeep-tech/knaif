@@ -18,7 +18,10 @@ Available tools:
   - delete_files: Delete files in a folder, optionally filtered by type or pattern.
     args: path (required), file_type (optional), pattern (optional), recursive (optional)
   - move_files: Move or copy files from a source folder into a destination folder, optionally filtered by type or pattern.
-    args: src (required), dst (required), file_type (optional), pattern (optional)Examples:
+    args: src (required), dst (required), file_type (optional), pattern (optional)
+  - alert_when_done: Alert the user (a desktop notification and a beep) when the task has finished.
+    args:
+Examples:
   request: "list text files in reports"
   output:  {"plan": [{"tool": "list_files", "args": {"path": "reports", "file_type": "text"}}]}
 

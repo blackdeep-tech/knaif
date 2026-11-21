@@ -1,0 +1,16 @@
+artifact: knaif-1.4.0-linux-x64.tar.gz
+
+1. MUST PASS at the claimed floor (ubuntu:22.04)
+   ldd (Ubuntu GLIBC 2.35-0ubuntu3.14) 2.35
+   ok  runs at the floor
+
+2. MUST FAIL below it (ubuntu:20.04)
+   ldd (Ubuntu GLIBC 2.31-0ubuntu9.17) 2.31
+   ok  refuses below the floor, for the right reason:
+         version `CXXABI_1.3.13' not found
+         version `GLIBCXX_3.4.29' not found
+         version `GLIBC_2.32' not found
+         version `GLIBC_2.33' not found
+         version `GLIBC_2.34' not found
+
+PASS: floor confirmed in both directions (ubuntu:22.04 runs, ubuntu:20.04 does not)

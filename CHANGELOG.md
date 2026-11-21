@@ -5,6 +5,151 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-11-21
+
+**Links, many files at once, and "beep when done".** Same models as 1.2.0 (`knaif-qwen3-4b-v2`
+and `knaif-qwen3-1.7b-v2`). A request can name a file by its link, cover every file in a folder,
+and end with a desktop notification; a run leaves only the results you asked for.
+
+**Measured on the shipped binary.** Every number below comes from the packaged 1.4.0 binary,
+executing each request for real and graded on the files it produced, on the release subset of each
+corpus: 234 ffmpeg and 103 documents requests per cell (one request per tool, outcome and kind, plus
+every chain, edge-case, safety and hard request), complete coverage, the safety gate run on the
+binary over the whole safety corpus. They are not comparable with 1.3.0's numbers, which covered
+the whole corpus. A cell plans its requests with one model load; 30 requests per skill also run
+live, one process each, and must plan the same. Each cell is held to its Python reference on the
+same requests: no request the reference passed may fail, and outcome and knaif score within 0.02.
+
+| Model | OS · backend | ffmpeg outcome / knaif | documents outcome / knaif | Safety gate | Planned / reused ⁴ | Verdict |
+|---|---|---|---|---|---|---|
+| `knaif-qwen3-4b-v2` | Windows · CUDA | 0.953 / 0.988 | 0.961 / 0.989 | 11/11 · 9/9 | 0 / 337 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | Windows · Vulkan | 0.953 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 0 / 337 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | Windows · CPU | 0.957 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 148 / 189 | accepted, 1 request reviewed ³ |
+| `knaif-qwen3-4b-v2` | Linux · CUDA | 0.953 / 0.988 | 0.961 / 0.989 | 11/11 · 9/9 | 0 / 337 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | Linux · CPU | 0.962 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 337 / 0 | accepted, 1 request reviewed ³ |
+| `knaif-qwen3-4b-v2` | macOS · Metal | 0.953 / 0.988 | 0.961 / 0.989 | 10/11 ⁵ · 9/9 | 337 / 0 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-4b-v2` | macOS · CPU | 0.949 / 0.990 | 0.951 / 0.989 | 10/11 ⁵ · 9/9 | 337 / 0 | accepted, 4 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Windows · CUDA | 0.923 / 0.982 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 3 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Windows · Vulkan | 0.923 / 0.985 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Windows · CPU | 0.923 / 0.976 | 0.913 / 0.992 | 11/11 · 9/9 | 337 / 0 | accepted, 4 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Linux · CUDA | 0.923 / 0.982 | 0.903 / 0.998 | 11/11 · 9/9 | 103 / 234 | accepted, 3 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | Linux · CPU | 0.893 / 0.984 | 0.903 / 0.998 | 11/11 · 9/9 | 337 / 0 | accepted, 8 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | macOS · Metal | 0.923 / 0.985 | 0.903 / 0.998 | 11/11 · 9/9 | 337 / 0 | accepted, 2 requests reviewed ³ |
+| `knaif-qwen3-1.7b-v2` | macOS · CPU | 0.910 / 0.985 | 0.913 / 0.992 | 11/11 · 9/9 | 103 / 234 | accepted, 4 requests reviewed ³ |
+
+Measured 2026-11-02/04 on an RTX 5080 (Windows 11, and Ubuntu 24.04 under WSL2) and 2026-11-18/19
+on an Apple M1 Pro (macOS 27.2). The native and Python runtimes agree wherever both planned the same
+thing, on the release subset: 0 port bugs, and on Windows CUDA 2.8% ffmpeg plan disagreement (both
+models) and 1.9% (4B) and 2.9% (1.7B) documents, every difference reviewed; on macOS Metal 0.5%
+ffmpeg (4B) and none otherwise. Plans through the daemon are byte-identical to plans made without
+it, on Windows, Linux and macOS. The installers were checked in clean machines: in Windows Sandbox
+from the published 1.3.0 installer up (the upgrade, reinstall and uninstall over a running daemon,
+a fresh install with real requests), on macOS 12 VMs with no developer tools (the quarantined zip,
+the package with the network off, the upgrade from 1.3.0 and the uninstaller, and Metal from a fresh
+account on a Mac), and the Linux builds on the oldest Ubuntu they support. The bundled PDFium loads
+and rasterizes on Windows and on macOS 12.
+³ Accepted after review: on these requests the binary's result differs from the Python
+reference's, and each was reviewed with both plans and commands. In every ffmpeg cell, "compress
+clip.mp4 to crf18" comes out bigger, so knaif keeps the original, as 1.4.0 means it to; the
+reference grades the bigger file as delivered. The rest are the model's choices, not the port's:
+the 4B puts `mkv` in the wrong place in "convert and make it smaller" and asks; the 1.7B crops
+where the reference letterboxed, writes a malformed plan that both runtimes refuse before anything
+runs, leaves out one of two requested results, and for "upload sample.pdf to <link>" names a tool
+that does not exist, so knaif stops before anything runs. On the Linux CPU the 1.7B also leaves
+out "beep when done" once, gives one tool an argument it does not take (knaif asks), and asks to
+confirm a trim-and-join; its ffmpeg outcome is 0.893 against a 0.8945 floor. On the macOS CPU the
+1.7B does the first two of those as well, and the 4B asks instead of planning twice (compress and
+prepare for a platform; inspect a PDF by its link) and answers "beep" with a malformed plan that
+both runtimes refuse before anything runs.
+⁴ Requests whose plan this cell made, and requests whose plan was replayed from a reply recorded
+earlier by a 1.4.0 candidate binary with the same model, prompt and settings: on Windows GPUs the
+first release candidate's (it differs only in `extract_text`'s result line), on Linux CUDA an
+earlier pass of this run that was graded wrongly and run again, on the Windows 4B CPU the replies
+made before a pause, on the macOS 1.7B CPU the replies made before the disk filled up. Every
+request still executed on the shipped binary, and the live requests planned the same in every
+cell. The 1.7B documents cells planned every request live: one of their live requests ("upload
+sample.pdf to <link>", the request in ³) made no plan, so they ran in full.
+⁵ One request asks for the original file to be overwritten; with Vulkan, Metal and on the CPU the
+4B asks a question instead of refusing. Nothing runs, and knaif never writes over an input: an
+output that would is renamed.
+
+### Added
+
+- **Name a file by its http(s) link.** knaif downloads it and works on it like a local file. It
+  asks first (`--allow download` or `--yes` approves it up front), never downloads in a
+  `--dry-run`, and refuses other schemes, links that carry a password, web pages and oversized
+  responses.
+- **One request over many files.** "Every video here" or a pattern such as `*.mov` runs the steps
+  once per file and ends with a batch report; one file can give several results, and a later step
+  works on every file an earlier step produced.
+- **"Beep when done."** A request that asks to be told when it finishes ends with a desktop
+  notification and a beep (a beep alone where notifications are unavailable), once work has
+  started, whether it succeeded, failed or was stopped at a question. It is understood in English,
+  German, Spanish, French, Bulgarian, Russian and Chinese.
+- **Save results into your real Downloads, Desktop, Documents, Pictures, Music or Videos folder**
+  by naming it in the request.
+- **Split a video into pieces** (every N seconds, or N equal parts), **save many stills from a
+  video** (every N seconds, every Nth frame, or N spread evenly), and **split a PDF every N pages**.
+- **`--stdout`** prints a text result (`extract_text`) alone on stdout for a pipe, and saves
+  nothing. **`--keep-intermediates`**, or asking for it in the request, keeps every step's output
+  in your folder.
+- **"Make it smaller" says what it saved**: "N% smaller (A → B)", for videos and PDFs.
+
+### Changed
+
+- **`--allow` replaces `--overwrite`.** `--allow download,overwrite,model` approves those
+  questions up front (a comma list or a repeated flag), and **`--yes` now approves all of them**,
+  including replacing an existing file, which in 1.3.0 always asked. Without either, each one asks
+  (Enter is no), and without a terminal the run stops and names the permission it needs.
+- **A run leaves only the results you asked for.** The files a chain makes along the way stay in
+  a scratch folder, and each result is written and checked there before it moves into your folder,
+  so a step that fails leaves nothing half-written.
+- **"Convert every video to mp4" skips the ones that already are**, and says which, instead of
+  making a numbered copy of each.
+- **"Make it smaller" no longer hands back a bigger file.** The audio is no longer re-encoded above
+  the source's own bitrate, and a result that is not smaller is not written: knaif says it left the
+  file as it was. When the request also asks for another format, you get the converted file, and
+  knaif says it is not smaller. A size the request never states is no longer assumed.
+- **A converted file keeps its own name** (`clip.mkv`, not `clip_converted.mkv`); a name already
+  taken gets a number, and a name you give an output is never read as an input.
+- **A request that names a count asks which files** when the folder has more ("merge the two
+  videos" among five), and a pattern that matches nothing asks instead of running.
+- **A folder or pattern in the plan is shown as the files it found.** The Python CLI uses the
+  native CLI's plain and tree views and its flags, so both read the same.
+- **Tool lookup understands more word forms**: plurals, other inflections, hyphenated words and
+  trailing punctuation.
+- llama.cpp is updated to a 2026-10-05 build.
+- **For skill authors:** every tool declares its `effects:` (`fs.read`, `fs.write`, `net`,
+  `exec:<program>` or `[]`), and a bundle with an undeclared one does not load; each `tools.yaml`
+  entry matches exactly one class by name; shared tools come from `toolkits/` (`fs`, `net`).
+  See `docs/TOOL_SCHEMA.md`.
+
+### Fixed
+
+- **"Convert clip.mov to mp4 and make it smaller"** plans one compress to mp4 instead of answering
+  that it isn't supported.
+- **Removing the audio or changing the volume of a video saved as `.webm`** no longer fails on an
+  h264 source: the video is re-encoded for the WebM container instead of copied.
+- **"The last frame"** is now exactly the final frame; it was about three frames early, and could
+  be further off on a variable frame rate.
+- **Previewing a chain that rotates, reorders, removes or splits the pages of a PDF an earlier
+  step creates** no longer fails with "No such file".
+- "Except" in a request leaves that kind of file out of every step, trims from the end ("the last
+  3 seconds") cut the end, and `extract_text` saves its text as `<name>.txt`.
+- On Windows, the Python CLI with its input redirected from `NUL` no longer waits on a question
+  nobody can answer.
+
+### Known issues
+
+- **`knaif-qwen3-1.7b-v2` often leaves out the "notify me when done" part** of a request; the 4B
+  model usually keeps it. Neither shipped model was trained on the new features.
+- With Smart App Control on, the ffmpeg skill cannot run on Windows: Windows blocks FFmpeg.
+- **On a Mac, the first run takes about 15 s longer** while Metal compiles its shaders; later runs
+  do not pay it again.
+- **The macOS `.pkg` keeps no receipt for the `PATH` link, the model or the tool choices**, so
+  `pkgutil` does not list them. `/usr/local/knaif/uninstall.sh` still removes knaif and its link;
+  the model stays in `~/.knaif`.
+
 ## [1.3.0] — 2026-10-10
 
 **knaif on macOS, and an optional model daemon.** Same models as 1.2.0 (`knaif-qwen3-4b-v2`

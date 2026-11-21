@@ -13,7 +13,7 @@ import pytest
 from knaif.agent import CommandAgent
 from knaif.skill import Skill
 from knaif.skill_base import Skill as SkillBase
-from knaif.tool import Step
+from knaif.tool import Handler
 
 IO_SKILL_DIR = Path(__file__).parents[2]
 
@@ -44,7 +44,7 @@ def test_io_skill_tool_map_values_are_steps():
     skill = Skill.load(IO_SKILL_DIR)
     assert skill.tool_map is not None
     for name, tool in skill.tool_map.items():
-        assert isinstance(tool, Step), f"tool_map[{name!r}] is not a Step"
+        assert isinstance(tool, Handler), f"tool_map[{name!r}] is not a Step"
 
 
 def test_io_skill_instance_is_skill_base():

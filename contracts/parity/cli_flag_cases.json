@@ -1,0 +1,280 @@
+{
+  "_comment": "One set of flags for both CLIs (owner, 2026-10-23). Every question a run can ask is approved up front by `--allow <what>`, a comma list or a repeated flag: `download` (a URL input), `overwrite` (replace an existing file), `model` (download the recommended model); `all` is every permission, now and later, and `--yes` / `-y` is `--allow all`. An unknown name is an error listing the valid ones. `--confirm` asks `Proceed?` before each step unless everything is allowed (`--confirm --yes` is `--yes`, as before). The old `--allow-download` and `--overwrite` are removed, not aliased. Each case is the argv after `run`; `allow` is what it approves, `asks_proceed` whether each step asks, `error` a text the CLI's usage error must contain, `stdout` (when given) whether `--stdout` is on: the result's text alone goes to stdout, the view to stderr, nothing is saved (owner, 2026-10-23). Python python/core/tests/test_cli_flag_parity.py (knaif.app's `run`), Rust apps/cli/src/main.rs `cli_flag_cases` (knaif's `run`).",
+  "cases": [
+    {
+      "name": "no flag approves nothing",
+      "argv": [
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": false,
+        "model": false
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "one permission",
+      "argv": [
+        "--allow",
+        "download",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": false,
+        "model": false
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "a comma list",
+      "argv": [
+        "--allow",
+        "download,overwrite",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": true,
+        "model": false
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "a repeated flag adds up",
+      "argv": [
+        "--allow",
+        "overwrite",
+        "--allow",
+        "model",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": true,
+        "model": true
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "the = form",
+      "argv": [
+        "--allow=model",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": false,
+        "model": true
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "names ignore case and spaces",
+      "argv": [
+        "--allow",
+        "Download, OVERWRITE",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": true,
+        "model": false
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "all is every permission",
+      "argv": [
+        "--allow",
+        "all",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": true,
+        "model": true
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "--yes is --allow all",
+      "argv": [
+        "--yes",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": true,
+        "model": true
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "-y is --yes",
+      "argv": [
+        "-y",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": true,
+        "model": true
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "flags after the skill count too",
+      "argv": [
+        "ffmpeg",
+        "--allow",
+        "overwrite",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": true,
+        "model": false
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "--confirm asks before each step",
+      "argv": [
+        "--confirm",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": false,
+        "model": false
+      },
+      "asks_proceed": true
+    },
+    {
+      "name": "--confirm still asks with some permissions",
+      "argv": [
+        "--confirm",
+        "--allow",
+        "overwrite",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": true,
+        "model": false
+      },
+      "asks_proceed": true
+    },
+    {
+      "name": "--confirm --yes is --yes",
+      "argv": [
+        "--confirm",
+        "--yes",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": true,
+        "model": true
+      },
+      "asks_proceed": false
+    },
+    {
+      "name": "an unknown permission is an error naming the valid ones",
+      "argv": [
+        "--allow",
+        "delete",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "error": "unknown permission 'delete': use download, overwrite, model or all"
+    },
+    {
+      "name": "an unknown permission in a list is an error too",
+      "argv": [
+        "--allow",
+        "download,network",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "error": "unknown permission 'network': use download, overwrite, model or all"
+    },
+    {
+      "name": "--allow-download is removed",
+      "argv": [
+        "--allow-download",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "error": "--allow-download"
+    },
+    {
+      "name": "--overwrite is removed",
+      "argv": [
+        "--overwrite",
+        "ffmpeg",
+        "compress clip.mp4"
+      ],
+      "error": "--overwrite"
+    },
+    {
+      "name": "--stdout is off by default",
+      "argv": [
+        "documents",
+        "extract the text of a.pdf"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": false,
+        "model": false
+      },
+      "asks_proceed": false,
+      "stdout": false
+    },
+    {
+      "name": "--stdout turns it on",
+      "argv": [
+        "--stdout",
+        "documents",
+        "extract the text of a.pdf"
+      ],
+      "allow": {
+        "download": false,
+        "overwrite": false,
+        "model": false
+      },
+      "asks_proceed": false,
+      "stdout": true
+    },
+    {
+      "name": "--stdout is no permission",
+      "argv": [
+        "--stdout",
+        "--yes",
+        "documents",
+        "extract the text of a.pdf"
+      ],
+      "allow": {
+        "download": true,
+        "overwrite": true,
+        "model": true
+      },
+      "asks_proceed": false,
+      "stdout": true
+    }
+  ]
+}

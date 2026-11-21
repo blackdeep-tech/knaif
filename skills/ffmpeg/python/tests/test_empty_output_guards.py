@@ -61,9 +61,18 @@ def _probe(name: str, duration: float) -> dict:
 class _Ctx:
     sandbox = None
     skip_execution = False
+    work_dir = None
 
     def __init__(self, *, dry_run: bool) -> None:
         self.dry_run = dry_run
+
+    def call_tool(self, name: str, args: dict) -> dict:
+        assert name == "ensure_parent", name  # the only fs tool a scratch-less write needs
+        Path(args["path"]).parent.mkdir(parents=True, exist_ok=True)
+        return {"path": args["path"]}
+
+    def exec(self, program: str, argv: list[str], **kwargs):  # an unrestricted HandlerContext
+        return subprocess.run(argv, **kwargs)
 
 
 def _build(steps_mod, probe: dict, *, dry_run: bool = False, **trim) -> dict:
@@ -120,9 +129,11 @@ def test_an_unknown_duration_is_not_a_reason_to_refuse(steps_mod):
 def _run_batch(steps_mod, monkeypatch, tmp_path: Path, *, streams: list) -> dict:
     out = tmp_path / "Test2_intermediate.mov"
     out.write_bytes(b"\0" * 185)
-    monkeypatch.setattr(steps_mod._deps, "run_ffmpeg", lambda _cmd: {"returncode": 0, "stderr": ""})
     monkeypatch.setattr(
-        steps_mod._deps, "run_ffprobe", lambda _p: {"streams": streams, "format": {}}
+        steps_mod._deps, "run_ffmpeg", lambda _cmd, *_: {"returncode": 0, "stderr": ""}
+    )
+    monkeypatch.setattr(
+        steps_mod._deps, "run_ffprobe", lambda _p, *_: {"streams": streams, "format": {}}
     )
     return steps_mod.RunBatchStep().handle(
         {"commands": [{"input": "in.mov", "output": str(out), "command": ["ffmpeg"]}]},

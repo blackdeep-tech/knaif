@@ -1,0 +1,2200 @@
+{
+  "_comment": "Core runs a chain once per file. The model writes the steps as for one file with the batch glob as the first step's input (the per-file rule, owner 2026-10-14); core repeats them for every file the glob matched. A later step is in the chain when it reads a chain step's output: by its name (the per-file form) or by its pattern (`rotated/*.mkv`); core accepts both links. A joining tool reading a chain output reads every file's, in input order (fan-in). Names (owner, 2026-10-15): the input's name with the extension the step writes, next to the input; a pattern's * is the input's name, in the pattern's folder when it has one. On a clash with a batch input or an earlier output of the lift, the model's label is added (`dog_trimmed.mp4`), then a counter. `expand` is what the caller found for each glob, in input order. Order: each file goes through the whole chain before the next (per file; won the run-order A/B against step by step, 2026-10-20). Python `knaif.batch_chain.lift_per_file_chain`, Rust `knaif_core::batch_chain`. Each case's `lift` records which file every lifted step works on (`file_of`, an index into `files`, null outside the chain), each file as reports show it (`shown`), and where every entry of a join came from (`join_files`, by the join's index in the lifted plan); `home` and `single` are lift_batch's options.",
+  "joining_tools": [
+    "concat_video",
+    "merge_pdfs"
+  ],
+  "_batch_outputs": "Tools that write their result to a file only when core repeats them over many files (tools.yaml `batch_output:`, owner 2026-10-20): a lifted step of one with no output of its own gets the batch file's name with this extension, next to it. A single-file step is not lifted and keeps printing.",
+  "batch_outputs": {
+    "extract_text": "txt"
+  },
+  "cases": [
+    {
+      "name": "a_name_link_runs_the_chain_once_per_file",
+      "_note": "The model's label (clip) never reaches a file name: input name + the new extension.",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "audio_format": "mp3"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ],
+            "audio_format": "mp3"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "city.mov"
+            ],
+            "container": "mp4",
+            "output": "city.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "city.mp4"
+            ],
+            "audio_format": "mp3"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_pattern_link_with_a_folder_keeps_the_folder",
+      "expand": {
+        "*.mkv": [
+          "beach.mkv",
+          "garden.mkv"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "rotate_video",
+          "args": {
+            "inputs": [
+              "*.mkv"
+            ],
+            "angle": 90,
+            "output": "rotated/*.mkv"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "rotated/*.mkv"
+            ],
+            "height": 1080
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "rotate_video",
+          "args": {
+            "inputs": [
+              "beach.mkv"
+            ],
+            "angle": 90,
+            "output": "rotated/beach.mkv"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "rotated/beach.mkv"
+            ],
+            "height": 1080
+          }
+        },
+        {
+          "tool": "rotate_video",
+          "args": {
+            "inputs": [
+              "garden.mkv"
+            ],
+            "angle": 90,
+            "output": "rotated/garden.mkv"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "rotated/garden.mkv"
+            ],
+            "height": 1080
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mkv",
+          "garden.mkv"
+        ],
+        "shown": [
+          "beach.mkv",
+          "garden.mkv"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_pattern_link_without_a_folder_goes_next_to_each_input",
+      "expand": {
+        "videos/*.mp4": [
+          "videos/dog.mp4",
+          "videos/party.mp4"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "adjust_speed",
+          "args": {
+            "inputs": [
+              "videos/*.mp4"
+            ],
+            "speed": 2.0,
+            "output": "*_fast.mp4"
+          }
+        },
+        {
+          "tool": "strip_audio",
+          "args": {
+            "inputs": [
+              "*_fast.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "adjust_speed",
+          "args": {
+            "inputs": [
+              "videos/dog.mp4"
+            ],
+            "speed": 2.0,
+            "output": "videos/dog_fast.mp4"
+          }
+        },
+        {
+          "tool": "strip_audio",
+          "args": {
+            "inputs": [
+              "videos/dog_fast.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "adjust_speed",
+          "args": {
+            "inputs": [
+              "videos/party.mp4"
+            ],
+            "speed": 2.0,
+            "output": "videos/party_fast.mp4"
+          }
+        },
+        {
+          "tool": "strip_audio",
+          "args": {
+            "inputs": [
+              "videos/party_fast.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "videos/dog.mp4",
+          "videos/party.mp4"
+        ],
+        "shown": [
+          "videos/dog.mp4",
+          "videos/party.mp4"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_name_that_is_the_input_takes_the_models_label",
+      "expand": {
+        "*.mp4": [
+          "dog.mp4",
+          "party.mp4"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "*.mp4",
+            "end": "00:00:05",
+            "output": "trimmed.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "trimmed.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "dog.mp4",
+            "end": "00:00:05",
+            "output": "dog_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "dog_trimmed.mp4"
+            ],
+            "container": "gif",
+            "output": "dog.gif"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "party.mp4",
+            "end": "00:00:05",
+            "output": "party_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "party_trimmed.mp4"
+            ],
+            "container": "gif",
+            "output": "party.gif"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "dog.mp4",
+          "party.mp4"
+        ],
+        "shown": [
+          "dog.mp4",
+          "party.mp4"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_name_an_earlier_step_took_takes_the_label",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ],
+            "output": "beach_small.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "city.mov"
+            ],
+            "container": "mp4",
+            "output": "city.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "city.mp4"
+            ],
+            "output": "city_small.mp4"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "two_inputs_with_one_stem_never_share_an_output",
+      "_note": "beach.mp4 is an input of the batch, so neither conversion may take that name.",
+      "expand": {
+        "*": [
+          "beach.mov",
+          "beach.mp4"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach_clip.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "beach_clip.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ],
+            "container": "mp4",
+            "output": "beach_clip_2.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "beach_clip_2.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "beach.mp4"
+        ],
+        "shown": [
+          "beach.mov",
+          "beach.mp4"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_join_reads_every_files_result_in_input_order",
+      "expand": {
+        "*.mp4": [
+          "dog.mp4",
+          "party.mp4"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "*.mp4",
+            "end": "00:00:02",
+            "output": "part.mp4"
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "part.mp4"
+            ],
+            "output": "all.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "dog.mp4",
+            "end": "00:00:02",
+            "output": "dog_part.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "party.mp4",
+            "end": "00:00:02",
+            "output": "party_part.mp4"
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "dog_part.mp4",
+              "party_part.mp4"
+            ],
+            "output": "all.mp4"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "dog.mp4",
+          "party.mp4"
+        ],
+        "shown": [
+          "dog.mp4",
+          "party.mp4"
+        ],
+        "file_of": [
+          0,
+          1,
+          null
+        ],
+        "join_files": {
+          "2": {
+            "inputs": [
+              0,
+              1
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "documents_runs_the_steps_once_per_pdf",
+      "expand": {
+        "*.pdf": [
+          "contract.pdf",
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "rotate_pages",
+          "args": {
+            "input": "*.pdf",
+            "degrees": 90,
+            "output": "rotated.pdf"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "rotated.pdf",
+            "text": "CONFIDENTIAL"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "rotate_pages",
+          "args": {
+            "input": "contract.pdf",
+            "degrees": 90,
+            "output": "contract_rotated.pdf"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "contract_rotated.pdf",
+            "text": "CONFIDENTIAL"
+          }
+        },
+        {
+          "tool": "rotate_pages",
+          "args": {
+            "input": "invoice.pdf",
+            "degrees": 90,
+            "output": "invoice_rotated.pdf"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "invoice_rotated.pdf",
+            "text": "CONFIDENTIAL"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "shown": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_merge_reads_every_pdf_in_input_order",
+      "expand": {
+        "*.pdf": [
+          "contract.pdf",
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "*.pdf",
+            "output": "small.pdf"
+          }
+        },
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": "small.pdf",
+            "output": "all.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "contract.pdf",
+            "output": "contract_small.pdf"
+          }
+        },
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "invoice.pdf",
+            "output": "invoice_small.pdf"
+          }
+        },
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": [
+              "contract_small.pdf",
+              "invoice_small.pdf"
+            ],
+            "output": "all.pdf"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "shown": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          1,
+          null
+        ],
+        "join_files": {
+          "2": {
+            "inputs": [
+              0,
+              1
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "a_single_batch_step_is_left_to_the_skill",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [],
+        "shown": [],
+        "file_of": [],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_lone_step_on_one_input_runs_once_per_file",
+      "_note": "A tool that reads one `input` cannot expand a glob, so core repeats it even when nothing reads it (\"add page numbers to every pdf here\"). A glob in `inputs` stays the skill's own batch (a_single_batch_step_is_left_to_the_skill).",
+      "expand": {
+        "*.pdf": [
+          "contract.pdf",
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "*.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "contract.pdf"
+          }
+        },
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "invoice.pdf"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "shown": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_lone_step_on_one_input_names_each_files_output",
+      "expand": {
+        "*.pdf": [
+          "contract.pdf",
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "*.pdf",
+            "text": "DRAFT",
+            "output": "stamped.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "contract.pdf",
+            "text": "DRAFT",
+            "output": "contract_stamped.pdf"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "invoice.pdf",
+            "text": "DRAFT",
+            "output": "invoice_stamped.pdf"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "shown": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_lone_video_step_on_one_input_runs_once_per_file",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "*.mov",
+            "start": 0,
+            "end": 5
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "beach.mov",
+            "start": 0,
+            "end": 5
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "city.mov",
+            "start": 0,
+            "end": 5
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          0,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_list_of_globs_on_one_input_runs_once_per_file",
+      "_note": "A one-path input given several globs (\"every clip\" as *.mp4 and *.mov) is one batch; each lifted step gets one file in `input` (owner, 2026-10-21).",
+      "expand": {
+        "*.mp4": [
+          "concert.mp4"
+        ],
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": [
+              "*.mp4",
+              "*.mov"
+            ],
+            "output": "thumb_*.jpg"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "concert.mp4",
+            "output": "thumb_concert.jpg"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "beach.mov",
+            "output": "thumb_beach.jpg"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "city.mov",
+            "output": "thumb_city.jpg"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "concert.mp4",
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "concert.mp4",
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          0,
+          1,
+          2
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_list_of_globs_on_one_input_heads_a_chain",
+      "expand": {
+        "*.mp4": [
+          "concert.mp4"
+        ],
+        "*.mov": [
+          "beach.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": [
+              "*.mp4",
+              "*.mov"
+            ],
+            "end": "00:00:05",
+            "output": "clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip_trimmed.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "concert.mp4",
+            "end": "00:00:05",
+            "output": "concert_clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "concert_clip_trimmed.mp4"
+            ],
+            "container": "gif"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "beach.mov",
+            "end": "00:00:05",
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "concert.mp4",
+          "beach.mov"
+        ],
+        "shown": [
+          "concert.mp4",
+          "beach.mov"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_batch_step_nothing_reads_is_left_alone",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "output": "small.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "poster.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "output": "small.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "poster.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [],
+        "shown": [],
+        "file_of": [],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_glob_without_files_is_left_alone",
+      "_note": "No files were found for *.webm: the executor reports it as today.",
+      "expand": {},
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.webm"
+            ],
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.webm"
+            ],
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [],
+        "shown": [],
+        "file_of": [],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "steps_outside_the_chain_keep_their_places",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "poster.mp4"
+            ],
+            "output": "poster.jpg"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "done",
+          "args": {
+            "summary": "ok"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "poster.mp4"
+            ],
+            "output": "poster.jpg"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "city.mov"
+            ],
+            "container": "mp4",
+            "output": "city.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "city.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "done",
+          "args": {
+            "summary": "ok"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          null,
+          0,
+          0,
+          1,
+          1,
+          null
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_three_step_chain_links_every_step",
+      "expand": {
+        "*.mov": [
+          "beach.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "small.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ],
+            "output": "beach_small.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "beach_small.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov"
+        ],
+        "shown": [
+          "beach.mov"
+        ],
+        "file_of": [
+          0,
+          0,
+          0
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "several_readers_of_one_file_all_run_per_file",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "city.mov"
+            ],
+            "container": "mp4",
+            "output": "city.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "city.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "city.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "two_steps_on_the_batch_both_run_per_file",
+      "_note": "\"a thumbnail and a short gif of every video\": the model gives each result its own step on the batch glob. Every step reading the head's files is part of each file's chain (the gif step reads its own trim's output).",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "*.mov"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "*.mov",
+            "start": 0,
+            "end": 5,
+            "output": "short.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "short.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "beach.mov"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "beach.mov",
+            "start": 0,
+            "end": 5,
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ],
+            "container": "gif"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "city.mov"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "city.mov",
+            "start": 0,
+            "end": 5,
+            "output": "city.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "city.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_step_on_another_glob_is_not_part_of_the_batch",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "*.mp4": [
+          "dog.mp4"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "*.mov"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "beach.mov"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "input": "city.mov"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "file_of": [
+          0,
+          1,
+          null
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "several_globs_in_the_first_step_are_one_batch",
+      "expand": {
+        "*.mov": [
+          "beach.mov",
+          "city.mov"
+        ],
+        "*.mkv": [
+          "garden.mkv"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov",
+              "*.mkv",
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "beach.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "city.mov"
+            ],
+            "container": "mp4",
+            "output": "city.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "city.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "garden.mkv"
+            ],
+            "container": "mp4",
+            "output": "garden.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "garden.mp4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov",
+          "city.mov",
+          "garden.mkv"
+        ],
+        "shown": [
+          "beach.mov",
+          "city.mov",
+          "garden.mkv"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1,
+          2,
+          2
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_reference_spelled_with_dot_slash_or_case_still_links",
+      "_note": "The extension keeps the spelling the model gave it.",
+      "expand": {
+        "*.mov": [
+          "beach.mov"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4",
+            "output": "Clip.MP4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "./clip.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "beach.mov"
+            ],
+            "container": "mp4",
+            "output": "beach.MP4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "beach.MP4"
+            ]
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "beach.mov"
+        ],
+        "shown": [
+          "beach.mov"
+        ],
+        "file_of": [
+          0,
+          0
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "an_output_without_an_extension_keeps_the_inputs",
+      "expand": {
+        "*.pdf": [
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "rotate_pages",
+          "args": {
+            "input": "*.pdf",
+            "degrees": 90,
+            "output": "rotated"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "rotated",
+            "text": "DRAFT"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "rotate_pages",
+          "args": {
+            "input": "invoice.pdf",
+            "degrees": 90,
+            "output": "invoice_rotated.pdf"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "invoice_rotated.pdf",
+            "text": "DRAFT"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "invoice.pdf"
+        ],
+        "shown": [
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          0
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_lone_text_step_saves_each_files_text",
+      "expand": {
+        "*.pdf": [
+          "contract.pdf",
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "*.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "contract.pdf",
+            "output": "contract.txt"
+          }
+        },
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "invoice.pdf",
+            "output": "invoice.txt"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "shown": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_text_step_in_a_chain_is_named_after_the_batch_file",
+      "expand": {
+        "*.pdf": [
+          "contract.pdf",
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "*.pdf",
+            "output": "small.pdf"
+          }
+        },
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "small.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "contract.pdf",
+            "output": "contract_small.pdf"
+          }
+        },
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "contract_small.pdf",
+            "output": "contract.txt"
+          }
+        },
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "invoice.pdf",
+            "output": "invoice_small.pdf"
+          }
+        },
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "invoice_small.pdf",
+            "output": "invoice.txt"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "shown": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          0,
+          1,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_text_step_with_its_own_output_keeps_it",
+      "expand": {
+        "*.pdf": [
+          "contract.pdf",
+          "invoice.pdf"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "*.pdf",
+            "output": "notes.md"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "contract.pdf",
+            "output": "contract.md"
+          }
+        },
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "invoice.pdf",
+            "output": "invoice.md"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "shown": [
+          "contract.pdf",
+          "invoice.pdf"
+        ],
+        "file_of": [
+          0,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "pieces_in_the_scratch_are_named_from_their_place",
+      "_note": "A planned set (the pieces of a split) lives in the run scratch: `home` maps each piece to its place in the user's folder, which names its results and is what reports show; `single` lifts a lone reader of the set, since no skill could expand the pieces itself.",
+      "expand": {
+        "clip_%03d.mp4": [
+          "work/clip_001.mp4",
+          "work/clip_002.mp4"
+        ]
+      },
+      "home": {
+        "work/clip_001.mp4": "clip_001.mp4",
+        "work/clip_002.mp4": "clip_002.mp4"
+      },
+      "single": true,
+      "plan": [
+        {
+          "tool": "split_video",
+          "args": {
+            "input": "clip.mp4",
+            "every_seconds": 4,
+            "output": "clip_%03d.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip_%03d.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "split_video",
+          "args": {
+            "input": "clip.mp4",
+            "every_seconds": 4,
+            "output": "clip_%03d.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "work/clip_001.mp4"
+            ],
+            "output": "clip_001_small.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "work/clip_002.mp4"
+            ],
+            "output": "clip_002_small.mp4"
+          }
+        }
+      ],
+      "lift": {
+        "files": [
+          "work/clip_001.mp4",
+          "work/clip_002.mp4"
+        ],
+        "shown": [
+          "clip_001.mp4",
+          "clip_002.mp4"
+        ],
+        "file_of": [
+          null,
+          0,
+          1
+        ],
+        "join_files": {}
+      }
+    },
+    {
+      "name": "a_lone_reader_on_inputs_is_lifted_only_for_a_set",
+      "expand": {
+        "clip_%03d.mp4": [
+          "work/clip_001.mp4",
+          "work/clip_002.mp4"
+        ]
+      },
+      "plan": [
+        {
+          "tool": "split_video",
+          "args": {
+            "input": "clip.mp4",
+            "every_seconds": 4,
+            "output": "clip_%03d.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip_%03d.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "split_video",
+          "args": {
+            "input": "clip.mp4",
+            "every_seconds": 4,
+            "output": "clip_%03d.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip_%03d.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        }
+      ],
+      "lift": {
+        "files": [],
+        "shown": [],
+        "file_of": [],
+        "join_files": {}
+      }
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "extract_audio", "args": {"inputs": ["clip.mp4"], "audio_format": "mp3", "output": "Music/clip.mp3"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "resize_video", "args": {"inputs": ["*.mp4", "*.mov", "*.mkv"], "height": 720, "output": "video_720p.mov"}}, {"tool": "strip_audio", "args": {"inputs": ["video_720p.mov"]}}]}

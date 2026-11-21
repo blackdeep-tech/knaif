@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from knaif.evalsuite.report import _path_fwd, _rel_path, _triage_key
 
 # ── URL encoding in path helpers ──────────────────────────────────────────────
@@ -108,3 +110,62 @@ def test_triage_key_perfect_score_is_last():
     perfect_key = _triage_key(_make_arm_map(1.0, outcome="plan", outcome_correct=True))
     low_key = _triage_key(_make_arm_map(0.0, outcome="plan", outcome_correct=True))
     assert low_key < perfect_key
+
+
+def test_the_row_detail_prints_no_local_path(tmp_path):
+    """The verbose log prints a failing row's command, and a chain intermediate renders in the
+    run scratch, under the home folder on Windows: the printed line names the person (seen in run
+    logs, 2026-10-21). It is redacted like the saved scoreboard."""
+    import io
+    import os
+
+    from knaif.evalsuite.report import print_row_detail
+    from knaif.scratch import scratch_root
+
+    home = os.path.expanduser("~")
+    work = str(scratch_root() / "run-8520-7ace9782" / "clip_1080p.mp4")
+    row = {
+        "id": "ffmpeg_001",
+        "utterance": "make clip.mp4 smaller",
+        "actual_outcome": "plan",
+        "expected_outcome": "plan",
+        "outcome_correct": False,
+        "artifact": f"ffmpeg -y -i {work} {os.path.join(home, 'out.mp4')}",
+    }
+    buf = io.StringIO()
+    print_row_detail(row, file=buf)
+    text = buf.getvalue()
+    assert home not in text, text
+    assert "<work>" in text, text
+
+
+@pytest.mark.parametrize("command", ["run", "safety"])
+def test_the_saved_path_is_printed_without_the_machine(command, monkeypatch, capsys):
+    """`evalsuite run` and `safety` print where they saved, and a run folder commits that log:
+    the line named this checkout's absolute path (seen in an A/B run's logs, 2026-10-27). Saved
+    inside the checkout, as a run folder is, from the checkout, as a run is started."""
+    import os
+    import shutil
+    import sys
+
+    from knaif.evalsuite import cli
+
+    repo = Path(__file__).resolve().parents[3]
+    save = repo / "sandbox" / f"saved-path-test-{os.getpid()}-{command}"
+    target = str(save) if command == "run" else str(save / "safety.json")
+    argv = ["evalsuite", command, "--skill", "ffmpeg", "--config", str(repo / "eval_backends.yaml")]
+    argv += ["--backends", "mock", "--save", target]
+    if command == "run":
+        argv += ["--verifier", "cheap", "--limit", "1"]
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(sys, "argv", argv)
+    try:
+        cli.main()
+    except SystemExit:
+        pass
+    finally:
+        shutil.rmtree(save, ignore_errors=True)
+    out = capsys.readouterr().out
+    assert "saved" in out.lower(), out[-400:]
+    for form in (str(repo), repo.as_posix()):
+        assert form not in out, out[-400:]

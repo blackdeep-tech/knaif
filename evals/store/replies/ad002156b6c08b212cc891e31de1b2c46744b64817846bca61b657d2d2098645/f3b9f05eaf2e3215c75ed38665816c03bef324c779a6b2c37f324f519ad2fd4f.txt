@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_pdf", "args": {"input": "sample.pdf", "compress_quality": "high"}}]}

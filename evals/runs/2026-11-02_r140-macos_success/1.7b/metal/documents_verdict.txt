@@ -1,0 +1,1 @@
+the cold-start sample does not hold, so this cell's batch planning is void: live row documents_url_010#0 produced no plan and was not a screen rejection ('error': Error: Plan step 1 invalid: Unknown tool: "upload"). Re-run the cell live on the subset (`native --subset`, no --batch-plan).

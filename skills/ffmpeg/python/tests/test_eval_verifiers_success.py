@@ -662,3 +662,66 @@ def test_success_duration_triggers_the_file_probe(tmp_path: Path):
     result = success(out, {"duration_s": 3.0}, tmp_path)
     assert result.score == pytest.approx(0.0)
     assert "artifact_file_missing_or_not_produced" in result.failed
+
+
+# ── a compress is graded on what it did to the size (2026-10-28) ─────────────
+#
+# `compress_video` re-encoded a 69k AAC track at 96k and handed back a file 10% bigger than its
+# `.mov`, and every compress row passed: they assert a container and codecs, which a bigger file
+# satisfies. Two criteria make the rows able to fail on the thing a compress is for; a compress
+# that must write nothing is a folder row's `expect_gone`.
+
+
+def _with_fixture(m: MagicMock, fixture: Path | None) -> MagicMock:
+    m.fixture_path = fixture
+    return m
+
+
+def test_no_larger_than_passes_a_smaller_output_and_fails_a_bigger_one(tmp_path: Path):
+    src = tmp_path / "clip.mov"
+    src.write_bytes(b"x" * 1000)
+    small, big = tmp_path / "small.mp4", tmp_path / "big.mp4"
+    small.write_bytes(b"x" * 900)
+    big.write_bytes(b"x" * 1100)
+    with _mock_ffprobe(_probe()):
+        ok = success(_mock_output(artifact_path=small), {"no_larger_than": "clip.mov"}, tmp_path)
+        bad = success(_mock_output(artifact_path=big), {"no_larger_than": "clip.mov"}, tmp_path)
+    assert ok.score == pytest.approx(1.0), ok.failed
+    assert bad.score == pytest.approx(0.0)
+    assert any("1100" in f and "1000" in f for f in bad.failed), bad.failed
+
+
+def test_no_larger_than_finds_the_input_among_the_fixtures(tmp_path: Path):
+    """A chain's input is gone from the row folder's view (or the output is elsewhere): the
+    row's fixture folder holds the original, as documents' criterion reads it."""
+    fixtures, row = tmp_path / "fixtures", tmp_path / "row"
+    fixtures.mkdir()
+    row.mkdir()
+    (fixtures / "clip.mov").write_bytes(b"x" * 1000)
+    out = row / "clip_compressed.mp4"
+    out.write_bytes(b"x" * 900)
+    m = _with_fixture(_mock_output(artifact_path=out), fixtures / "clip.mov")
+    with _mock_ffprobe(_probe()):
+        result = success(m, {"no_larger_than": "clip.mov"}, tmp_path / "elsewhere")
+    assert result.score == pytest.approx(1.0), result.failed
+
+
+def test_max_audio_kbps_fails_audio_encoded_above_the_source(tmp_path: Path):
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    probe = _probe()
+    probe["streams"][1]["bit_rate"] = "90822"  # the manual test's re-encode
+    with _mock_ffprobe(probe):
+        bad = success(_mock_output(artifact_path=f), {"max_audio_kbps": 80}, tmp_path)
+    probe["streams"][1]["bit_rate"] = "69339"  # copied
+    with _mock_ffprobe(probe):
+        ok = success(_mock_output(artifact_path=f), {"max_audio_kbps": 80}, tmp_path)
+    assert bad.score == pytest.approx(0.0) and ok.score == pytest.approx(1.0), (bad, ok)
+
+
+def test_max_audio_kbps_fails_closed_without_a_bitrate(tmp_path: Path):
+    f = tmp_path / "out.mp4"
+    f.write_bytes(b"fake")
+    with _mock_ffprobe(_probe()):  # no `bit_rate` on the stream
+        result = success(_mock_output(artifact_path=f), {"max_audio_kbps": 80}, tmp_path)
+    assert result.score == pytest.approx(0.0)

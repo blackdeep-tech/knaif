@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "inspect_document", "args": {"input": "sample-scanned.pdf", "text_layer": true}}]}

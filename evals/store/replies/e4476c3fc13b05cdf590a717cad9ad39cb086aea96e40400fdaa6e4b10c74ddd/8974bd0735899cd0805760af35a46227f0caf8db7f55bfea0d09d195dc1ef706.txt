@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "remove_pages", "args": {"input": "sample.pdf", "pages": "-1", "output": "sample_trimmed.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "sample_trimmed.pdf"}}]}

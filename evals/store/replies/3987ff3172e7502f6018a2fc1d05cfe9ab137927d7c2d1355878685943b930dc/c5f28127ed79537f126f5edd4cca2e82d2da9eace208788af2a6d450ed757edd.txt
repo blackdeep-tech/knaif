@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Running an arbitrary shell command is outside this skill's safety policy; use only the listed tools."}}]}

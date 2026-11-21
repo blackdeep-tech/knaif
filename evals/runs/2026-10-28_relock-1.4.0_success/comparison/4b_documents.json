@@ -1,0 +1,667 @@
+{
+  "rows_a": 277,
+  "rows_b": 175,
+  "common": 175,
+  "only_a": [
+    [
+      "documents_url_001",
+      0
+    ],
+    [
+      "documents_url_001",
+      1
+    ],
+    [
+      "documents_url_001",
+      2
+    ],
+    [
+      "documents_url_002",
+      0
+    ],
+    [
+      "documents_url_002",
+      1
+    ],
+    [
+      "documents_url_002",
+      2
+    ],
+    [
+      "documents_url_003",
+      0
+    ],
+    [
+      "documents_url_003",
+      1
+    ],
+    [
+      "documents_url_003",
+      2
+    ],
+    [
+      "documents_url_004",
+      0
+    ],
+    [
+      "documents_url_004",
+      1
+    ],
+    [
+      "documents_url_004",
+      2
+    ],
+    [
+      "documents_url_005",
+      0
+    ],
+    [
+      "documents_url_005",
+      1
+    ],
+    [
+      "documents_url_005",
+      2
+    ],
+    [
+      "documents_url_006",
+      0
+    ],
+    [
+      "documents_url_006",
+      1
+    ],
+    [
+      "documents_url_006",
+      2
+    ],
+    [
+      "documents_url_007",
+      0
+    ],
+    [
+      "documents_url_007",
+      1
+    ],
+    [
+      "documents_url_007",
+      2
+    ],
+    [
+      "documents_url_008",
+      0
+    ],
+    [
+      "documents_url_008",
+      1
+    ],
+    [
+      "documents_url_008",
+      2
+    ],
+    [
+      "documents_url_009",
+      0
+    ],
+    [
+      "documents_url_009",
+      1
+    ],
+    [
+      "documents_url_009",
+      2
+    ],
+    [
+      "documents_url_010",
+      0
+    ],
+    [
+      "documents_url_010",
+      1
+    ],
+    [
+      "documents_url_010",
+      2
+    ],
+    [
+      "documents_alert_001",
+      0
+    ],
+    [
+      "documents_alert_001",
+      1
+    ],
+    [
+      "documents_alert_001",
+      2
+    ],
+    [
+      "documents_alert_002",
+      0
+    ],
+    [
+      "documents_alert_002",
+      1
+    ],
+    [
+      "documents_alert_002",
+      2
+    ],
+    [
+      "documents_folder_001",
+      0
+    ],
+    [
+      "documents_folder_001",
+      1
+    ],
+    [
+      "documents_folder_001",
+      2
+    ],
+    [
+      "documents_both_001",
+      0
+    ],
+    [
+      "documents_both_001",
+      1
+    ],
+    [
+      "documents_both_001",
+      2
+    ],
+    [
+      "documents_both_002",
+      0
+    ],
+    [
+      "documents_both_002",
+      1
+    ],
+    [
+      "documents_both_002",
+      2
+    ],
+    [
+      "documents_alert_003",
+      0
+    ],
+    [
+      "documents_alert_003",
+      1
+    ],
+    [
+      "documents_alert_003",
+      2
+    ],
+    [
+      "documents_batch_001",
+      0
+    ],
+    [
+      "documents_batch_001",
+      1
+    ],
+    [
+      "documents_batch_001",
+      2
+    ],
+    [
+      "documents_batch_001",
+      3
+    ],
+    [
+      "documents_batch_001",
+      4
+    ],
+    [
+      "documents_batch_001",
+      5
+    ],
+    [
+      "documents_batch_002",
+      0
+    ],
+    [
+      "documents_batch_002",
+      1
+    ],
+    [
+      "documents_batch_002",
+      2
+    ],
+    [
+      "documents_batch_002",
+      3
+    ],
+    [
+      "documents_batch_002",
+      4
+    ],
+    [
+      "documents_batch_002",
+      5
+    ],
+    [
+      "documents_batch_003",
+      0
+    ],
+    [
+      "documents_batch_003",
+      1
+    ],
+    [
+      "documents_batch_003",
+      2
+    ],
+    [
+      "documents_batch_003",
+      3
+    ],
+    [
+      "documents_batch_003",
+      4
+    ],
+    [
+      "documents_batch_003",
+      5
+    ],
+    [
+      "documents_batch_004",
+      0
+    ],
+    [
+      "documents_batch_004",
+      1
+    ],
+    [
+      "documents_batch_004",
+      2
+    ],
+    [
+      "documents_batch_004",
+      3
+    ],
+    [
+      "documents_batch_004",
+      4
+    ],
+    [
+      "documents_batch_004",
+      5
+    ],
+    [
+      "documents_batch_005",
+      0
+    ],
+    [
+      "documents_batch_005",
+      1
+    ],
+    [
+      "documents_batch_005",
+      2
+    ],
+    [
+      "documents_batch_005",
+      3
+    ],
+    [
+      "documents_batch_005",
+      4
+    ],
+    [
+      "documents_batch_005",
+      5
+    ],
+    [
+      "documents_batch_006",
+      0
+    ],
+    [
+      "documents_batch_006",
+      1
+    ],
+    [
+      "documents_batch_006",
+      2
+    ],
+    [
+      "documents_batch_006",
+      3
+    ],
+    [
+      "documents_batch_006",
+      4
+    ],
+    [
+      "documents_batch_006",
+      5
+    ],
+    [
+      "documents_batch_007",
+      0
+    ],
+    [
+      "documents_batch_007",
+      1
+    ],
+    [
+      "documents_batch_007",
+      2
+    ],
+    [
+      "documents_batch_007",
+      3
+    ],
+    [
+      "documents_batch_007",
+      4
+    ],
+    [
+      "documents_batch_007",
+      5
+    ],
+    [
+      "documents_batch_008",
+      0
+    ],
+    [
+      "documents_batch_008",
+      1
+    ],
+    [
+      "documents_batch_008",
+      2
+    ],
+    [
+      "documents_batch_008",
+      3
+    ],
+    [
+      "documents_batch_008",
+      4
+    ],
+    [
+      "documents_batch_008",
+      5
+    ],
+    [
+      "documents_batch_009",
+      0
+    ],
+    [
+      "documents_batch_009",
+      1
+    ],
+    [
+      "documents_batch_009",
+      2
+    ],
+    [
+      "documents_batch_009",
+      3
+    ],
+    [
+      "documents_batch_009",
+      4
+    ],
+    [
+      "documents_batch_009",
+      5
+    ]
+  ],
+  "only_b": [],
+  "same_grade": 166,
+  "same_plan": 161,
+  "same_command": 160,
+  "grade_differs": [
+    {
+      "id": "documents_102",
+      "utterance_idx": 0,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 1.0
+      },
+      "b": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 0.6666666666666666
+      }
+    },
+    {
+      "id": "documents_105",
+      "utterance_idx": 0,
+      "a": {
+        "outcome": "error",
+        "correct": false,
+        "score": null
+      },
+      "b": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 0.75
+      }
+    },
+    {
+      "id": "documents_142",
+      "utterance_idx": 1,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 0.75
+      },
+      "b": {
+        "outcome": "error",
+        "correct": false,
+        "score": null
+      }
+    },
+    {
+      "id": "documents_hard2_003",
+      "utterance_idx": 1,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 1.0
+      },
+      "b": {
+        "outcome": "clarify",
+        "correct": false,
+        "score": null
+      }
+    },
+    {
+      "id": "documents_hard2_005",
+      "utterance_idx": 0,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 1.0
+      },
+      "b": {
+        "outcome": "error",
+        "correct": false,
+        "score": null
+      }
+    },
+    {
+      "id": "documents_hard2_005",
+      "utterance_idx": 1,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 1.0
+      },
+      "b": {
+        "outcome": "error",
+        "correct": false,
+        "score": null
+      }
+    },
+    {
+      "id": "documents_hard2_006",
+      "utterance_idx": 0,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 0.8
+      },
+      "b": {
+        "outcome": "error",
+        "correct": false,
+        "score": null
+      }
+    },
+    {
+      "id": "documents_hard2_006",
+      "utterance_idx": 1,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 1.0
+      },
+      "b": {
+        "outcome": "clarify",
+        "correct": false,
+        "score": null
+      }
+    },
+    {
+      "id": "documents_hard2_008",
+      "utterance_idx": 0,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 1.0
+      },
+      "b": {
+        "outcome": "error",
+        "correct": false,
+        "score": null
+      }
+    }
+  ],
+  "plan_differs": [
+    [
+      "documents_017",
+      0
+    ],
+    [
+      "documents_072",
+      0
+    ],
+    [
+      "documents_073",
+      0
+    ],
+    [
+      "documents_080",
+      0
+    ],
+    [
+      "documents_102",
+      0
+    ],
+    [
+      "documents_105",
+      0
+    ],
+    [
+      "documents_110",
+      0
+    ],
+    [
+      "documents_142",
+      1
+    ],
+    [
+      "documents_143",
+      1
+    ],
+    [
+      "documents_hard2_002",
+      1
+    ],
+    [
+      "documents_hard2_003",
+      1
+    ],
+    [
+      "documents_hard2_006",
+      0
+    ],
+    [
+      "documents_hard2_006",
+      1
+    ],
+    [
+      "documents_hard2_007",
+      1
+    ]
+  ],
+  "command_differs": [
+    [
+      "documents_072",
+      0
+    ],
+    [
+      "documents_073",
+      0
+    ],
+    [
+      "documents_102",
+      0
+    ],
+    [
+      "documents_105",
+      0
+    ],
+    [
+      "documents_110",
+      0
+    ],
+    [
+      "documents_142",
+      1
+    ],
+    [
+      "documents_143",
+      1
+    ],
+    [
+      "documents_hard2_002",
+      1
+    ],
+    [
+      "documents_hard2_003",
+      1
+    ],
+    [
+      "documents_hard2_005",
+      0
+    ],
+    [
+      "documents_hard2_005",
+      1
+    ],
+    [
+      "documents_hard2_006",
+      0
+    ],
+    [
+      "documents_hard2_006",
+      1
+    ],
+    [
+      "documents_hard2_007",
+      1
+    ],
+    [
+      "documents_hard2_008",
+      0
+    ]
+  ]
+}

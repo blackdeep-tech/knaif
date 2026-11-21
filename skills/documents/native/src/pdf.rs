@@ -93,9 +93,16 @@ pub fn parse_page_range_specs(
 
 // ── Document ops via lopdf ───────────────────────────────────────────────────────────────────
 
-/// Load a PDF from disk, with a friendly error.
+/// Load a PDF from disk, with a friendly error that names the file, never its folders (as
+/// Python `_engine._open_pdf`).
 pub fn load(path: &std::path::Path) -> anyhow::Result<Document> {
-    Document::load(path).map_err(|e| anyhow::anyhow!("could not open PDF {}: {e}", path.display()))
+    Document::load(path).map_err(|e| {
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| path.display().to_string());
+        anyhow::anyhow!("could not open PDF {name}: {e}")
+    })
 }
 
 /// [`load`] for an operation that reads or rewrites the pages. An encrypted PDF opens fine but

@@ -10,7 +10,7 @@ from typing import Any
 from knaif.handler_api import HandlerContext
 from knaif.planner import _resolve_path
 from knaif.skill_base import Skill
-from knaif.tool import Step
+from knaif.tool import Handler
 
 _FILE_TYPE_PATTERNS: dict[str, list[str]] = {
     "executable": (
@@ -49,7 +49,7 @@ def _match_files(files: list[Path], patterns: list[str]) -> list[Path]:
     return [p for p in files if any(fnmatch(p.name, pat) for pat in patterns)]
 
 
-class ListFilesStep(Step):
+class ListFilesStep(Handler):
     name = "list_files"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -58,7 +58,7 @@ class ListFilesStep(Step):
         return {"count": len(files), "files": [str(p) for p in sorted(files)]}
 
 
-class FindFilesStep(Step):
+class FindFilesStep(Handler):
     name = "find_files"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -67,7 +67,7 @@ class FindFilesStep(Step):
         return {"count": len(files), "files": [str(p) for p in sorted(files)]}
 
 
-class DeleteFilesStep(Step):
+class DeleteFilesStep(Handler):
     name = "delete_files"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -99,7 +99,7 @@ class DeleteFilesStep(Step):
         }
 
 
-class MoveFilesStep(Step):
+class MoveFilesStep(Handler):
     name = "move_files"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -135,4 +135,4 @@ class MoveFilesStep(Step):
 
 
 class IoSkill(Skill):
-    tools = [ListFilesStep, FindFilesStep, DeleteFilesStep, MoveFilesStep]
+    pass

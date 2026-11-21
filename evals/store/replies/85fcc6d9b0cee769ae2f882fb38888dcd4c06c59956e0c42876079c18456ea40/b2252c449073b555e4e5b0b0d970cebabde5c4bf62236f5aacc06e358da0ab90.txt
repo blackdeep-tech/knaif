@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "What should I do to every mp4 file here — compress, convert, trim, or something else?"}}]}

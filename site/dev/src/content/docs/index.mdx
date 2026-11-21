@@ -33,6 +33,57 @@ hero:
 ---
 
 import { CardGrid, Card, LinkCard } from '@astrojs/starlight/components';
+import DemoGif from '../../components/DemoGif.astro';
+import tourGif from '../../../../../media/demo/knaif-tour.gif?url';
+import tourStill from '../../../../../media/demo/knaif-tour.jpg?url';
+import raceGif from '../../../../../media/demo/knaif-vs-claude-code.gif?url';
+import raceStill from '../../../../../media/demo/knaif-vs-claude-code.jpg?url';
+import moreGif from '../../../../../media/demo/knaif-more.gif?url';
+import moreStill from '../../../../../media/demo/knaif-more.jpg?url';
+
+## See it run
+
+What your users get: a sentence in, a validated plan, the real command, and the result.
+
+<DemoGif
+  gif={tourGif}
+  still={tourStill}
+  width={1733}
+  height={1018}
+  eager
+  alt="A terminal session: knaif resizes clip.mp4 to 720p, turns its first 3 seconds into a GIF, merges two PDFs, and refuses to delete the original video."
+  caption="A real session, nothing sped up: knaif 1.4.0 on Linux with an NVIDIA RTX 5080, the model kept loaded by the daemon."
+/>
+
+Prefer a narrated version? [Watch the two-minute tour on YouTube](https://youtu.be/AZ1lGlUI9j8).
+
+<details>
+<summary>Side by side with a premium coding agent (81 s)</summary>
+
+<DemoGif
+  gif={raceGif}
+  still={raceStill}
+  width={1893}
+  height={1052}
+  alt="Side by side on one machine: knaif and Claude Code get the same three requests at the same moment. knaif finishes in 2.0 s, 3.8 s and 1.0 s against 12.5 s, 14.5 s and 32.4 s, and for 'make my video better' both ask what to improve."
+  caption="A recorded side-by-side on one machine (RTX 5080), not a measurement: knaif 1.4.0 with the model kept loaded, and Claude Code on opus-5.5, given the same requests at the same moment. The measured comparison is on knaif.org/vs."
+/>
+
+</details>
+
+<details>
+<summary>A folder at once, five languages, pipes, a password and a refusal (66 s)</summary>
+
+<DemoGif
+  gif={moreGif}
+  still={moreStill}
+  width={1050}
+  height={670}
+  alt="A terminal session: knaif starts its daemon, previews a compression with --dry-run, compresses every video in a folder, handles video requests in German, French, Spanish and Chinese, pipes a PDF's text into wc, password-protects a PDF, asks what 'make my video better' means, and refuses to delete all videos."
+  caption="Same machine and setup, nothing sped up."
+/>
+
+</details>
 
 ## Two different developers land here
 

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["*.mp4"], "bitrate": "500k"}}]}

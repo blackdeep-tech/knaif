@@ -1,0 +1,103 @@
+inspect sample.png
+inspect sample-scanned.pdf
+extract sample.pdf
+extract sample.docx
+within sample.pdf find gamma
+convert sample.txt to markdown
+compress sample.pdf
+ocr sample-scanned.pdf
+split pages 2-3 of sample.pdf into a new pdf
+turn all pages of sample.pdf 90 degrees
+remove page 3 from sample.pdf
+reorder sample.pdf to 2,3,1
+watermark sample.pdf with DRAFT
+number sample.pdf
+protect sample.pdf
+merge these documents
+process my document
+delete all documents
+inspect sample.pdf
+rotate sample.pdf 90 degrees
+reorder sample.pdf to 3,2,1
+merge sample.pdf and sample-scanned.pdf into merged.pdf
+number the pages of sample.pdf
+password-protect sample.pdf with secret
+unlock sample-protected.pdf with password secret
+merge sample.pdf and sample-scanned.pdf into combined.pdf, then add page numbers
+I just got handed sample.pdf and have no clue what's inside - how many pages is it and is the text actually selectable?
+Before I send sample-scanned.pdf to the print shop, can you confirm whether it has a real text layer or it's just an image?
+I need to paste the wording from sample.docx into an email - can you pull all the text out for me?
+My screen reader chokes on sample.pdf; just give me the plain text so I can read it.
+A coworker swears the word Gamma shows up somewhere in sample.pdf but I can't spot it - which page is it on?
+My manager only accepts plain .txt files, so I need a .txt copy of sample.md saved out to send him.
+Marketing wants sample.docx as a PDF so the layout doesn't shift on their computers - can you make that?
+sample.pdf is too big for our email server, which rejects anything over 10 MB - can you slim it down?
+sample-scanned.pdf is basically a photo of a contract - I can't select or search any of the text. Make it searchable.
+Only pages 2 to 3 of sample.pdf matter to the client - carve those out into their own PDF I can send.
+Someone scanned sample.pdf sideways and every page is turned 90 degrees the wrong way - fix the orientation.
+The last page of sample.pdf is just a blank sheet - drop it before I archive this.
+sample.pdf came off the scanner backwards, the pages are in reverse - put them back in the proper order.
+I'd rather send the client one attachment than two - combine sample.pdf and sample-scanned.pdf into one.pdf.
+This copy of sample.pdf isn't final - stamp DRAFT across it so nobody mistakes it for the signed version.
+The printed copies of sample.pdf keep getting shuffled in meetings - add page numbers so people can follow along.
+I'm emailing sample.pdf to a client and don't want anyone who intercepts it to open it - lock it with the password hunter2.
+I'm sick of typing the password every time I open sample-protected.pdf - the password is secret, please take it off.
+Komprimiere sample.pdf, sie ist zu groß.
+Combina sample.pdf y sample-scanned.pdf en uno.pdf.
+Extrae el texto de sample.pdf.
+Numérote les pages de sample.pdf.
+Protège sample.pdf avec le mot de passe hunter2.
+Сожми sample.pdf, файл слишком большой.
+Найди Gamma в sample.pdf.
+Раздели страници 2-3 от sample.pdf в нов файл.
+Завърти sample.pdf на 90 градуса.
+压缩 sample.pdf。
+把 sample.pdf 旋转 90 度。
+split pages 1-2 of sample.pdf into a new file and stamp DRAFT on it
+remove the last page of sample.pdf, then add page numbers to what's left
+watermark sample.pdf with CONFIDENTIAL and then compress the result
+extract the first 2 pages of sample.pdf into a new pdf
+extract the text from the first 2 pages of sample.pdf
+extract the first 2 pages of sample.pdf
+pull page 3 out of sample.pdf as its own file
+delete page 3 from sample.pdf
+find the word invoice in sample.pdf
+save sample.docx as a pdf
+drehe sample.pdf um 90 Grad
+comprime sample.pdf
+extrais le texte de sample.pdf
+раздели sample.pdf и сохрани первые 2 страницы в новый pdf
+разгледай sample.pdf
+rotate sample.pdf 90 degrees and then compress it
+extract the first 2 pages of sample.pdf into a new pdf and compress it
+unlock sample-protected.pdf with the password secret and rotate every page 90 degrees
+ocr sample-scanned.pdf and then compress the result
+convert sample.docx to pdf and add page numbers to it
+put the pages of sample.pdf in the order 3,1,2 and lock the result with the password secret
+merge sample.pdf and sample-scanned.pdf, then keep only pages 1-2 of the merged file
+stamp DRAFT across sample.pdf and rotate it 180 degrees
+drop page 2 from sample.pdf, watermark what is left with FINAL and compress it
+take pages 1-2 of sample.pdf into a new file and swap their order
+merge https://files.knaif.test/documents/report.pdf and sample-scanned.pdf into merged.pdf
+extract the text from https://files.knaif.test/documents/report.pdf
+convert https://files.knaif.test/documents/notes.txt to markdown
+how many pages does https://files.knaif.test/documents/report.pdf have
+compress https://files.knaif.test/documents/report.pdf
+ocr https://files.knaif.test/documents/scan.pdf
+split pages 2-3 of https://files.knaif.test/documents/report.pdf into a new pdf
+within https://files.knaif.test/documents/report.pdf find gamma
+download https://files.knaif.test/documents/report.pdf
+upload sample.pdf to https://files.knaif.test/upload
+compress sample.pdf and beep when it's done
+extract the text from sample.pdf and notify me when it's done
+convert sample.txt to markdown and save it in my Documents folder
+merge sample.pdf and sample-scanned.pdf into Downloads and let me know when it's done
+compress https://files.knaif.test/documents/report.pdf, save it to the Desktop and beep when finished
+beep
+unlock all the PDFs in this folder and stamp DRAFT on each
+compress every pdf here and add page numbers
+compress all PDFs here and merge them into one
+add page numbers to every pdf in this folder
+split report.pdf into one file per page
+split report.pdf into one file per page and stamp DRAFT on each
+merge all the PDFs here into one

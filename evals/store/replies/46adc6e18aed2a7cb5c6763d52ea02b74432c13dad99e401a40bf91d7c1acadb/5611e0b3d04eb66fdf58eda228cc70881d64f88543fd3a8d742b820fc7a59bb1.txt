@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "split_video", "args": {"input": "video.mp4", "parts": 3}}]}

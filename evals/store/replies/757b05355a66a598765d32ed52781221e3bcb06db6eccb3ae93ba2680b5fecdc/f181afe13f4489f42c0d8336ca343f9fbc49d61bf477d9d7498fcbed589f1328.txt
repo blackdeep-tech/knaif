@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Transcoding isn't needed if the file is already using the target codec. Is there another operation I can help with?"}}]}

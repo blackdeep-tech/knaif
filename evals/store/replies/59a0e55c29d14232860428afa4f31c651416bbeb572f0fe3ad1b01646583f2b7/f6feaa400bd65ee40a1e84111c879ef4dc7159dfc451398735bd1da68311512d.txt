@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "I need a file path, not a URL. Did you mean to download it first?"}}]}

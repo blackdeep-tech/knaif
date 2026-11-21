@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "ocr_document", "args": {"input": "sample-scanned.pdf", "language": "eng"}}, {"tool": "compress_pdf", "args": {"input": "ocr-output.pdf", "compress_quality": "balanced"}}]}

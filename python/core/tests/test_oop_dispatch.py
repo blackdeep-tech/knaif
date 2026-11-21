@@ -16,10 +16,12 @@ from knaif.agent import CommandAgent
 
 TOOLS_YAML = textwrap.dedent("""\
     do_thing:
+      effects: []
       description: "Do a thing."
       required_args: []
       safety_category: safe
     expand_thing:
+      effects: []
       description: "Expand into sub-steps."
       required_args: []
       safety_category: safe
@@ -28,7 +30,6 @@ TOOLS_YAML = textwrap.dedent("""\
 SKILL_YAML_TEMPLATE = textwrap.dedent("""\
     name: test_oop
     description: "OOP dispatch test skill"
-    skill_class: handlers.TestOopSkill
     """)
 
 
@@ -36,7 +37,11 @@ def _make_oop_skill_dir(tmp_path: Path, handlers_body: str) -> Path:
     d = tmp_path / "oop_skill"
     d.mkdir(parents=True, exist_ok=True)
     (d / "skill.yaml").write_text(SKILL_YAML_TEMPLATE, encoding="utf-8")
-    (d / "tools.yaml").write_text(TOOLS_YAML, encoding="utf-8")
+    # Every YAML entry needs a class (1:1), so declare expand_thing only when a test defines it.
+    tools_yaml = (
+        TOOLS_YAML if '"expand_thing"' in handlers_body else TOOLS_YAML.split("expand_thing:")[0]
+    )
+    (d / "tools.yaml").write_text(tools_yaml, encoding="utf-8")
     (d / "handlers.py").write_text(handlers_body, encoding="utf-8")
     return d
 
@@ -46,15 +51,15 @@ def _make_oop_skill_dir(tmp_path: Path, handlers_body: str) -> Path:
 
 def test_from_skill_oop_sets_tool_map(tmp_path):
     body = textwrap.dedent("""\
-        from knaif.tool import Step
+        from knaif.tool import Handler
         from knaif.skill_base import Skill as SkillBase
 
-        class DoThingStep(Step):
+        class DoThingStep(Handler):
             name = "do_thing"
             def handle(self, args, ctx): return {"did": True}
 
         class TestOopSkill(SkillBase):
-            tools = [DoThingStep]
+            pass
         """)
     skill_dir = _make_oop_skill_dir(tmp_path, body)
     agent = CommandAgent.from_skill(skill_dir, sandbox=tmp_path / "sb")
@@ -64,15 +69,15 @@ def test_from_skill_oop_sets_tool_map(tmp_path):
 
 def test_from_skill_oop_dispatches_via_handle(tmp_path):
     body = textwrap.dedent("""\
-        from knaif.tool import Step
+        from knaif.tool import Handler
         from knaif.skill_base import Skill as SkillBase
 
-        class DoThingStep(Step):
+        class DoThingStep(Handler):
             name = "do_thing"
             def handle(self, args, ctx): return {"did": True}
 
         class TestOopSkill(SkillBase):
-            tools = [DoThingStep]
+            pass
         """)
     skill_dir = _make_oop_skill_dir(tmp_path, body)
     agent = CommandAgent.from_skill(skill_dir, sandbox=tmp_path / "sb")
@@ -88,10 +93,10 @@ def test_from_skill_oop_dispatches_via_handle(tmp_path):
 
 def test_from_skill_oop_expands_intent(tmp_path):
     body = textwrap.dedent("""\
-        from knaif.tool import Step, Intent
+        from knaif.tool import Handler, Intent
         from knaif.skill_base import Skill as SkillBase
 
-        class DoThingStep(Step):
+        class DoThingStep(Handler):
             name = "do_thing"
             def handle(self, args, ctx): return {"did": True}
 
@@ -101,7 +106,7 @@ def test_from_skill_oop_expands_intent(tmp_path):
                 return [{"tool": "do_thing", "args": {}}]
 
         class TestOopSkill(SkillBase):
-            tools = [DoThingStep, ExpandThingIntent]
+            pass
         """)
     skill_dir = _make_oop_skill_dir(tmp_path, body)
     agent = CommandAgent.from_skill(skill_dir, sandbox=tmp_path / "sb")
@@ -115,10 +120,10 @@ def test_from_skill_oop_expands_intent(tmp_path):
 
 def test_from_skill_oop_intent_summarize(tmp_path):
     body = textwrap.dedent("""\
-        from knaif.tool import Step, Intent
+        from knaif.tool import Handler, Intent
         from knaif.skill_base import Skill as SkillBase
 
-        class DoThingStep(Step):
+        class DoThingStep(Handler):
             name = "do_thing"
             def handle(self, args, ctx): return {"did": True}
 
@@ -128,7 +133,7 @@ def test_from_skill_oop_intent_summarize(tmp_path):
             def summarize(self, args): return "expand the thing nicely"
 
         class TestOopSkill(SkillBase):
-            tools = [DoThingStep, ExpandThingIntent]
+            pass
         """)
     skill_dir = _make_oop_skill_dir(tmp_path, body)
     agent = CommandAgent.from_skill(skill_dir, sandbox=tmp_path / "sb")
@@ -148,16 +153,16 @@ def test_from_skill_oop_intent_summarize(tmp_path):
 
 def test_oop_dispatch_tool_preflight_override_takes_precedence(tmp_path):
     body = textwrap.dedent("""\
-        from knaif.tool import Step
+        from knaif.tool import Handler
         from knaif.skill_base import Skill as SkillBase
 
-        class DoThingStep(Step):
+        class DoThingStep(Handler):
             name = "do_thing"
             def handle(self, args, ctx): return {"did": True}
             def preflight(self, args, **kw): return ["tool_preflight_ran"]
 
         class TestOopSkill(SkillBase):
-            tools = [DoThingStep]
+            pass
             def preflight(self, tool, args, **kw): return ["skill_preflight_ran"]
         """)
     skill_dir = _make_oop_skill_dir(tmp_path, body)
@@ -173,16 +178,16 @@ def test_oop_dispatch_tool_preflight_override_takes_precedence(tmp_path):
 
 def test_oop_dispatch_skill_preflight_used_when_tool_does_not_override(tmp_path):
     body = textwrap.dedent("""\
-        from knaif.tool import Step
+        from knaif.tool import Handler
         from knaif.skill_base import Skill as SkillBase
 
-        class DoThingStep(Step):
+        class DoThingStep(Handler):
             name = "do_thing"
             def handle(self, args, ctx): return {"did": True}
             # No preflight override → skill-level preflight should run
 
         class TestOopSkill(SkillBase):
-            tools = [DoThingStep]
+            pass
             def preflight(self, tool, args, **kw): return ["skill_preflight_ran"]
         """)
     skill_dir = _make_oop_skill_dir(tmp_path, body)

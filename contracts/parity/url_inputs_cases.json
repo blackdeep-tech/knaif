@@ -1,0 +1,350 @@
+{
+  "_comment": "Golden parity fixtures for URL inputs: which argument values are URLs, which URLs are refused before any request, what a downloaded file is called, and which content types a skill accepts. A value is a URL when it starts with a scheme followed by `://`; only http and https are accepted, and a URL carrying a user name or password is refused (no credentials). Consumed by python/core/tests/test_url_inputs_parity.py (knaif.urls) and, once the native port lands, by native/crates/knaif-core/tests/url_inputs_parity.rs (knaif_core::urls). WHY: a URL used to pass validation as a relative path (`https://h/a.mov` became `<sandbox>/https:/h/a.mov`) and fail late as 'not found'; the two runtimes must agree on the value class before either downloads anything.",
+  "_expected_values": "Written by hand from the rules above, before the implementation. DO NOT regenerate to make a failing test pass.",
+  "url_cases": [
+    {
+      "name": "an_https_url",
+      "value": "https://files.knaif.test/ffmpeg/talk.mp4",
+      "is_url": true
+    },
+    {
+      "name": "an_http_url",
+      "value": "http://example.com/a.pdf",
+      "is_url": true
+    },
+    {
+      "name": "the_scheme_is_case_insensitive",
+      "value": "HTTPS://Example.com/A.MP4",
+      "is_url": true
+    },
+    {
+      "name": "a_query_string_is_part_of_the_url",
+      "value": "https://h.test/a.mov?sig=abc&x=1",
+      "is_url": true
+    },
+    {
+      "name": "ftp_is_refused",
+      "value": "ftp://h.test/a.mov",
+      "is_url": true,
+      "error_contains": "only http and https"
+    },
+    {
+      "name": "file_urls_are_refused",
+      "value": "file:///etc/passwd",
+      "is_url": true,
+      "error_contains": "only http and https"
+    },
+    {
+      "name": "credentials_are_refused",
+      "value": "https://user:secret@h.test/a.mov",
+      "is_url": true,
+      "error_contains": "user name or password"
+    },
+    {
+      "name": "a_user_name_alone_is_refused",
+      "value": "https://user@h.test/a.mov",
+      "is_url": true,
+      "error_contains": "user name or password"
+    },
+    {
+      "name": "a_url_needs_a_host",
+      "value": "https:///a.mov",
+      "is_url": true,
+      "error_contains": "no host"
+    },
+    {
+      "name": "a_file_name_is_not_a_url",
+      "value": "clip.mp4",
+      "is_url": false
+    },
+    {
+      "name": "a_relative_path_is_not_a_url",
+      "value": "videos/project/clip.mp4",
+      "is_url": false
+    },
+    {
+      "name": "a_windows_path_is_not_a_url",
+      "value": "C:/Users/alice/clip.mp4",
+      "is_url": false
+    },
+    {
+      "name": "a_glob_is_not_a_url",
+      "value": "*.mp4",
+      "is_url": false
+    },
+    {
+      "name": "a_scheme_without_slashes_is_not_a_url",
+      "value": "mailto:alice@example.com",
+      "is_url": false
+    }
+  ],
+  "file_name_cases": [
+    {
+      "name": "the_last_path_segment",
+      "url": "https://h.test/media/holiday.mov",
+      "expected": "holiday.mov"
+    },
+    {
+      "name": "query_and_fragment_are_dropped",
+      "url": "https://h.test/a.mov?sig=1#t=3",
+      "expected": "a.mov"
+    },
+    {
+      "name": "percent_escapes_are_decoded",
+      "url": "https://h.test/my%20clip.mp4",
+      "expected": "my clip.mp4"
+    },
+    {
+      "name": "an_encoded_path_cannot_climb_out",
+      "url": "https://h.test/..%2F..%2Fetc%2Fpasswd",
+      "expected": "passwd"
+    },
+    {
+      "name": "a_backslash_cannot_climb_out",
+      "url": "https://h.test/a%5C..%5Cb.pdf",
+      "expected": "b.pdf"
+    },
+    {
+      "name": "characters_windows_refuses_become_underscores",
+      "url": "https://h.test/a%3Cb%3E%3A.mp4",
+      "expected": "a_b__.mp4"
+    },
+    {
+      "name": "leading_dots_are_stripped",
+      "url": "https://h.test/.hidden.pdf",
+      "expected": "hidden.pdf"
+    },
+    {
+      "name": "no_extension_takes_one_from_the_content_type",
+      "url": "https://h.test/watch",
+      "content_type": "video/mp4",
+      "expected": "watch.mp4"
+    },
+    {
+      "name": "content_type_parameters_are_ignored",
+      "url": "https://h.test/notes",
+      "content_type": "text/plain; charset=utf-8",
+      "expected": "notes.txt"
+    },
+    {
+      "name": "an_empty_path_is_called_download",
+      "url": "https://h.test/",
+      "content_type": "application/pdf",
+      "expected": "download.pdf"
+    },
+    {
+      "name": "an_unknown_type_adds_no_extension",
+      "url": "https://h.test/blob",
+      "content_type": "application/x-unknown",
+      "expected": "blob"
+    },
+    {
+      "name": "an_existing_extension_is_kept",
+      "url": "https://h.test/clip.mov",
+      "content_type": "video/mp4",
+      "expected": "clip.mov"
+    }
+  ],
+  "content_type_cases": [
+    {
+      "name": "a_wildcard_matches_its_family",
+      "content_type": "video/mp4",
+      "accepted": [
+        "video/*"
+      ],
+      "ok": true
+    },
+    {
+      "name": "matching_ignores_case_and_parameters",
+      "content_type": "VIDEO/MP4; codecs=avc1",
+      "accepted": [
+        "video/*"
+      ],
+      "ok": true
+    },
+    {
+      "name": "a_trailing_wildcard_matches_a_prefix",
+      "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "accepted": [
+        "application/vnd.openxmlformats-officedocument.*"
+      ],
+      "ok": true
+    },
+    {
+      "name": "an_exact_type_matches",
+      "content_type": "application/pdf",
+      "accepted": [
+        "application/pdf"
+      ],
+      "ok": true
+    },
+    {
+      "name": "a_missing_type_counts_as_octet_stream",
+      "content_type": "",
+      "accepted": [
+        "application/octet-stream"
+      ],
+      "ok": true
+    },
+    {
+      "name": "a_missing_type_is_refused_without_octet_stream",
+      "content_type": "",
+      "accepted": [
+        "video/*"
+      ],
+      "error_contains": "not a type this skill accepts"
+    },
+    {
+      "name": "a_web_page_is_named_as_one",
+      "content_type": "text/html; charset=utf-8",
+      "accepted": [
+        "video/*",
+        "application/octet-stream"
+      ],
+      "error_contains": "web page"
+    },
+    {
+      "name": "another_family_is_refused",
+      "content_type": "application/pdf",
+      "accepted": [
+        "video/*",
+        "audio/*"
+      ],
+      "error_contains": "not a type this skill accepts"
+    }
+  ],
+  "_validation": "validation_cases: each plan is validated against `tools_yaml` (plus the core control tools). A URL may only be the value of an input arg (inputs, input, files, base, append, or an arg whose schema says `path_role: input`), and must pass the URL rules; anywhere else, or failing them, the plan is refused with a message carrying `error_contains`. Core control tools are exempt: a clarify question may quote a URL.",
+  "validation_tools_yaml": "convert_media:\n  effects: [fs.read, fs.write]\n  description: test tool\n  required_args: [inputs]\n  optional_args: [output, overlay, title]\n  safety_category: safe\n  arg_schemas:\n    inputs:\n      type: array\n    output:\n      type: string\n    overlay:\n      type: string\n      path_role: input\n    title:\n      type: string\n",
+  "validation_cases": [
+    {
+      "name": "a_url_input_is_valid",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_media",
+            "args": {
+              "inputs": [
+                "https://files.knaif.test/ffmpeg/talk.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "name": "a_url_beside_a_local_file_is_valid",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_media",
+            "args": {
+              "inputs": [
+                "https://files.knaif.test/ffmpeg/talk.mp4",
+                "clip.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "name": "a_path_role_input_arg_takes_a_url",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_media",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "overlay": "https://h.test/logo.png"
+            }
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "name": "a_url_output_is_refused",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_media",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "https://h.test/out.mp4"
+            }
+          }
+        ]
+      },
+      "error_contains": "a URL can only be an input file"
+    },
+    {
+      "name": "a_url_in_another_arg_is_refused",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_media",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "title": "https://h.test/x"
+            }
+          }
+        ]
+      },
+      "error_contains": "a URL can only be an input file"
+    },
+    {
+      "name": "another_scheme_is_refused_at_validation",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_media",
+            "args": {
+              "inputs": [
+                "ftp://h.test/a.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "error_contains": "only http and https"
+    },
+    {
+      "name": "credentials_are_refused_at_validation",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_media",
+            "args": {
+              "inputs": [
+                "https://u:p@h.test/a.mp4"
+              ]
+            }
+          }
+        ]
+      },
+      "error_contains": "user name or password"
+    },
+    {
+      "name": "a_clarify_may_quote_a_url",
+      "plan": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "https://h.test/a.mp4"
+            }
+          }
+        ]
+      },
+      "ok": true
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A 0x0 size isn't achievable. What resolution do you want, for example 720p or 1080p?"}}]}

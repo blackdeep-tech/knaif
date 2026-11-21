@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["sample.pdf", "sample-scanned.pdf"], "output": "merged.pdf"}}, {"tool": "split_pdf", "args": {"input": "merged.pdf", "ranges": "1-2"}}]}

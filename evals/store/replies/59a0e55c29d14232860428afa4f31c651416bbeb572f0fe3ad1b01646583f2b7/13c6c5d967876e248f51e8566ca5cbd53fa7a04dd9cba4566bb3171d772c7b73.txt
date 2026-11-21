@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_volume", "args": {"inputs": ["clip.mp4"], "level": "6dB", "output": "clip_louder.mp4"}}, {"tool": "extract_audio", "args": {"inputs": ["clip_louder.mp4"], "audio_format": "mp3"}}]}

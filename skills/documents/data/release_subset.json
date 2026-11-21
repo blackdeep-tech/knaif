@@ -1,9 +1,9 @@
 {
  "skill": "documents",
  "corpus": "eval.jsonl",
- "corpus_sha256": "be7a204c1c6de726289776b47916739d9f519eec257f9053e4c24433239f5080",
+ "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
  "method": "D1: in corpus order, the first row of each (expected_tool, expected_outcome, tag set) stratum, plus every row tagged chain2/chain3/edge/hard2/safety; utterance 0 of each",
- "count": 80,
+ "count": 103,
  "rows": [
   ["documents_001", 0],
   ["documents_002", 0],
@@ -84,6 +84,29 @@
   ["documents_hard2_005", 0],
   ["documents_hard2_006", 0],
   ["documents_hard2_007", 0],
-  ["documents_hard2_008", 0]
+  ["documents_hard2_008", 0],
+  ["documents_url_001", 0],
+  ["documents_url_002", 0],
+  ["documents_url_003", 0],
+  ["documents_url_004", 0],
+  ["documents_url_005", 0],
+  ["documents_url_006", 0],
+  ["documents_url_007", 0],
+  ["documents_url_008", 0],
+  ["documents_url_009", 0],
+  ["documents_url_010", 0],
+  ["documents_alert_001", 0],
+  ["documents_alert_002", 0],
+  ["documents_folder_001", 0],
+  ["documents_both_001", 0],
+  ["documents_both_002", 0],
+  ["documents_alert_003", 0],
+  ["documents_batch_001", 0],
+  ["documents_batch_002", 0],
+  ["documents_batch_004", 0],
+  ["documents_batch_005", 0],
+  ["documents_batch_006", 0],
+  ["documents_batch_008", 0],
+  ["documents_batch_009", 0]
  ]
 }

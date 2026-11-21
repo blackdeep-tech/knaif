@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["4K.mov"], "target": "email", "quality": "small_file"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "A 10-second clip trimmed from 50 to 60 seconds isn't achievable. Should I trim the start or end of the clip?"}}]}

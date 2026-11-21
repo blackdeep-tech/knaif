@@ -1,0 +1,103 @@
+{
+  "_comment": "One file into many (owner, 2026-10-20:the names are known before running). A step whose tool writes many files (split_video, extract_frames, create_thumbnail at several times, split_pdf every N pages) gets, from its skill, the set's name and the files it will write. Before scratch routing, core points every later step that reads the set at that one name: a reader of the producer's own output name, or a glob matching every file of the set; a step that names the set already is left as it is. The producer's output becomes the set's name when a step reads it, so routing can move the whole set into the scratch, and the lift then runs the readers once per file. A glob that misses one of the files is not the set. Nothing reads it: the plan is unchanged. Python `knaif.batch_chain.link_set_readers`, Rust `knaif_core::batch_chain::link_set_readers`.",
+  "cases": [
+    {
+      "name": "a_reader_of_the_producers_output_name",
+      "sets": {"0": {"name": "part_%03d.mp4", "files": ["part_001.mp4", "part_002.mp4"]}},
+      "plan": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "every": "10s", "output": "part.mp4"}},
+        {"tool": "compress_video", "args": {"inputs": ["part.mp4"]}}
+      ],
+      "expected": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "every": "10s", "output": "part_%03d.mp4"}},
+        {"tool": "compress_video", "args": {"inputs": ["part_%03d.mp4"]}}
+      ]
+    },
+    {
+      "name": "a_glob_matching_every_file_of_the_set",
+      "sets": {"0": {"name": "clip_%03d.mp4", "files": ["clip_001.mp4", "clip_002.mp4", "clip_003.mp4"]}},
+      "plan": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "parts": 3}},
+        {"tool": "compress_video", "args": {"inputs": ["clip_*.mp4"]}}
+      ],
+      "expected": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "parts": 3, "output": "clip_%03d.mp4"}},
+        {"tool": "compress_video", "args": {"inputs": ["clip_%03d.mp4"]}}
+      ]
+    },
+    {
+      "name": "a_glob_any_case_and_dot_slash",
+      "sets": {"0": {"name": "clip_frame_%03d.jpg", "files": ["clip_frame_001.jpg", "clip_frame_002.jpg"]}},
+      "plan": [
+        {"tool": "extract_frames", "args": {"input": "clip.mp4", "count": 2}},
+        {"tool": "resize_image", "args": {"input": "./CLIP_FRAME_*.JPG"}}
+      ],
+      "expected": [
+        {"tool": "extract_frames", "args": {"input": "clip.mp4", "count": 2, "output": "clip_frame_%03d.jpg"}},
+        {"tool": "resize_image", "args": {"input": "clip_frame_%03d.jpg"}}
+      ]
+    },
+    {
+      "name": "a_glob_that_misses_a_file_is_not_the_set",
+      "sets": {"0": {"name": "clip_%03d.mp4", "files": ["clip_001.mp4", "clip_002.mp4"]}},
+      "plan": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "parts": 2}},
+        {"tool": "compress_video", "args": {"inputs": ["clip_001*.mp4"]}}
+      ],
+      "expected": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "parts": 2}},
+        {"tool": "compress_video", "args": {"inputs": ["clip_001*.mp4"]}}
+      ]
+    },
+    {
+      "name": "nothing_reads_the_set",
+      "sets": {"0": {"name": "clip_%03d.mp4", "files": ["clip_001.mp4", "clip_002.mp4"]}},
+      "plan": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "every": "10s"}},
+        {"tool": "compress_video", "args": {"inputs": ["other.mp4"]}}
+      ],
+      "expected": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "every": "10s"}},
+        {"tool": "compress_video", "args": {"inputs": ["other.mp4"]}}
+      ]
+    },
+    {
+      "name": "a_step_naming_the_set_already",
+      "sets": {"0": {"name": "clip_%03d.mp4", "files": ["clip_001.mp4", "clip_002.mp4"]}},
+      "plan": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "parts": 2, "output": "clip_%03d.mp4"}},
+        {"tool": "compress_video", "args": {"inputs": ["clip_%03d.mp4"]}}
+      ],
+      "expected": [
+        {"tool": "split_video", "args": {"input": "clip.mp4", "parts": 2, "output": "clip_%03d.mp4"}},
+        {"tool": "compress_video", "args": {"inputs": ["clip_%03d.mp4"]}}
+      ]
+    },
+    {
+      "name": "a_join_reads_the_set_by_name",
+      "sets": {"0": {"name": "clip_frame_%03d.jpg", "files": ["clip_frame_001.jpg", "clip_frame_002.jpg"]}},
+      "plan": [
+        {"tool": "extract_frames", "args": {"input": "clip.mp4", "every": "5s", "output": "frame.jpg"}},
+        {"tool": "concat_video", "args": {"inputs": ["frame.jpg"], "output": "all.mp4"}}
+      ],
+      "expected": [
+        {"tool": "extract_frames", "args": {"input": "clip.mp4", "every": "5s", "output": "clip_frame_%03d.jpg"}},
+        {"tool": "concat_video", "args": {"inputs": ["clip_frame_%03d.jpg"], "output": "all.mp4"}}
+      ]
+    },
+    {
+      "name": "steps_before_the_producer_are_untouched",
+      "sets": {"1": {"name": "report-pages.pdf", "files": ["report-pages-1.pdf", "report-pages-2.pdf"]}},
+      "plan": [
+        {"tool": "watermark", "args": {"input": "report-pages-1.pdf", "text": "OLD"}},
+        {"tool": "split_pdf", "args": {"input": "report.pdf", "every": 1}},
+        {"tool": "watermark", "args": {"input": "report-pages-*.pdf", "text": "DRAFT"}}
+      ],
+      "expected": [
+        {"tool": "watermark", "args": {"input": "report-pages-1.pdf", "text": "OLD"}},
+        {"tool": "split_pdf", "args": {"input": "report.pdf", "every": 1, "output": "report-pages.pdf"}},
+        {"tool": "watermark", "args": {"input": "report-pages.pdf", "text": "DRAFT"}}
+      ]
+    }
+  ]
+}

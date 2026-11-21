@@ -25,7 +25,6 @@ Ordered by severity:
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -69,9 +68,11 @@ def test_destination_keeps_inputs_apart_when_stems_collide(engine):
             _recipe("/sb/clip.mov", "/sb/converted/clip.mp4"),
         ]
     )
-    outs = [r["output"] for r in got]
+    outs = [Path(r["output"]).as_posix() for r in got]
     assert outs[0] != outs[1], f"both inputs render {outs[0]}"
-    assert "mov" in outs[1], outs[1]
+    # A taken name gets the first free number (owner, 2026-10-23), which replaced
+    # the source extension (`clip_mov.mp4`).
+    assert outs == ["/sb/converted/clip.mp4", "/sb/converted/clip_1.mp4"], outs
 
 
 def test_a_lone_input_keeps_its_plain_name(engine):
@@ -92,6 +93,22 @@ def test_three_way_collision_terminates(engine):
     assert len(set(outs)) == 3, outs
 
 
+def _probe(name: str) -> dict:
+    """A probe of a short video with sound, as `inspect_media` reports one."""
+    return {
+        "file": str(Path("/sb") / name),
+        "container": Path(name).suffix.lstrip("."),
+        "duration": 10.0,
+        "size_bytes": None,
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "has_audio": True,
+    }
+
+
 def test_a_batch_name_says_which_input_produced_it(engine):
     """`audio_mp4_5.mp3` — observed in `2026-09-15_l4-ffmpeg-t8`, from `clip_no_audio.mp4`.
 
@@ -100,22 +117,31 @@ def test_a_batch_name_says_which_input_produced_it(engine):
     extension*, which five of the six share — so it distinguished nothing and the counter did
     all the work. The user is left with six files and no way to tell which input made which.
 
-    The source stem is what differs here, so it is what the name carries.
+    Since 2026-10-23 (owner) one literal name over many files names none of them:
+    each file keeps its own name, the tool's suffix and the literal's extension
+    (contracts/parity/output_name_cases.json).
     """
-    got = engine.disambiguate_outputs(
-        [
-            _recipe(f"/sb/{name}", "/sb/audio.mp3")
-            for name in ("clip.mov", "clip2.mp4", "clip_4k.mp4", "clip_no_audio.mp4")
-        ]
-    )
+    got = [
+        engine._build_one_recipe(
+            _probe(name),
+            None,
+            None,
+            {
+                "mode": "extract_audio",
+                "audio_format": "mp3",
+                "output_path": "audio.mp3",
+                engine.PER_FILE_NAME: True,
+            },
+        )
+        for name in ("clip.mov", "clip2.mp4", "clip_4k.mp4", "clip_no_audio.mp4")
+    ]
     outs = [Path(r["output"]).name for r in got]
-    assert len(set(outs)) == 4, outs
-    assert outs[0] == "audio.mp3", outs
-    for name, out in zip(("clip2", "clip_4k", "clip_no_audio"), outs[1:], strict=True):
-        assert out == f"audio_{name}.mp3", outs
-    assert not any(
-        re.search(r"_\d+\.", o) for o in outs
-    ), f"a counter carries no information: {outs}"
+    assert outs == [
+        "clip_audio.mp3",
+        "clip2_audio.mp3",
+        "clip_4k_audio.mp3",
+        "clip_no_audio_audio.mp3",
+    ], outs
 
 
 # ── 4. one seconds format, both runtimes ─────────────────────────────────────

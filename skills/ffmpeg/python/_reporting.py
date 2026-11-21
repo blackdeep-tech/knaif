@@ -143,9 +143,16 @@ def _preflight_inputs(
     root: Path,
     sandbox: Path | None = None,
     planned_output_names: set[str] | None = None,
+    planned_extensions: set[str] | None = None,
+    work_dir: Path | None = None,
     **kwargs: Any,
 ) -> list[str]:
-    """Return error strings for any input paths that do not exist."""
+    """Return error strings for any input paths that do not exist.
+
+    A file in this run's scratch (*work_dir*: a downloaded URL input) is the run's own, not a
+    place outside the sandbox. A pattern of a format an earlier step writes
+    (*planned_extensions*) is not checked: those files do not exist until that step runs.
+    """
     raw = args.get("inputs") or args.get("input") or args.get("paths")
     if not raw:
         return []
@@ -160,7 +167,13 @@ def _preflight_inputs(
     # only a request whose every input is a pattern matching nothing has nothing to work on.
     patterns = [p for p in paths if isinstance(p, str) and not p.startswith("$") and _is_glob(p)]
     if patterns:
-        matched = any(_glob_matches(p, base) for p in patterns)
+        # `*.mov` → mp4, then `*.mp4`: the second step's files are the first step's results.
+        # Native expands a step's pattern when that step runs, so it never refused this.
+        planned = {e.lower() for e in planned_extensions or ()}
+        matched = any(
+            _glob_matches(p, base) or Path(p).suffix.lstrip(".").lower() in planned
+            for p in patterns
+        )
         if not matched and len(patterns) == len(paths):
             location = "sandbox" if sandbox is not None else "working directory"
             listed = ", ".join(repr(p) for p in patterns)
@@ -176,7 +189,8 @@ def _preflight_inputs(
             p = (base / raw_path).resolve()
         else:
             p = p.resolve()
-            if sandbox is not None:
+            in_scratch = work_dir is not None and p.is_relative_to(Path(work_dir).resolve())
+            if sandbox is not None and not in_scratch:
                 try:
                     p.relative_to(sandbox.resolve())
                 except ValueError:
@@ -212,6 +226,47 @@ def _preflight_inputs(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def ffmpeg_failure(returncode: Any, stderr: str) -> str:
+    """``ffmpeg failed (exit 1): <the stderr line that names the real error>``.
+
+    Skips the generic "Conversion failed!" sign-off and ffmpeg's progress lines.
+    """
+    msg = f"ffmpeg failed (exit {returncode})"
+    skip = {"conversion failed!", "error while", ""}
+    diag = next(
+        (
+            ln.strip()
+            for ln in reversed((stderr or "").strip().splitlines())
+            if ln.strip().lower() not in skip
+            and not ln.strip().startswith("frame=")
+            and not ln.strip().startswith("size=")
+        ),
+        None,
+    )
+    return f"{msg}: {diag}" if diag else msg
+
+
+def result_line(
+    c: dict[str, Any], size: dict[str, Any] | None, seconds: float | None
+) -> dict[str, Any]:
+    """What one command's end shows: ``output`` (with what a compress saved), or ``kept`` for
+    a compress that could not make its file smaller (`steps._shrunk`)."""
+    if size and size["kept"]:
+        return {
+            "kind": "kept",
+            "message": str(c.get("output") if size["kept"] == "input" else c.get("input")),
+            "written": size["kept"] == "input",
+            "before": size["before"],
+            "after": size["after"],
+        }
+    item: dict[str, Any] = {"kind": "output", "message": str(c.get("output"))}
+    if seconds is not None:
+        item["seconds"] = seconds
+    if size:
+        item["before"], item["after"] = size["before"], size["after"]
+    return item
+
+
 def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dict[str, str]]:
     """Convert a list of execution results into structured items for the CLI.
 
@@ -224,11 +279,20 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
     items: list[dict[str, str]] = []
     inspect_errors: list[str] = []
     batch_outputs: list[dict[str, Any]] = []
+    # Files this step went over: a batch's failures are core's batch report (printed as they
+    # happen, counted at the end), so they are not repeated here.
+    inspected = 0
+    built = 0
 
     for step in results:
         tool = step["tool"]
         res = step.get("result") or {}
+        if tool == "build_recipes":
+            built += len(res.get("skipped") or [])
+        if tool == "run_batch":
+            built += len(res.get("outputs") or [])
         if tool == "inspect_media":
+            inspected += len(res.get("probes") or []) + len(res.get("errors") or [])
             for e in res.get("errors") or []:
                 msg = e.get("error") if isinstance(e, dict) else str(e)
                 if msg:
@@ -236,52 +300,59 @@ def _format_results(results: list[dict[str, Any]], *, dry_run: bool) -> list[dic
         elif tool in ("run_batch", "run_concat"):
             batch_outputs.extend(res.get("outputs") or [])
 
-    for err in inspect_errors:
-        items.append({"kind": "error", "message": err})
-    if inspect_errors:
-        return items  # Bail out on errors, matches old behavior.
+    # The files a batch convert skipped as already in that format, when not shown live.
+    for step in results:
+        if step["tool"] == "build_recipes" and (step.get("result") or {}).get("already"):
+            items.append({"kind": "note", "message": step["result"]["already"]})
+
+    files_seen = max(inspected, built)
+    if files_seen < 2:
+        for err in inspect_errors:
+            items.append({"kind": "error", "message": err})
+        if inspect_errors:
+            return items  # Bail out on errors, matches old behavior.
 
     if dry_run:
         if batch_outputs:
             for out in batch_outputs:
                 cmd = out.get("command") or []
+                # `argv` too: the CLI shows each path as native does (relative, `<work>/…`) and
+                # quotes as its `shell_join`.
                 items.append(
                     {
                         "kind": "command",
                         "message": " ".join(str(c) for c in cmd),
+                        "argv": [str(c) for c in cmd],
                     }
                 )
         else:
             items.append({"kind": "info", "message": "(nothing to execute)"})
     else:
-        produced = []
+        # Each command, then what it wrote, as native shows a step: a `✓` for the file with its
+        # folder and time right after its command (the name alone hid `out/`; every command
+        # first, then every `✓`, was not native's order).
+        # A line already shown as it happened (`run_batch`'s `ctx.show`) is not repeated.
+        produced = 0
         for out in batch_outputs:
+            shown = bool(out.get("shown"))
+            if out.get("command") and not shown:
+                items.append(
+                    {
+                        "kind": "command",
+                        "message": " ".join(str(c) for c in out["command"]),
+                        "argv": [str(c) for c in out["command"]],
+                    }
+                )
             if out.get("returncode", 0) != 0:
-                stderr = (out.get("stderr_tail") or "").strip()
-                msg = f"ffmpeg failed (exit {out['returncode']})"
-                if stderr:
-                    # Skip the generic "Conversion failed!" sign-off and ffmpeg
-                    # progress lines to surface the line that names the real error.
-                    skip = {"conversion failed!", "error while", ""}
-                    diag = next(
-                        (
-                            ln.strip()
-                            for ln in reversed(stderr.splitlines())
-                            if ln.strip().lower() not in skip
-                            and not ln.strip().startswith("frame=")
-                            and not ln.strip().startswith("size=")
-                        ),
-                        None,
-                    )
-                    if diag:
-                        msg = f"{msg}: {diag}"
-                items.append({"kind": "error", "message": msg})
+                if files_seen < 2:
+                    msg = ffmpeg_failure(out["returncode"], out.get("stderr_tail") or "")
+                    items.append({"kind": "error", "message": msg})
             elif out.get("output"):
-                produced.append(out["output"])
-        if produced:
-            for f in produced:
-                items.append({"kind": "output", "message": Path(f).name})
-        elif not any(i["kind"] == "error" for i in items):
+                produced += 1
+                if shown:
+                    continue
+                items.append(result_line(out, out.get("size"), out.get("seconds")))
+        if not produced and not any(i["kind"] == "error" for i in items):
             items.append({"kind": "info", "message": "(no output files produced)"})
 
     return items

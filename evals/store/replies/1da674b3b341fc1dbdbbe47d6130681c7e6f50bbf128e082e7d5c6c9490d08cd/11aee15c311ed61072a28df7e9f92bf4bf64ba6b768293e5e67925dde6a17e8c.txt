@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "What is the password for the PDFs, and where should I save the outputs?"}}]}

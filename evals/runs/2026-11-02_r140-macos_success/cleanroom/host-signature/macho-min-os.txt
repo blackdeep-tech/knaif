@@ -1,0 +1,7 @@
+FAIL: 1 dependency/portability issue(s)
+
+  - libpdfium.dylib: deployment floor is 13.0.0, expected 12.0.0 — MACOSX_DEPLOYMENT_TARGET was not honoured for this binary (it is not a rerun-if-env-changed input, so a stale cached build silently keeps the old floor — see D9)
+
+An unresolved @rpath dependency resolves on THIS machine only because the file happens
+to exist here (a build box, a Mac with Homebrew, ...). Stage it beside the binary, or
+remove the dependency (see D3 for the OpenMP case).

@@ -539,8 +539,9 @@ def test_every_plan_utterance_can_reach_a_file(skill: str) -> None:
     measurement agreeing completely, which is why the fix was a relabel rather than a
     retrain target. See `evals/runs/2026-09-12_t6a-control_success/report.md`.
 
-    `batch` rows are exempt by design: their expected plan *is* a glob, so naming no file is
-    the request, not a gap in it.
+    `batch` and `many_files` rows are exempt by design: their expected plan *is* a glob, so
+    naming no file is the request, not a gap in it. A URL names its file by itself (the
+    URL-inputs rows, eval.jsonl since 2026-10-28).
     """
     rows = _corpus_rows(skill)
     fixtures = {(r.get("fixture") or "").lower() for r in rows if r.get("fixture")}
@@ -556,7 +557,8 @@ def test_every_plan_utterance_can_reach_a_file(skill: str) -> None:
     def reaches_a_file(utterance: str) -> bool:
         u = utterance.lower()
         return (
-            any(_token(f).search(u) for f in fixtures)
+            "://" in u
+            or any(_token(f).search(u) for f in fixtures)
             or any(_token(s).search(u) for s in stems)
             or any(_token(e).search(u) for e in unique_ext)
         )
@@ -564,7 +566,8 @@ def test_every_plan_utterance_can_reach_a_file(skill: str) -> None:
     unreachable = [
         f"{row['id']}#{i} {utterance!r}"
         for row in rows
-        if row.get("expected_outcome") == "plan" and "batch" not in set(row.get("tags") or [])
+        if row.get("expected_outcome") == "plan"
+        and not {"batch", "many_files"} & set(row.get("tags") or [])
         for i, utterance in enumerate(row["utterances"])
         if not reaches_a_file(utterance)
     ]

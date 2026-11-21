@@ -118,6 +118,94 @@ pub fn expand_execute(
     expand(tool, args, data, sandbox, ProbeMode::Execute)
 }
 
+/// This run's scratch, for an expansion that may read or write in it (`knaif_core::scratch`).
+#[derive(Debug, Clone, Copy)]
+pub struct ScratchCtx<'a> {
+    /// The run's scratch folder: a routed chain intermediate lives here.
+    pub work_dir: &'a Path,
+    /// The folder the user sees (the sandbox, else cwd).
+    pub home: &'a Path,
+}
+
+/// [`expand`] with the run's scratch: an input in `work_dir` (a routed chain intermediate) is
+/// accepted, an output named after it lands in `home`, and a routed output may be in `work_dir`.
+pub fn expand_in(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+    mode: ProbeMode,
+    scratch: Option<&ScratchCtx>,
+) -> anyhow::Result<Expansion> {
+    // concat_video joins N inputs into ONE command — it doesn't fit the per-input recipe shape.
+    if tool == "concat_video" {
+        return expand_concat(args, data, sandbox, mode, scratch);
+    }
+    let rendered = match recipes(tool, args, data, sandbox, mode, scratch)? {
+        Ok(r) => r,
+        Err(clarify) => return Ok(Expansion::Clarify(clarify)),
+    };
+    Ok(Expansion::Commands(
+        rendered
+            .iter()
+            .map(|(recipe, pre, post)| render_command(recipe, pre, post, None))
+            .collect(),
+    ))
+}
+
+/// Whether `tool` previews for these args: `reverse_video` always, `prepare_for_platform` unless
+/// told not to, the batch tools with a preview block only on `preview: true`. Port of the
+/// `_build_preview_block` call sites in `skills/ffmpeg/python/intents.py`.
+pub fn previews(tool: &str, args: &serde_json::Map<String, Value>) -> bool {
+    let asked = args.get("preview").and_then(Value::as_bool);
+    match tool {
+        "reverse_video" => true,
+        "prepare_for_platform" => asked.unwrap_or(true),
+        "compress_video" | "convert_video" | "resize_video" | "trim_video" => asked == Some(true),
+        _ => false,
+    }
+}
+
+/// The preview clip's command, when `tool` previews: the first input, 10 s from the start,
+/// rendered into `<work>/preview/<stem>_preview.<container>`. Port of `render_preview_command`,
+/// with `_preview_output_for` moved into the scratch. `None` when the tool does not preview.
+pub fn preview_command(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+    mode: ProbeMode,
+    scratch: &ScratchCtx,
+) -> anyhow::Result<Option<Vec<String>>> {
+    if !previews(tool, args) {
+        return Ok(None);
+    }
+    let Ok(rendered) = recipes(tool, args, data, sandbox, mode, Some(scratch))? else {
+        return Ok(None);
+    };
+    let Some((recipe, pre, post)) = rendered.first() else {
+        return Ok(None);
+    };
+    let stem = Path::new(&recipe.input)
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let container = recipe
+        .container
+        .clone()
+        .unwrap_or_else(|| "mp4".to_string());
+    let out = scratch
+        .work_dir
+        .join("preview")
+        .join(format!("{stem}_preview.{container}"));
+    let preview = crate::engine::Preview {
+        start: Some("0".to_string()),
+        duration: Some("10".to_string()),
+        output_override: Some(out.to_string_lossy().into_owned()),
+    };
+    Ok(Some(render_command(recipe, pre, post, Some(&preview))))
+}
+
 /// Expand a validated ffmpeg intent step into the `ffmpeg` command(s) it would run.
 ///
 /// `tool` is the intent name (`compress_video`, …); `args` is the step's already-validated arg
@@ -131,28 +219,83 @@ pub fn expand(
     sandbox: Option<&Path>,
     mode: ProbeMode,
 ) -> anyhow::Result<Expansion> {
-    // concat_video joins N inputs into ONE command — it doesn't fit the per-input recipe shape.
-    if tool == "concat_video" {
-        return expand_concat(args, data, sandbox, mode);
+    expand_in(tool, args, data, sandbox, mode, None)
+}
+
+/// One rendered recipe: the recipe (its output final) and its pre/post-input flags.
+type Rendered = (crate::engine::Recipe, Vec<String>, Vec<String>);
+
+/// The per-input recipes for a (non-concat) intent, or the clarify it needs.
+fn recipes(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+    mode: ProbeMode,
+    scratch: Option<&ScratchCtx>,
+) -> anyhow::Result<Result<Vec<Rendered>, String>> {
+    // One file into many (split_video, extract_frames, create_thumbnail at several times): one
+    // recipe per piece, from each input's probe (`crate::pieces`).
+    if crate::pieces::writes_many(tool, args) {
+        return piece_recipes(tool, args, data, sandbox, mode, scratch).map(Ok);
     }
-    let resolved = match resolve_intent(tool, args, data)? {
+    let mut resolved = match resolve_intent(tool, args, data)? {
         Ok(r) => r,
-        Err(clarify) => return Ok(Expansion::Clarify(clarify)),
+        Err(clarify) => return Ok(Err(clarify)),
     };
+    if let Some(sc) = scratch {
+        resolved.options.work_dir = Some(sc.work_dir.to_path_buf());
+        resolved.options.home = Some(sc.home.to_path_buf());
+    }
+    let work_dir = scratch.map(|sc| sc.work_dir);
     // Globs become one input per matching file BEFORE the render loop, so each match gets its own
     // command and its own derived output name (N1).
-    let inputs = expand_input_globs(&resolved.inputs, sandbox, &data.vocab.media_extensions)?;
+    let inputs = expand_input_globs(&resolved.inputs, sandbox, &data.vocab.media_extensions, &[])?;
+    // Every input a pattern and none matched: nothing to work on, so ask, in Python's preflight
+    // words (`_preflight_inputs`); an empty run used to report "Done".
+    let patterns: Vec<&String> = resolved
+        .inputs
+        .iter()
+        .filter(|p| !p.starts_with('$') && has_glob_magic(p))
+        .collect();
+    if inputs.is_empty() && !patterns.is_empty() && patterns.len() == resolved.inputs.len() {
+        let location = if sandbox.is_some() {
+            "sandbox"
+        } else {
+            "working directory"
+        };
+        let listed: Vec<String> = patterns.iter().map(|p| format!("'{p}'")).collect();
+        return Ok(Err(format!(
+            "no files match {} in the {location}",
+            listed.join(", ")
+        )));
+    }
     // Build every recipe first: only the batch can see two inputs landing on one output
     // path, and every rendered command carries -y, so an unresolved clash is a silent
     // overwrite rather than an error.
     let mut recipes = Vec::with_capacity(inputs.len());
-    let mut outs: Vec<(std::path::PathBuf, std::path::PathBuf)> = Vec::with_capacity(inputs.len());
+    let mut outs: Vec<(std::path::PathBuf, std::path::PathBuf, bool)> =
+        Vec::with_capacity(inputs.len());
+    // More than one file: a literal output name names none of them.
+    resolved.options.per_file_name = inputs.len() > 1;
     let mut skipped: Vec<String> = Vec::new();
+    let mut skipped_paths: Vec<std::path::PathBuf> = Vec::new();
+    let mut unreadable: Vec<(std::path::PathBuf, String)> = Vec::new();
     for input in &inputs {
         // Probe and render the RESOLVED path — checking one representation and reading another
         // is not a boundary (see resolve_input_in_sandbox; fix review R1).
-        let input_path = resolve_input_in_sandbox(input, sandbox)?;
-        let probe = probe_input(&input_path, data, mode)?;
+        let input_path = resolve_input_in_sandbox(input, sandbox, work_dir)?;
+        let probe = match probe_input(&input_path, data, mode) {
+            Ok(probe) => probe,
+            // One unreadable file of a step over many is that file's failure; the others go on
+            // (Python's `inspect_media` under `ctx.file_finished`).
+            Err(e) if mode == ProbeMode::Execute && inputs.len() > 1 => {
+                let reason = probe_reason(&e.to_string(), &input_path);
+                unreadable.push((input_path, reason));
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
         // ffmpeg cannot extract audio from a file that has none: it exits with "Output file does
         // not contain any stream", and one silent video in a folder of ten takes the whole batch
         // down. The probe already answered this, so building the command anyway discards a fact
@@ -168,6 +311,7 @@ pub fn expand(
                     .map(|n| n.to_string_lossy().into_owned())
                     .unwrap_or_else(|| input_path.to_string_lossy().into_owned()),
             );
+            skipped_paths.push(input_path);
             continue;
         }
         // A trim that starts at or past the end has no answer: ffmpeg would exit 0 with an empty
@@ -192,26 +336,298 @@ pub fn expand(
             &data.vocab,
             sandbox,
         )?;
-        outs.push((input_path.clone(), std::path::PathBuf::from(&recipe.output)));
+        outs.push((
+            input_path.clone(),
+            std::path::PathBuf::from(&recipe.output),
+            recipe.default_name,
+        ));
         recipes.push(recipe);
+    }
+    if let Some(note) =
+        copies_of_themselves(resolved.options.mode.as_deref(), &mut recipes, &mut outs)?
+    {
+        if let Ok(mut all) = NOTES.lock() {
+            all.push(note);
+        }
     }
     // Skipping every input is not success with zero results: an empty command list executes
     // cleanly and reports done, telling the user the work happened.
     if recipes.is_empty() && !skipped.is_empty() {
         anyhow::bail!("{}", no_audio_error(&skipped));
     }
-    // Returning fewer files than asked for without saying why reads as a tool that lost a file.
-    if !skipped.is_empty() {
+    if recipes.is_empty() {
+        if let Some((_, reason)) = unreadable.first() {
+            anyhow::bail!("{reason}");
+        }
+    }
+    // Returning fewer files than asked for without saying why reads as a tool that lost a file:
+    // a real run reports each as a failed file of the batch (`take_file_failures`), a preview
+    // notes them.
+    if mode == ProbeMode::Execute {
+        let mut failures = unreadable;
+        failures.extend(
+            skipped_paths
+                .into_iter()
+                .map(|p| (p, "has no audio track to extract".to_string())),
+        );
+        if let Ok(mut all) = FILE_FAILURES.lock() {
+            all.extend(failures);
+        }
+    } else if !skipped.is_empty() {
         eprintln!("note: skipped {} (no audio track)", skipped.join(", "));
     }
     crate::engine::disambiguate_outputs(&mut outs);
-    let mut commands = Vec::with_capacity(recipes.len());
-    for (mut recipe, (_, out)) in recipes.into_iter().zip(outs) {
+    let mut rendered = Vec::with_capacity(recipes.len());
+    for (mut recipe, (_, out, _)) in recipes.into_iter().zip(outs) {
         recipe.output = out.to_string_lossy().into_owned();
         let (pre, post) = build_flags(&recipe, &data.vocab)?;
-        commands.push(render_command(&recipe, &pre, &post, None));
+        rendered.push((recipe, pre, post));
     }
-    Ok(Expansion::Commands(commands))
+    Ok(Ok(rendered))
+}
+
+/// The files a split, a frame grab or thumbnails at several times will write, before anything
+/// runs: the set's name and its files, relative to where paths resolve. The
+/// input is probed (a missing one as in a preview); an unreadable one is no set, the step itself
+/// reports it. `None` for a step that writes one file. Port of `FFmpegSkill.planned_outputs`.
+pub fn planned_set(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+) -> anyhow::Result<Option<(String, Vec<String>)>> {
+    if !crate::pieces::writes_many(tool, args) {
+        return Ok(None);
+    }
+    let source = match args.get("input") {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(items)) => items
+            .first()
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+        _ => String::new(),
+    };
+    if source.is_empty() {
+        return Ok(None);
+    }
+    let path = Path::new(&source);
+    let path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        match sandbox {
+            Some(s) => s.join(path),
+            None => std::env::current_dir()?.join(path),
+        }
+    };
+    let probe = if path.is_file() {
+        match crate::exec::run_ffprobe(&path) {
+            Ok(probe) => probe,
+            Err(_) => return Ok(None),
+        }
+    } else {
+        crate::engine::dummy_probe(&path, &data.vocab)
+    };
+    let pieces = crate::pieces::plan_pieces(
+        tool,
+        args,
+        probe.duration.unwrap_or(0.0),
+        probe.fps,
+        &data.vocab.image_extensions,
+    )?;
+    Ok(pieces.map(|p| (p.name, p.items.into_iter().map(|(out, _)| out).collect())))
+}
+
+/// The files of a step over many that failed before any command ran (unreadable, or silent for
+/// `extract_audio`), with why, recorded by a real run's expansion for the caller's batch report.
+static FILE_FAILURES: std::sync::Mutex<Vec<(std::path::PathBuf, String)>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// ffprobe's first line of complaint, without the path (it names the user's folders) or
+/// ffmpeg's `[demuxer @ address]` prefix: `moov atom not found`. Port of `_probe_reason`.
+fn probe_reason(error: &str, path: &Path) -> String {
+    let shown = path.display().to_string();
+    let text = error
+        .strip_prefix(&format!("ffprobe failed for {shown}: "))
+        .unwrap_or(error);
+    for line in text.lines() {
+        let mut line = line.trim();
+        // `[mov,mp4,… @ 0000024b82885000] ` / `[… @ 0x55d…] `
+        if let Some(rest) = line.strip_prefix('[') {
+            if let Some((inside, after)) = rest.split_once(']') {
+                if let Some((_, addr)) = inside.rsplit_once(" @ ") {
+                    let addr = addr.strip_prefix("0x").unwrap_or(addr);
+                    if !addr.is_empty() && addr.chars().all(|c| c.is_ascii_hexdigit()) {
+                        line = after.trim_start();
+                    }
+                }
+            }
+        }
+        let line = line.strip_prefix(&format!("{shown}: ")).unwrap_or(line);
+        if !line.is_empty() {
+            return line.to_string();
+        }
+    }
+    error.to_string()
+}
+
+/// What the last expansions skipped and say once (a batch convert's files already in that
+/// format), for the caller to print as a note.
+static NOTES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+/// Take the notes the last expansions recorded (see [`NOTES`]).
+pub fn take_notes() -> Vec<String> {
+    NOTES
+        .lock()
+        .map(|mut all| std::mem::take(&mut *all))
+        .unwrap_or_default()
+}
+
+/// Drop the files of a batch convert that would only be copied, as they are, beside
+/// themselves: an mp4 among "every video to mp4" became `concert_1.mp4` (owner, 2026-10-25).
+/// Into another folder the copy is work, and one file the user names keeps its numbered
+/// copy. The note to print, or an error when every file is one. Python
+/// `_without_copies_of_themselves`.
+fn copies_of_themselves(
+    mode: Option<&str>,
+    recipes: &mut Vec<crate::engine::Recipe>,
+    outs: &mut Vec<(std::path::PathBuf, std::path::PathBuf, bool)>,
+) -> anyhow::Result<Option<String>> {
+    if mode != Some("convert") || recipes.len() < 2 {
+        return Ok(None);
+    }
+    let folder = |p: &Path| {
+        let parent = p.parent().unwrap_or(Path::new(""));
+        let abs = std::path::absolute(parent).unwrap_or_else(|_| parent.to_path_buf());
+        let text = abs.to_string_lossy().into_owned();
+        // A Windows path compares without case, as the folder does.
+        if cfg!(windows) {
+            text.to_lowercase()
+        } else {
+            text
+        }
+    };
+    let ext = |p: &Path| {
+        p.extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default()
+    };
+    let target = ext(Path::new(&recipes[0].output));
+    let mut skipped: Vec<String> = Vec::new();
+    let mut kept_recipes = Vec::with_capacity(recipes.len());
+    let mut kept_outs = Vec::with_capacity(outs.len());
+    for (recipe, out) in recipes.drain(..).zip(outs.drain(..)) {
+        let (src, dst) = (Path::new(&recipe.input), Path::new(&recipe.output));
+        if recipe.remux && ext(src) == ext(dst) && folder(src) == folder(dst) {
+            skipped.push(
+                src.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| recipe.input.clone()),
+            );
+        } else {
+            kept_recipes.push(recipe);
+            kept_outs.push(out);
+        }
+    }
+    *recipes = kept_recipes;
+    *outs = kept_outs;
+    if skipped.is_empty() {
+        return Ok(None);
+    }
+    let names = skipped.join(", ");
+    if recipes.is_empty() {
+        let verb = if skipped.len() == 1 { "is" } else { "are" };
+        anyhow::bail!("Nothing to convert: {names} {verb} already {target}.");
+    }
+    Ok(Some(format!("note: skipped {names} (already {target})")))
+}
+
+/// Take the failed files the last expansions recorded (see [`FILE_FAILURES`]).
+pub fn take_file_failures() -> Vec<(std::path::PathBuf, String)> {
+    FILE_FAILURES
+        .lock()
+        .map(|mut all| std::mem::take(&mut *all))
+        .unwrap_or_default()
+}
+
+/// The recipes of a tool that writes many files from one: each piece is a trim or a thumbnail
+/// recipe of its own, written where the planned set says, so the preview names what is written.
+/// Port of Python `_piece_recipes` (the pieces from `crate::pieces::plan_pieces`, the same
+/// planner the planned set is read from).
+fn piece_recipes(
+    tool: &str,
+    args: &serde_json::Map<String, Value>,
+    data: &FfmpegData,
+    sandbox: Option<&Path>,
+    mode: ProbeMode,
+    scratch: Option<&ScratchCtx>,
+) -> anyhow::Result<Vec<Rendered>> {
+    let work_dir = scratch.map(|sc| sc.work_dir);
+    let raw = match args.get("input").filter(|v| !v.is_null()) {
+        Some(v) => coerce_inputs(Some(v))?,
+        None => coerce_inputs(args.get("inputs"))?,
+    };
+    let inputs = expand_input_globs(&raw, sandbox, &data.vocab.media_extensions, &[])?;
+    let quality = resolve_quality_profile(
+        &str_arg(args, "quality").unwrap_or_else(|| "visually_good".into()),
+        data,
+    )?;
+    // A piece's name is relative to where paths resolve (the input's folder leads it), so it is
+    // written there: the sandbox, else the working directory, as Python's `base / path`.
+    let base = match sandbox {
+        Some(s) => s.to_path_buf(),
+        None => std::env::current_dir()?,
+    };
+    let mut rendered = Vec::new();
+    for input in &inputs {
+        let input_path = resolve_input_in_sandbox(input, sandbox, work_dir)?;
+        let probe = probe_input(&input_path, data, mode)?;
+        let Some(pieces) = crate::pieces::plan_pieces(
+            tool,
+            args,
+            probe.duration.unwrap_or(0.0),
+            probe.fps,
+            &data.vocab.image_extensions,
+        )?
+        else {
+            continue;
+        };
+        for (out, piece) in pieces.items {
+            let out_path = if Path::new(&out).is_absolute() {
+                std::path::PathBuf::from(&out)
+            } else {
+                base.join(&out)
+            };
+            let mut options = Options {
+                output_path: Some(out_path.to_string_lossy().into_owned()),
+                work_dir: scratch.map(|sc| sc.work_dir.to_path_buf()),
+                home: scratch.map(|sc| sc.home.to_path_buf()),
+                ..Options::default()
+            };
+            match piece {
+                crate::pieces::Piece::Trim { start, duration } => {
+                    options.mode = Some("trim".into());
+                    options.start = Some(start);
+                    options.duration = Some(duration);
+                }
+                crate::pieces::Piece::Still {
+                    at_time,
+                    image_format,
+                    scale,
+                } => {
+                    options.mode = Some("thumbnail".into());
+                    options.at_time = Some(at_time);
+                    options.image_format = Some(image_format);
+                    options.scale = scale;
+                }
+            }
+            let recipe =
+                build_one_recipe(&probe, None, Some(&quality), &options, &data.vocab, sandbox)?;
+            let (pre, post) = build_flags(&recipe, &data.vocab)?;
+            rendered.push((recipe, pre, post));
+        }
+    }
+    Ok(rendered)
 }
 
 /// Expand `concat_video`: assemble the ordered input list (`inputs`, or `base` + `append`), probe
@@ -222,21 +638,38 @@ fn expand_concat(
     data: &FfmpegData,
     sandbox: Option<&Path>,
     mode: ProbeMode,
+    scratch: Option<&ScratchCtx>,
 ) -> anyhow::Result<Expansion> {
+    let work_dir = scratch.map(|sc| sc.work_dir);
     let inputs = assemble_concat_inputs(args)?;
     if inputs.is_empty() {
         anyhow::bail!("concat_video requires either 'inputs' or 'base'/'append' args.");
     }
     let output = str_arg(args, "output").unwrap_or_else(|| "combined.mp4".to_string());
+    // A pattern or folder in `inputs` expands in natural order and never matches the join's own
+    // output (Python passes `inputs` through `resolve_inputs` with `exclude: [output]`). The
+    // `base` + `append` form names its files and is left as written, as in Python.
+    let inputs = if args.contains_key("base") || args.contains_key("append") {
+        inputs
+    } else {
+        expand_input_globs(
+            &inputs,
+            sandbox,
+            &data.vocab.media_extensions,
+            std::slice::from_ref(&output),
+        )?
+    };
     let out_path = resolve_output(&output, sandbox)?;
-    crate::engine::assert_in_sandbox(&out_path, sandbox)?;
+    if !crate::engine::within(&out_path, work_dir) {
+        crate::engine::assert_in_sandbox(&out_path, sandbox)?;
+    }
 
     // Resolve + boundary-check every concat input, then probe AND render the resolved paths —
     // the raw list must not reach the rendered command (see resolve_input_in_sandbox; R1).
     let mut infos = Vec::with_capacity(inputs.len());
     let mut resolved_inputs = Vec::with_capacity(inputs.len());
     for input in &inputs {
-        let input_path = resolve_input_in_sandbox(input, sandbox)?;
+        let input_path = resolve_input_in_sandbox(input, sandbox, work_dir)?;
         let probe = probe_input(&input_path, data, mode)?;
         infos.push(crate::concat::ConcatInfo::from_probe(&probe));
         resolved_inputs.push(input_path.to_string_lossy().into_owned());
@@ -350,13 +783,15 @@ fn collapse_star_runs(pattern: &str) -> String {
 /// The semantics are Python's, and each one is load-bearing:
 /// * the pattern applies to the **name component only** — `videos/*.mp4` globs inside `videos/`,
 ///   never recursively, so a glob cannot quietly pull in a whole tree;
-/// * results are **sorted**, so the rendered command order is reproducible;
+/// * results come back in **natural order** (`clip1`, `clip2`, `clip10`), the order a batch runs
+///   its files in (contracts/parity/batch_cases.json);
 /// * **files only** — a matching directory is not an input;
+/// * a **folder** reads as every media file in it, not recursively;
+/// * `exclude` drops a match that is one of the given paths (`concat_video` passes its own output,
+///   which a second "merge all the clips here" would otherwise read back);
 /// * a path with no magic is passed through **untouched even when missing**, leaving "not found"
 ///   to the probe rather than silently expanding to nothing.
 ///
-/// Not applied to `concat_video`: Python's `ConcatVideoIntent` does not route its inputs through
-/// `ResolveInputs`, so globbing there would be a divergence, not a fix.
 /// Expand globs to one input per matching file, keeping only media.
 ///
 /// `media_extensions` mirrors Python, which passes the same list to `resolve_inputs` at all 13
@@ -367,13 +802,32 @@ fn expand_input_globs(
     inputs: &[String],
     sandbox: Option<&Path>,
     media_extensions: &[String],
+    exclude: &[String],
 ) -> anyhow::Result<Vec<String>> {
+    let excluded: Vec<std::path::PathBuf> = exclude
+        .iter()
+        .filter_map(|e| resolve_input_in_sandbox(e, sandbox, None).ok())
+        .filter_map(|p| p.canonicalize().ok())
+        .collect();
     let mut out = Vec::with_capacity(inputs.len());
     for raw in inputs {
-        if !has_glob_magic(raw) {
-            out.push(raw.clone());
-            continue;
-        }
+        // A folder is every file in it: the pattern `*` inside the folder as written.
+        let folder = (!has_glob_magic(raw))
+            .then(|| resolve_input_in_sandbox(raw, sandbox, None).ok())
+            .flatten()
+            .filter(|p| p.is_dir());
+        let as_glob;
+        let raw = match &folder {
+            Some(_) => {
+                as_glob = format!("{}/*", raw.trim_end_matches(['/', '\\']));
+                &as_glob
+            }
+            None if !has_glob_magic(raw) => {
+                out.push(raw.clone());
+                continue;
+            }
+            None => raw,
+        };
         let as_path = Path::new(raw);
         let Some(file_name) = as_path.file_name().and_then(|n| n.to_str()) else {
             out.push(raw.clone());
@@ -391,7 +845,7 @@ fn expand_input_globs(
         };
         // The directory is resolved and boundary-checked like any other input, so a pattern
         // cannot read outside the sandbox.
-        let dir = resolve_input_in_sandbox(&parent.to_string_lossy(), sandbox)?;
+        let dir = resolve_input_in_sandbox(&parent.to_string_lossy(), sandbox, None)?;
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue; // No such directory: the pattern matches nothing, exactly as Python's does.
         };
@@ -399,10 +853,14 @@ fn expand_input_globs(
         // `videos/a.mp4` for `videos/*.mp4` — rather than the resolved directory joined to the
         // name. The render loop resolves every input against the sandbox anyway, so re-basing
         // here would resolve twice and leave a synthesized `.\` in the rendered command.
-        let as_written = as_path.parent().unwrap_or(Path::new(""));
-        let mut matched: Vec<String> = entries
+        let mut matched: Vec<(String, String)> = entries
             .flatten()
             .filter(|e| e.path().is_file())
+            .filter(|e| {
+                e.path()
+                    .canonicalize()
+                    .map_or(true, |p| !excluded.contains(&p))
+            })
             .filter(|e| {
                 e.file_name()
                     .to_str()
@@ -421,14 +879,18 @@ fn expand_input_globs(
                     })
             })
             .map(|e| {
-                as_written
-                    .join(e.file_name())
-                    .to_string_lossy()
-                    .into_owned()
+                let name = e.file_name().to_string_lossy().into_owned();
+                // The pattern's own separator: `Path::join` printed `"videos\\a.mp4"` on Windows
+                // for `videos/*.mp4`.
+                let shown = match raw.rfind(['/', '\\']) {
+                    Some(i) => format!("{}{name}", &raw[..=i]),
+                    None => name.clone(),
+                };
+                (name, shown)
             })
             .collect();
-        matched.sort();
-        out.extend(matched);
+        matched.sort_by_key(|(name, _)| knaif_toolkit_fs::natural_key(name));
+        out.extend(matched.into_iter().map(|(_, shown)| shown));
     }
     Ok(out)
 }
@@ -436,6 +898,7 @@ fn expand_input_globs(
 fn resolve_input_in_sandbox(
     raw: &str,
     sandbox: Option<&Path>,
+    work_dir: Option<&Path>,
 ) -> anyhow::Result<std::path::PathBuf> {
     let Some(sb) = sandbox else {
         // Open/CLI mode: no boundary to enforce and nothing to re-base — keep the raw string so
@@ -443,7 +906,11 @@ fn resolve_input_in_sandbox(
         return Ok(std::path::PathBuf::from(raw));
     };
     let resolved = knaif_skill_api::sandbox::resolve_real(Path::new(raw), sb);
-    knaif_skill_api::sandbox::assert_in_sandbox(&resolved, sb)?;
+    // A routed chain intermediate lives in this run's scratch. Only core routing or an earlier
+    // step can name it: the model's own paths were checked against the sandbox before routing.
+    if !crate::engine::within(&resolved, work_dir) {
+        knaif_skill_api::sandbox::assert_in_sandbox(&resolved, sb)?;
+    }
     Ok(resolved)
 }
 
@@ -483,6 +950,8 @@ pub fn is_supported(tool: &str) -> bool {
             | "resize_video"
             | "reverse_video"
             | "rotate_video"
+            | "split_video"
+            | "extract_frames"
             | "strip_audio"
             | "trim_video"
     )
@@ -1009,6 +1478,24 @@ mod tests {
     // Ground truth captured from the Python engine (skills/ffmpeg/python/_engine.py) for the same
     // intent args — the native path must render byte-identical argv.
 
+    /// "convert all the avi files to mp4" with no avi here ran nothing and said "Done"; Python's
+    /// preflight asks. The same words both sides (`skills/ffmpeg/python/_reporting.py`,
+    /// `_preflight_inputs`).
+    #[test]
+    fn a_glob_that_matches_nothing_asks() {
+        let dir = std::env::temp_dir().join(format!("knaif-no-match-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("clip.mp4"), b"").unwrap();
+        let a = args(serde_json::json!({"inputs": ["*.avi"], "container": "mp4"}));
+        let got = expand_dry_run("convert_video", &a, &data(), Some(&dir)).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        match got {
+            Expansion::Clarify(q) => assert_eq!(q, "no files match '*.avi' in the sandbox"),
+            Expansion::Commands(c) => panic!("expected a question, got commands {c:?}"),
+        }
+    }
+
     #[test]
     fn prepare_for_platform_youtube() {
         assert_eq!(
@@ -1099,7 +1586,7 @@ mod tests {
                 "libopus",
                 "-b:a",
                 "128k",
-                "a_converted.webm"
+                "a.webm"
             ]
         );
     }
@@ -1115,15 +1602,7 @@ mod tests {
                 "convert_video",
                 serde_json::json!({"inputs": "a.mov", "container": "mkv"})
             ),
-            vec![
-                "ffmpeg",
-                "-y",
-                "-i",
-                "a.mov",
-                "-c",
-                "copy",
-                "a_converted.mkv"
-            ]
+            vec!["ffmpeg", "-y", "-i", "a.mov", "-c", "copy", "a.mkv"]
         );
     }
 
@@ -1494,6 +1973,100 @@ mod tests {
             "{cmds:?}"
         );
         std::fs::remove_dir_all(&sandbox).ok();
+    }
+
+    fn commands_of(tool: &str, a: serde_json::Value, sandbox: &Path) -> Vec<Vec<String>> {
+        match expand_dry_run(tool, &args(a), &data(), Some(sandbox)).unwrap() {
+            Expansion::Commands(c) => c,
+            Expansion::Clarify(q) => panic!("expected commands, got clarify: {q}"),
+        }
+    }
+
+    fn input_names(cmds: &[Vec<String>]) -> Vec<String> {
+        cmds.iter()
+            .flat_map(|c| c.windows(2).filter(|w| w[0] == "-i").map(|w| w[1].clone()))
+            .map(|i| {
+                Path::new(&i)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_unreadable_files_reason_is_ffprobes_first_complaint() {
+        // Python `_probe_reason`: no path (it names the user's folders), no `[demuxer @ address]`.
+        let path = Path::new("C:/clips/broken.mov");
+        let error = "ffprobe failed for C:/clips/broken.mov: [mov,mp4,m4a,3gp,3g2,mj2 @ \
+                     0000024b82885000] moov atom not found\nC:/clips/broken.mov: Invalid data";
+        assert_eq!(probe_reason(error, path), "moov atom not found");
+        assert_eq!(
+            probe_reason(
+                "ffprobe failed for C:/clips/broken.mov: \nC:/clips/broken.mov: Invalid data found",
+                path
+            ),
+            "Invalid data found"
+        );
+        assert_eq!(probe_reason("odd", path), "odd");
+    }
+
+    #[test]
+    fn a_glob_comes_back_in_natural_order() {
+        // `clip1, clip2, clip10`, the order a batch runs its files in.
+        let sandbox = glob_sandbox("natural");
+        for name in ["clip10.mp4", "clip2.mp4", "clip1.mp4"] {
+            std::fs::write(sandbox.join(name), b"x").unwrap();
+        }
+        let cmds = commands_of(
+            "convert_video",
+            serde_json::json!({"inputs": ["*.mp4"], "container": "mkv"}),
+            &sandbox,
+        );
+        std::fs::remove_dir_all(&sandbox).ok();
+        assert_eq!(input_names(&cmds), ["clip1.mp4", "clip2.mp4", "clip10.mp4"]);
+    }
+
+    #[test]
+    fn a_folder_input_expands_to_its_media_files() {
+        // A folder reads as every media file in it, natural order, files only (Python's
+        // `resolve_inputs`).
+        let sandbox = glob_sandbox("folder");
+        std::fs::create_dir_all(sandbox.join("videos/nested")).unwrap();
+        for name in [
+            "videos/b.mp4",
+            "videos/a.mov",
+            "videos/notes.txt",
+            "videos/nested/c.mp4",
+        ] {
+            std::fs::write(sandbox.join(name), b"x").unwrap();
+        }
+        let cmds = commands_of(
+            "convert_video",
+            serde_json::json!({"inputs": ["videos/"], "container": "mkv"}),
+            &sandbox,
+        );
+        std::fs::remove_dir_all(&sandbox).ok();
+        assert_eq!(input_names(&cmds), ["a.mov", "b.mp4"]);
+    }
+
+    #[test]
+    fn concat_expands_a_glob_and_never_reads_its_own_output() {
+        // "merge all the clips here into one", a second time: `all.mp4` from the first run is
+        // not read back.
+        let sandbox = glob_sandbox("concat");
+        for name in ["clip10.mp4", "clip2.mp4", "clip1.mp4", "all.mp4"] {
+            std::fs::write(sandbox.join(name), b"x").unwrap();
+        }
+        let cmds = commands_of(
+            "concat_video",
+            serde_json::json!({"inputs": ["*.mp4"], "output": "all.mp4"}),
+            &sandbox,
+        );
+        std::fs::remove_dir_all(&sandbox).ok();
+        assert_eq!(cmds.len(), 1, "{cmds:?}");
+        assert_eq!(input_names(&cmds), ["clip1.mp4", "clip2.mp4", "clip10.mp4"]);
     }
 
     #[test]

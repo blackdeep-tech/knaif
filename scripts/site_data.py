@@ -221,7 +221,7 @@ def _skill_json(name: str) -> dict[str, Any] | None:
         "description": skill.description,
         "recommended_model": skill.recommended_model,
         "runtimes": {
-            "python": "python" in skill.runtimes,
+            "python": (skill.skill_dir / "python").is_dir(),
             "native": native,
         },
         "external_tools": [

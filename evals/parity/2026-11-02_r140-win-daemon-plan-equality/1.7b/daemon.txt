@@ -1,0 +1,4 @@
+Starting the model daemon (knaif-qwen3-1.7b-v2-q6_k)...
+knaif daemon is running with knaif-qwen3-1.7b-v2-q6_k.
+Later runs use it automatically; stop it with `knaif daemon stop`.
+knaif daemon stopped.

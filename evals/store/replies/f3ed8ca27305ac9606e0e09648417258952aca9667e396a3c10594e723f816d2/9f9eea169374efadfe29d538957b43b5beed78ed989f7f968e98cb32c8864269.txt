@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "watermark", "args": {"input": "sample.pdf", "text": "DRAFT", "position": "center"}}]}

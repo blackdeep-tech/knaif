@@ -1,0 +1,14 @@
+{
+  "backend": "cuda",
+  "inference": "3979f501e4645e51340990620043a771d53e98fc23a366ee7c1e82bc43d7a0be",
+  "model_sha256": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+  "platform": "linux-x64",
+  "settings": {
+    "KNAIF_MAX_TOKENS": null,
+    "KNAIF_N_CTX": null,
+    "KNAIF_N_GPU_LAYERS": null,
+    "KNAIF_N_THREADS": "8",
+    "KNAIF_N_THREADS_BATCH": "8",
+    "KNAIF_PREFIX_REUSE": null
+  }
+}

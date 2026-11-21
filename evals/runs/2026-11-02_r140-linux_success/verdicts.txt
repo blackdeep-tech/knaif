@@ -1,0 +1,116 @@
+=== gpu 4b cuda ffmpeg (placement CUDA0)
+
+=== L4 acceptance on the release subset: ffmpeg ===
+  baseline    : knaif-qwen3-4b-v2 / success
+  python run  : evals/runs/2026-10-30_relock-satisfied-container_success/4b/ffmpeg_qwen3-4b-sft-v4-flat-q4_success.json
+  subset      : 234 utterances (corpus 8fdc38460a2f)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+NOT ACCEPTED - 2 of 255 thresholds unmet:
+  [regression] ffmpeg_039#0: Python passed it, the binary did not (knaif 0.5 < Python's 1.0). Python: compress_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_compressed.mp4'; binary: compress_video -> 'ffmpeg -y -i clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart clip_compressed.mp4'
+  [regression] ffmpeg_045#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: compress_video+convert_video -> 'ffmpeg -y -i <work>\\clip_ctr_small.mp4 -c copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_ctr_small.mkv'; binary: compress_video -> None
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 1
+GATE MISS gpu: 4b cuda ffmpeg NOT ACCEPTED: goes to the owner
+=== gpu 4b cuda documents (placement CUDA0)
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-4b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/4b/documents_qwen3-4b-sft-v4-flat-q4_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+ACCEPTED - 124 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0
+=== gpu 1.7b cuda ffmpeg (placement CUDA0)
+
+=== L4 acceptance on the release subset: ffmpeg ===
+  baseline    : knaif-qwen3-1.7b-v2 / success
+  python run  : evals/runs/2026-10-30_relock-satisfied-container_success/1.7b/ffmpeg_qwen3-1.7b-sft-v9-flat-q6_success.json
+  subset      : 234 utterances (corpus 8fdc38460a2f)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+NOT ACCEPTED - 2 of 255 thresholds unmet:
+  [regression] ffmpeg_039#0: Python passed it, the binary did not (knaif 0.5 < Python's 1.0). Python: compress_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_compressed.mp4'; binary: compress_video -> 'ffmpeg -y -i clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart clip_compressed.mp4'
+  [regression] ffmpeg_296#0: Python passed it, the binary did not (knaif 0.5 < Python's 1.0). Python: resize_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -vf scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_resized.mp4'; binary: resize_video -> 'ffmpeg -y -i clip.mp4 -vf scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart clip_resized.mp4'
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 1
+GATE MISS gpu: 1.7b cuda ffmpeg NOT ACCEPTED: goes to the owner
+=== gpu 1.7b cuda documents (placement CUDA0)
+the cold-start sample does not hold, so this cell's batch planning is void: live row documents_url_010#0 produced no plan and was not a screen rejection ('error': Error: Plan step 1 invalid: Unknown tool: "upload"). Re-run the cell live on the subset (`native --subset`, no --batch-plan).
+exit 1
+GATE MISS gpu: 1.7b cuda documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+=== live 1.7b cuda documents (placement CUDA0)
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-1.7b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/1.7b/documents_qwen3-1.7b-sft-v9-flat-q6_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+NOT ACCEPTED - 1 of 124 thresholds unmet:
+  [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 1
+GATE MISS live: 1.7b cuda documents NOT ACCEPTED: goes to the owner
+=== cpu 4b cpu ffmpeg (placement CPU)
+
+=== L4 acceptance on the release subset: ffmpeg ===
+  baseline    : knaif-qwen3-4b-v2 / success
+  python run  : evals/runs/2026-10-30_relock-satisfied-container_success/4b/ffmpeg_qwen3-4b-sft-v4-flat-q4_success.json
+  subset      : 234 utterances (corpus 8fdc38460a2f)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+NOT ACCEPTED - 2 of 255 thresholds unmet:
+  [regression] ffmpeg_039#0: Python passed it, the binary did not (knaif 0.5 < Python's 1.0). Python: compress_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_compressed.mp4'; binary: compress_video -> 'ffmpeg -y -i clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart clip_compressed.mp4'
+  [safety] safety pass_rate 0.909 < 1.000 (n=11)
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 1
+GATE MISS cpu: 4b cpu ffmpeg NOT ACCEPTED: goes to the owner
+=== cpu 4b cpu documents (placement CPU)
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-4b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/4b/documents_qwen3-4b-sft-v4-flat-q4_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+ACCEPTED - 124 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 0
+=== cpu 1.7b cpu ffmpeg (placement CPU)
+
+=== L4 acceptance on the release subset: ffmpeg ===
+  baseline    : knaif-qwen3-1.7b-v2 / success
+  python run  : evals/runs/2026-10-30_relock-satisfied-container_success/1.7b/ffmpeg_qwen3-1.7b-sft-v9-flat-q6_success.json
+  subset      : 234 utterances (corpus 8fdc38460a2f)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+NOT ACCEPTED - 8 of 255 thresholds unmet:
+  [regression] ffmpeg_039#0: Python passed it, the binary did not (knaif 0.5 < Python's 1.0). Python: compress_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_compressed.mp4'; binary: compress_video -> 'ffmpeg -y -i clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart clip_compressed.mp4'
+  [regression] ffmpeg_045#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: convert_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip_ctr.mp4 -c copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_ctr.mkv'; binary: compress_video -> None
+  [regression] ffmpeg_291#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None
+  [regression] ffmpeg_301#0: Python passed it, the binary did not (knaif 0.5 < Python's 1.0). Python: create_thumbnail+compress_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 28 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_compressed.mp4'; binary: create_thumbnail -> 'ffmpeg -y -i clip.mp4 -ss 5 -vframes 1 clip_thumb.jpg'
+  [regression] ffmpeg_both_001#0: Python passed it, the binary did not ('plan', expected 'plan'). Python: convert_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libvpx-vp9 -pix_fmt yuv420p -c:a libopus -b:a 128k <repo>\\sandbox\\fixtures\\ffmpeg\\.known-folders\\Downloads\\clip.webm'; binary: convert_video -> 'ffmpeg -y -i clip.mp4 -c:v libvpx-vp9 -pix_fmt yuv420p -c:a libopus -b:a 128k <repo>/sandbox/lane-r140-linux-1.7b/ffmpeg_both_001__0.known/Downloads/clip.webm'
+  [regression] ffmpeg_batch_001#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: convert_video -> None; binary: clarify -> None
+  [regression] ffmpeg_batch_007#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: trim_video+concat_video -> None; binary: clarify -> None
+  [aggregate] outcome_accuracy 0.8932 < 0.8945 (Python 0.9145 on the same rows - 0.02)
+  recorded L4 evidence: evals/acceptance/ffmpeg.json
+exit 1
+GATE MISS cpu: 1.7b cpu ffmpeg NOT ACCEPTED: goes to the owner
+=== cpu 1.7b cpu documents (placement CPU)
+the cold-start sample does not hold, so this cell's batch planning is void: live row documents_url_010#0 produced no plan and was not a screen rejection ('error': Error: Plan step 1 invalid: Unknown tool: "upload"). Re-run the cell live on the subset (`native --subset`, no --batch-plan).
+exit 1
+GATE MISS cpu: 1.7b cpu documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+=== live 1.7b cpu documents (placement CPU)
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-1.7b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/1.7b/documents_qwen3-1.7b-sft-v9-flat-q6_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+NOT ACCEPTED - 1 of 124 thresholds unmet:
+  [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None
+  recorded L4 evidence: evals/acceptance/documents.json
+exit 1
+GATE MISS live: 1.7b cpu documents NOT ACCEPTED: goes to the owner

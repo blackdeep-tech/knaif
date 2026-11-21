@@ -11,11 +11,11 @@ import textwrap
 from pathlib import Path
 
 from knaif.agent import CommandAgent
-from knaif.core_tools import CORE_STEP_MAP
+from knaif.core_tools import CORE_TOOL_MAP
 from knaif.handler_api import HandlerContext
 
 # Core control tools are Step classes now; the executor's cmd_* duplicates were removed.
-cmd_wait_for_confirmation = CORE_STEP_MAP["wait_for_confirmation"].handle
+cmd_wait_for_confirmation = CORE_TOOL_MAP["wait_for_confirmation"].handle
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ctx.confirm()
@@ -73,18 +73,18 @@ def _write_demo_skill(skill_dir: Path) -> None:
         textwrap.dedent("""\
             name: demo
             description: "Tiny demo skill exercising intents + wait_for_confirmation."
-            tools: tools.yaml
-            skill_class: handlers.DemoSkill
             """),
         encoding="utf-8",
     )
     (skill_dir / "tools.yaml").write_text(
         textwrap.dedent("""\
             big_op:
+              effects: []
               description: "High-level intent expanded into 3 steps."
               required_args: [label]
               safety_category: destructive
             small_op:
+              effects: []
               description: "Internal worker step."
               required_args: [token]
               internal: true
@@ -94,9 +94,9 @@ def _write_demo_skill(skill_dir: Path) -> None:
     (skill_dir / "handlers.py").write_text(
         textwrap.dedent("""\
             from knaif.skill_base import Skill
-            from knaif.tool import Intent, Step
+            from knaif.tool import Intent, Handler
 
-            class SmallOpStep(Step):
+            class SmallOpStep(Handler):
                 name = "small_op"
                 def handle(self, args, ctx):
                     return {"echo": args["token"]}
@@ -113,7 +113,7 @@ def _write_demo_skill(skill_dir: Path) -> None:
                     ]
 
             class DemoSkill(Skill):
-                tools = [SmallOpStep, BigOpIntent]
+                pass
             """),
         encoding="utf-8",
     )

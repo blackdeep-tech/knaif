@@ -1,0 +1,11 @@
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-1.7b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/1.7b/documents_qwen3-1.7b-sft-v9-flat-q6_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+NOT ACCEPTED - 3 of 124 thresholds unmet:
+  [regression] documents_127#0: Python passed it, the binary did not (knaif 0.8 < Python's 1.0). Python: split_pdf+watermark -> '{"plan": [{"tool": "split_pdf", "args": {"input": "sample.pdf", "ranges": "1-2", "output": "sample_p1-2.pdf"}}, {"tool": "watermark", "args": {"input": "sample_p1-2.pdf", "text": "DRAFT"}}]}'; binary: split_pdf+watermark -> None
+  [regression] documents_128#0: Python passed it, the binary did not (knaif 0.8 < Python's 1.0). Python: remove_pages+add_page_numbers -> '{"plan": [{"tool": "remove_pages", "args": {"input": "sample.pdf", "pages": "last", "output": "sample_trimmed.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "sample_trimmed.pdf", "position": "bottom-center", "start_at": 1}}]}'; binary: remove_pages+add_page_numbers -> None
+  [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None
+  recorded L4 evidence: evals/acceptance/documents.json

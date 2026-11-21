@@ -252,3 +252,18 @@ def test_the_watcher_stops_when_a_native_batch_ends(tmp_path: Path) -> None:
         assert proc.returncode == 0
         assert "run finished" in proc.stdout
         assert tail.split()[0] in proc.stdout
+
+
+def test_native_reads_the_corpus_given(tmp_path: Path) -> None:
+    """`native --corpus` plans another corpus's utterances (a limited row set, on
+    Vulkan and CPU); without it, the skill's eval.jsonl."""
+    args = fr.main_parser().parse_args(
+        ["native", "--skill", "ffmpeg", "--bin", "k", "--model", "m", "--out", "o"]
+    )
+    assert fr.native_corpus(args) == fr.REPO_ROOT / "skills" / "ffmpeg" / "data" / "eval.jsonl"
+    rows = tmp_path / "rows.jsonl"
+    args = fr.main_parser().parse_args(
+        ["native", "--skill", "ffmpeg", "--bin", "k", "--model", "m", "--out", "o"]
+        + ["--corpus", str(rows)]
+    )
+    assert fr.native_corpus(args) == rows

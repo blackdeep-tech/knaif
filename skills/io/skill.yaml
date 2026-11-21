@@ -8,9 +8,6 @@ version: 0.1.0
 # create_agent("io").
 status: stale
 
-tools: tools.yaml
-skill_class: handlers.IoSkill
-prompt: prompt.yaml
 
 recommended_model: qwen3-4b
 

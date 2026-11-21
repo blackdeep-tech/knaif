@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["*"], "platform": "instagram", "preview": true}}]}

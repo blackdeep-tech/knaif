@@ -90,6 +90,7 @@ def test_fixtures_regen_force_reruns_all(tmp_path: Path):
         import hashlib
 
         cache[name] = hashlib.sha256(full_cmd.encode()).hexdigest()
+        (fixture_dir / name).parent.mkdir(parents=True, exist_ok=True)  # batch/ fixtures
         (fixture_dir / name).write_bytes(b"fake")
     cache_path.write_text(json.dumps(cache), encoding="utf-8")
 

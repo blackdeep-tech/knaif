@@ -79,7 +79,6 @@ def test_skill_load_parses_inject_step(tmp_path):
     (skill_dir / "skill.yaml").write_text(textwrap.dedent("""\
         name: myskill
         description: test skill
-        skill_class: handlers.InjectSkill
         pipeline:
           - inject:
               - host_files
@@ -97,7 +96,7 @@ def test_skill_load_parses_inject_step(tmp_path):
     (skill_dir / "handlers.py").write_text(textwrap.dedent("""\
         from knaif.skill_base import Skill
         class InjectSkill(Skill):
-            tools = []   # only the core 'clarify' tool, merged automatically
+            pass
     """))
 
     skill = Skill.load(skill_dir)
@@ -114,7 +113,6 @@ def test_skill_load_no_pipeline_has_empty_inject(tmp_path):
     (skill_dir / "skill.yaml").write_text(textwrap.dedent("""\
         name: myskill2
         description: test skill
-        skill_class: handlers.InjectSkill
     """))
     (skill_dir / "tools.yaml").write_text(textwrap.dedent("""\
         clarify:
@@ -127,7 +125,7 @@ def test_skill_load_no_pipeline_has_empty_inject(tmp_path):
     (skill_dir / "handlers.py").write_text(textwrap.dedent("""\
         from knaif.skill_base import Skill
         class InjectSkill(Skill):
-            tools = []   # only the core 'clarify' tool, merged automatically
+            pass
     """))
 
     skill = Skill.load(skill_dir)

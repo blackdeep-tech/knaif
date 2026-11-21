@@ -1,0 +1,28 @@
+{
+  "rows_a": 1066,
+  "rows_b": 1066,
+  "common": 1066,
+  "only_a": [],
+  "only_b": [],
+  "same_grade": 1065,
+  "same_plan": 1066,
+  "same_command": 1066,
+  "grade_differs": [
+    {
+      "id": "ffmpeg_size_003",
+      "utterance_idx": 0,
+      "a": {
+        "outcome": "plan",
+        "correct": true,
+        "score": 1.0
+      },
+      "b": {
+        "outcome": "clarify",
+        "correct": false,
+        "score": null
+      }
+    }
+  ],
+  "plan_differs": [],
+  "command_differs": []
+}

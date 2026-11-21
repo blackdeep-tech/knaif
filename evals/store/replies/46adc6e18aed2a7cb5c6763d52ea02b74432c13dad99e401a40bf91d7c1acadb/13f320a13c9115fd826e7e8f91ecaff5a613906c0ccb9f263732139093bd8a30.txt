@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "remove_pages", "args": {"input": "sample.pdf", "pages": "2", "output": "sample_trimmed.pdf"}}, {"tool": "watermark", "args": {"input": "sample_trimmed.pdf", "text": "FINAL", "position": "center", "output": "sample_final.pdf"}}, {"tool": "compress_pdf", "args": {"input": "sample_final.pdf", "compress_quality": "balanced"}}]}

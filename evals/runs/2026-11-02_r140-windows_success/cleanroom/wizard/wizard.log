@@ -1,0 +1,29 @@
+1.4.0 release clean-room wizard run 2026-11-04T15:55:39
+15:55:39 PASS M0_sac_enforcing_and_frozen_installer: SAC state 1; installer sha256 993ebbd68c416d12595a0caa9ede683ab9589c3c7d9affa25f3b96f7f480e5bb
+15:55:39 PASS M0_sac_blocks_unsigned: unsigned probe: Program 'sac-probe.exe' failed to run: An Application Control policy has blocked this fileAt C:\r140\in\wizard.ps1:104 char:14
+15:55:44 page 1 recorded (15 controls; next button: Next)
+15:55:44 accept the licence
+15:55:45 page 2 recorded (15 controls; next button: Next)
+15:55:45 press Next
+15:55:48 page 3 recorded (15 controls; next button: Next)
+15:55:48 press Next
+15:55:50 page 4 recorded (14 controls; next button: Next)
+15:55:50 press Next
+15:55:53 page 5 recorded (12 controls; next button: Next)
+15:55:53 press Next
+15:55:55 page 6 recorded (12 controls; next button: Install)
+15:55:55 press Install
+15:55:59 page 7 recorded (11 controls; next button: Next)
+15:55:59 press Next
+15:56:02 page 8 recorded (6 controls; next button: Finish)
+15:56:02 press Finish
+15:56:04 PASS setup_exit_0: exit 0
+15:56:04 FAIL M1_tools_disabled_with_reason: FFmpeg:  | Tesseract: 
+15:56:04 PASS M2_no_ghostscript_choice: 0 Ghostscript choices
+15:56:04 PASS M1b_no_cuda_offer: 0 controls mention CUDA
+15:56:04 PASS M3_finish_page_names_tools:     FFmpeg: not installed (Smart App Control blocks it) /     Ghostscript: not installed (Smart App Control blocks it) /     LibreOffice: not installed /     Tesseract OCR: not installed (Smart App Control blocks it) / Smart App Control is on: Windows blocks tools that are not validly signed by their makers (knaif itself is signed). They work only with Smart App Control off.
+15:56:04 PASS M5_no_old_version_named: 0 controls name 1.2.x: 
+15:56:04 PASS M4_skills_deps_marks_tools: [MISS] libreoffice    (optional) install: download from https://www.libreoffice.org/download/download-libreoffice/ / [MISS] tesseract      (optional) not installed — Smart App Control blocks it on this PC / ffmpeg: / [MISS] ffmpeg         (required) not installed — Smart App Control blocks it on this PC / The `ffmpeg` skill needs ffmpeg, which Smart App Control blocks on this PC: Windows runs only programs that are validly signed or that it trusts, and this one is not. It works only with Smart App Control off: Windows Security > App & browser control > Smart App Control. / Smart App Control is on. Windows then runs only programs that are validly signed or that it trusts, and it blocks ghostscript, tesseract, ffmpeg (knaif itself is signed). They work only with Smart App Control off: Windows Security > App & browser control > Smart App Control.
+15:56:04 PASS sac_enforcing_at_end: SAC state 1
+15:56:04 PASS run_completed: every page walked
+15:56:04 DONE: 11 checks, 1 failed [M1_tools_disabled_with_reason]. Review the page-NN.png screenshots on the host (M5). Close this Sandbox window; it discards everything.

@@ -1,0 +1,12 @@
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-4b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/4b/documents_qwen3-4b-sft-v4-flat-q4_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+NOT ACCEPTED - 3 of 124 thresholds unmet:
+  [regression] documents_128#0: Python passed it, the binary did not (knaif 0.6 < Python's 0.8). Python: remove_pages+add_page_numbers -> '{"plan": [{"tool": "remove_pages", "args": {"input": "sample.pdf", "pages": "-1", "output": "sample_trimmed.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "sample_trimmed.pdf", "position": "bottom-center", "start_at": 1}}]}'; binary: remove_pages+add_page_numbers -> None
+  [regression] documents_hard2_006#0: Python passed it, the binary did not (knaif 0.6 < Python's 0.8). Python: rotate_pages+watermark -> '{"plan": [{"tool": "rotate_pages", "args": {"input": "sample.pdf", "degrees": 180, "output": "sample_rotated.pdf"}}, {"tool": "watermark", "args": {"input": "sample_rotated.pdf", "text": "DRAFT"}}]}'; binary: rotate_pages+watermark -> None
+  [regression] documents_hard2_008#0: Python passed it, the binary did not (knaif 0.75 < Python's 1.0). Python: split_pdf+reorder_pages -> '{"plan": [{"tool": "split_pdf", "args": {"input": "sample.pdf", "ranges": "1-2", "output": "sample_p1-2.pdf"}}, {"tool": "reorder_pages", "args": {"input": "sample_p1-2.pdf", "order": "2,1"}}]}'; binary: split_pdf+reorder_pages -> None
+  recorded L4 evidence: evals/acceptance/documents.json

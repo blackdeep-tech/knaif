@@ -1,0 +1,60 @@
+{
+  "_comment": "Text preview (owner, 2026-10-23): extract_text saves the text as <name>.txt, and the terminal shows a short preview of it, never the whole text: the first five non-empty lines, each without trailing spaces, then \"… N more lines\" (\"line\" for one) when there are more; an empty text is \"(no text)\". Python skills/documents/python/tests/test_text_preview_parity.py, Rust skills/documents/native/tests/text_preview_parity.rs.",
+  "cases": [
+    {
+      "name": "a short text is shown whole",
+      "text": "Alpha page one\nBeta page two",
+      "expected": [
+        "Alpha page one",
+        "Beta page two"
+      ]
+    },
+    {
+      "name": "blank lines are left out",
+      "text": "\n\nAlpha\n\n   \nBeta\n",
+      "expected": [
+        "Alpha",
+        "Beta"
+      ]
+    },
+    {
+      "name": "more than five lines ends with a count",
+      "text": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8",
+      "expected": [
+        "line 1",
+        "line 2",
+        "line 3",
+        "line 4",
+        "line 5",
+        "… 3 more lines"
+      ]
+    },
+    {
+      "name": "one line more says line",
+      "text": "l1\nl2\nl3\nl4\nl5\nl6",
+      "expected": [
+        "l1",
+        "l2",
+        "l3",
+        "l4",
+        "l5",
+        "… 1 more line"
+      ]
+    },
+    {
+      "name": "trailing spaces are trimmed",
+      "text": "varius   sem.   \nNullam   ",
+      "expected": [
+        "varius   sem.",
+        "Nullam"
+      ]
+    },
+    {
+      "name": "no text says so",
+      "text": "  \n\n",
+      "expected": [
+        "(no text)"
+      ]
+    }
+  ]
+}

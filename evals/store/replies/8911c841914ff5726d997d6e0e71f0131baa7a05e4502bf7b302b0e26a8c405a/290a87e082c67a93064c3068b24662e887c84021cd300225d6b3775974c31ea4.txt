@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["https://files.knaif.test/ffmpeg/holiday.mov"], "container": "mp4", "output": "Downloads/holiday.mp4"}}, {"tool": "alert_when_done", "args": {}}]}

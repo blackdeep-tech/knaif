@@ -134,7 +134,7 @@ def run_knaif(utt: str, fixture: str, fixdir: Path, model: str, workroot: Path) 
             "--model",
             model,
             "--no-dry-run",
-            "--auto-approve",
+            "--yes",
         ],
         cwd=str(d),
         capture_output=True,

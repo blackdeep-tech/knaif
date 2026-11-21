@@ -32,6 +32,14 @@ NATIVE_SKILLS = {
 #: Control tools are provided by the host, not the skill crate.
 CONTROL_TOOLS = {"clarify", "reject", "done", "wait_for_confirmation"}
 
+#: Tools whose native port is scheduled, each with where. A feature adds a Python tool first and
+#: ports it later in the same plan; the plan cannot close while an entry is here (its bar requires
+#: native), and an entry whose tool is native fails below, so none goes stale.
+PENDING_NATIVE: dict[str, dict[str, str]] = {
+    "ffmpeg": {},
+    "documents": {},
+}
+
 
 def _public_tools(skill: str) -> set[str]:
     registry = load_registry(REPO_ROOT / "skills" / skill / "tools.yaml")
@@ -51,7 +59,10 @@ def _declared_native(skill: str) -> set[str]:
 
 @pytest.mark.parametrize("skill", sorted(NATIVE_SKILLS))
 def test_every_public_tool_is_implemented_natively(skill: str) -> None:
-    missing = _public_tools(skill) - _declared_native(skill)
+    pending = PENDING_NATIVE.get(skill, {})
+    ported = sorted(set(pending) & _declared_native(skill))
+    assert not ported, f"{skill}: {ported} are native now; remove them from PENDING_NATIVE"
+    missing = _public_tools(skill) - _declared_native(skill) - set(pending)
     assert not missing, (
         f"{skill}: declared in tools.yaml but not implemented in the native runtime: "
         f"{sorted(missing)}. Both runtimes read the same contract, so a tool that exists only "

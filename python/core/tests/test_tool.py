@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import pytest
 
-from knaif.tool import Intent, Step
+from knaif.tool import Handler, Intent
 
 # ── Step ──────────────────────────────────────────────────────────────────────
 
 
 def test_step_is_abstract():
     with pytest.raises(TypeError):
-        Step()  # type: ignore[abstract]
+        Handler()  # type: ignore[abstract]
 
 
 def test_step_requires_handle():
-    class NoHandle(Step):
+    class NoHandle(Handler):
         name = "no_handle"
 
     with pytest.raises(TypeError):
@@ -23,7 +23,7 @@ def test_step_requires_handle():
 
 
 def test_step_subclass_works():
-    class MyStep(Step):
+    class MyStep(Handler):
         name = "my_step"
 
         def handle(self, args, ctx):
@@ -35,7 +35,7 @@ def test_step_subclass_works():
 
 
 def test_step_preflight_override_detectable():
-    class WithPreflight(Step):
+    class WithPreflight(Handler):
         name = "wp"
 
         def handle(self, args, ctx):
@@ -44,17 +44,17 @@ def test_step_preflight_override_detectable():
         def preflight(self, args, **kw):
             return ["err"]
 
-    assert type(WithPreflight()).preflight is not Step.preflight
+    assert type(WithPreflight()).preflight is not Handler.preflight
 
 
 def test_step_default_preflight_not_overridden():
-    class Plain(Step):
+    class Plain(Handler):
         name = "plain"
 
         def handle(self, args, ctx):
             return {}
 
-    assert type(Plain()).preflight is Step.preflight
+    assert type(Plain()).preflight is Handler.preflight
 
 
 # ── Intent ────────────────────────────────────────────────────────────────────

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Which URL should I use to download clip.mp4 from, and what format should I convert it to?"}}]}

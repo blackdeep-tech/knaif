@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Which file should I speed up, and what format should the output be in?"}}]}

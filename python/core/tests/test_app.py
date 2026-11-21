@@ -45,7 +45,7 @@ def test_run_mock_dry_run_succeeds(runner):
             "--backend",
             "mock",
             "--dry-run",
-            "--auto-approve",
+            "--yes",
         ],
     )
     assert result.exit_code == 0
@@ -100,7 +100,7 @@ def test_backend_mismatch_is_rejected():
 
 
 def test_backend_ollama_with_model_path_is_rejected():
-    with pytest.raises(RuntimeError, match="model-path"):
+    with pytest.raises(RuntimeError, match="GGUF file"):
         build_orchestrator(model_path="model.gguf", backend="ollama")
 
 
@@ -138,7 +138,7 @@ def test_the_cli_shows_the_model_the_retrieved_tools(runner, monkeypatch, comman
     utterance = "encode clip.mp4 at crf 22"
     args = [command, "ffmpeg", *utterance.split(), "--backend", "mock"]
     if command == "run":
-        args += ["--dry-run", "--auto-approve"]
+        args += ["--dry-run", "--yes"]
 
     result = runner.invoke(cli, args)
 
@@ -190,16 +190,53 @@ def test_a_result_with_only_a_top_level_command_is_dumped() -> None:
     assert rendered_argvs([{"tool": "run_concat", "result": {"command": cmd}}]) == [cmd]
 
 
+# ── preview clips: show the path, offer to open it, then ask ─────────────────────────────
+
+
+def _confirmer(keys: str, tmp_path):
+    from knaif.app import make_preview_confirmer
+
+    clip = tmp_path / "clip_preview.mp4"
+    clip.write_bytes(b"x")
+    said: list[str] = []
+    opened: list[str] = []
+    pending = list(keys)
+    confirm = make_preview_confirmer(
+        echo=lambda s="", nl=True: said.append(str(s)),
+        getchar=lambda: pending.pop(0),
+        launch=lambda p: opened.append(p),
+    )
+    return confirm, clip, said, opened
+
+
+def test_the_preview_path_is_shown_before_the_question(tmp_path):
+    confirm, clip, said, _ = _confirmer("y", tmp_path)
+    assert confirm("Apply these settings to all 1 input(s)?", {"preview_output": str(clip)})
+    shown = "\n".join(said)
+    assert str(clip) in shown
+    assert shown.index(str(clip)) < shown.index("Apply these settings")
+
+
+def test_o_opens_the_clip_and_asks_again(tmp_path):
+    confirm, clip, _, opened = _confirmer("on", tmp_path)
+    assert confirm("Apply?", {"preview_output": str(clip)}) is False
+    assert opened == [str(clip)]
+
+
+def test_enter_accepts_and_n_declines(tmp_path):
+    confirm, clip, _, _ = _confirmer("\r", tmp_path)
+    assert confirm("Apply?", {"preview_output": str(clip)}) is True
+    confirm, clip, _, _ = _confirmer("n", tmp_path)
+    assert confirm("Apply?", {"preview_output": str(clip)}) is False
+
+
+def test_a_gate_without_a_clip_just_asks(tmp_path):
+    confirm, _, said, opened = _confirmer("y", tmp_path)
+    assert confirm("Reversing buffers it in RAM. Proceed?", None) is True
+    assert opened == [] and not any("Preview" in s for s in said)
+
+
 # ── 1.3.0: act without asking; ask before replacing a file ─────────────────────
-
-
-def test_a_run_asks_only_when_confirm_is_opted_into():
-    from knaif.app import approval_required
-
-    assert approval_required(auto_approve=None, confirm=False) is False  # the default acts
-    assert approval_required(auto_approve=None, confirm=True) is True
-    assert approval_required(auto_approve=True, confirm=True) is False  # -y skips the question
-    assert approval_required(auto_approve=False, confirm=False) is True  # -Y still asks
 
 
 def test_planned_outputs_are_read_from_a_preview(tmp_path):
@@ -228,7 +265,7 @@ def test_overwrite_gate_asks_with_no_as_the_default():
 
     assert overwrite_gate([], False, ask) is True
     assert overwrite_gate(["out.mp4"], True, ask) is True
-    assert asked == [], "nothing to replace, or --overwrite: no question"
+    assert asked == [], "nothing to replace, or --allow overwrite: no question"
     assert overwrite_gate(["out.mp4"], False, ask) is True
     assert asked == [("Replace out.mp4?", False)]
     assert overwrite_gate(["a", "b"], False, lambda q, d: False) is False
@@ -237,15 +274,15 @@ def test_overwrite_gate_asks_with_no_as_the_default():
 def test_overwrite_gate_without_a_terminal_names_the_flag():
     from knaif.app import overwrite_gate
 
-    with pytest.raises(click.ClickException, match="--overwrite"):
+    with pytest.raises(click.ClickException, match="--allow overwrite"):
         overwrite_gate(["out.mp4"], False, lambda q, d: None)
 
 
-def test_run_accepts_confirm_and_overwrite(runner):
+def test_run_accepts_confirm_and_allow_overwrite(runner):
     result = runner.invoke(
         cli,
         ["run", "ffmpeg", "convert", "a.mov", "to", "mp4", "--backend", "mock"]
-        + ["--dry-run", "--confirm", "--overwrite"],
+        + ["--dry-run", "--confirm", "--allow", "overwrite"],
     )
     assert result.exit_code == 0, result.output
 
@@ -313,3 +350,31 @@ def test_a_preview_that_fails_falls_back_to_the_outputs_the_plan_names(tmp_path,
 
     plan = {"plan": [{"tool": "x", "args": {"output": str(tmp_path / "named.mp4")}}]}
     assert [Path(p).name for p in _existing_outputs(Broken(), plan, "x")] == ["named.mp4"]
+
+
+# ── scratch paths are shown as <work> ──────────────────────────────────────────────────────
+
+
+def test_rendered_items_show_scratch_paths_as_work(capsys, monkeypatch, tmp_path):
+    from knaif.app import _render_items
+
+    monkeypatch.setenv("KNAIF_SCRATCH_ROOT", str(tmp_path / "knaif"))
+    mid = tmp_path / "knaif" / "run-1-ab" / "clip_trimmed.mp4"
+    _render_items(
+        [
+            {"kind": "command", "message": f"ffmpeg -y -i clip.mp4 {mid}"},
+            {"kind": "output", "message": str(mid)},
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "<work>/clip_trimmed.mp4" in out
+    assert "run-1-ab" not in out
+
+
+def test_text_items_print_plainly_line_by_line(capsys):
+    """A skill's answer (extracted text, a page count) prints as is, each line indented, with
+    no colour and no marker."""
+    from knaif.app import _render_items
+
+    assert _render_items([{"kind": "text", "message": "--- page 1 ---\nAlpha"}]) == 0
+    assert capsys.readouterr().out == "  --- page 1 ---\n  Alpha\n"

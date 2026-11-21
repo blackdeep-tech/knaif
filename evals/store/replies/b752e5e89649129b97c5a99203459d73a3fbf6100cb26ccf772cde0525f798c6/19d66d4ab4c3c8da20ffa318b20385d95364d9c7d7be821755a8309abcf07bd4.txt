@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "What should I do about its size? Compress it, trim it, or change its resolution?"}}]}

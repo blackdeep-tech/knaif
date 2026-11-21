@@ -15,7 +15,7 @@
 ; Kind/arch/version can be overridden: ISCC /DKind=vulkan /DAppVersion=0.1.0 ...
 
 #ifndef AppVersion
-  #define AppVersion "1.3.0"
+  #define AppVersion "1.4.0"
 #endif
 #ifndef Arch
   #define Arch "x64"

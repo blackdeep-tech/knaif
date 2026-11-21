@@ -62,10 +62,12 @@ pub fn compress(
     profile: &CompressProfile,
     gs: Option<&Path>,
 ) -> anyhow::Result<Method> {
-    if let Some(parent) = output.parent() {
-        std::fs::create_dir_all(parent).ok();
-    }
     let method = choose_method(quality, gs.is_some());
+    // Ghostscript cannot read a password-protected PDF and writes a blank page instead, exit 0;
+    // the other backends refuse such a file themselves (run-order A/B, 2026-10-20).
+    if method == Method::Ghostscript {
+        crate::pdf::load_unlocked(input)?;
+    }
     match method {
         Method::Ghostscript => ghostscript(
             input,
@@ -84,8 +86,17 @@ pub fn compress(
     Ok(method)
 }
 
-/// [`compress`], then never hand back a larger file: returns the method that ran and whether the
-/// input's own bytes were kept instead of its result.
+/// What [`compress_no_larger`] did: the method that ran, the input's size, the size its result
+/// came to, and whether the input's own bytes were kept instead of that result.
+#[derive(Debug)]
+pub struct NoLarger {
+    pub method: Method,
+    pub before: u64,
+    pub attempt: u64,
+    pub kept: bool,
+}
+
+/// [`compress`], then never hand back a larger file (see [`NoLarger`]).
 ///
 /// Every method grew the documents fixtures (Ghostscript's overhead on a small text PDF took
 /// 2227 bytes to 3952; found 2026-09-26, both runtimes). Not smaller is not a compression, so the
@@ -97,16 +108,21 @@ pub fn compress_no_larger(
     quality: &str,
     profile: &CompressProfile,
     gs: Option<&Path>,
-) -> anyhow::Result<(Method, bool)> {
+) -> anyhow::Result<NoLarger> {
     let method = compress(input, output, quality, profile, gs)?;
     let size = |p: &Path| std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
-    let original = size(input);
-    if original > 0 && size(output) >= original {
+    let (before, attempt) = (size(input), size(output));
+    let kept = before > 0 && attempt >= before;
+    if kept {
         std::fs::copy(input, output)
             .map_err(|e| anyhow::anyhow!("could not keep {}: {e}", input.display()))?;
-        return Ok((method, true));
     }
-    Ok((method, false))
+    Ok(NoLarger {
+        method,
+        before,
+        attempt,
+        kept,
+    })
 }
 
 /// lopdf stream compression + object-stream save (keeps text/vectors). Port of `_lossless_compress`.
@@ -215,6 +231,37 @@ mod tests {
         assert!(Method::Lossless.text_preserved());
     }
 
+    /// Ghostscript cannot read a password-protected PDF and writes a blank page, exit 0 (found
+    /// 2026-10-20 by a run-order A/B, Python side). The file is refused before gs runs.
+    #[test]
+    fn a_locked_pdf_is_refused_before_ghostscript() {
+        let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../contracts/parity/fixtures/documents/sample.pdf");
+        let dir = std::env::temp_dir().join(format!("knaif_cmp_locked_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let input = dir.join("locked.pdf");
+        let mut doc = crate::pdf::load(&fixture).unwrap();
+        crate::pdf::protect(&mut doc, "secret").unwrap();
+        crate::pdf::save(&mut doc, &input).unwrap();
+        let output = dir.join("out.pdf");
+        let profile = CompressProfile {
+            ghostscript_pdfsettings: "/ebook".into(),
+            lossless: Default::default(),
+            rasterize_fallback: crate::profile::RasterizeFallback {
+                dpi: 150,
+                jpeg_quality: 75,
+            },
+        };
+        // A gs that does not exist: reaching it would fail with a different error.
+        let gs = dir.join("no-such-gs");
+
+        let err = compress(&input, &output, "balanced", &profile, Some(&gs)).unwrap_err();
+
+        assert!(err.to_string().contains("password-protected"), "{err}");
+        assert!(!output.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// compress_pdf wrote a LARGER file for both fixtures (found 2026-09-26; Python and native).
     /// Not smaller is not a compression: the input's own bytes are kept, and the caller is told.
     #[test]
@@ -235,7 +282,14 @@ mod tests {
             },
         };
 
-        let (_, kept) = compress_no_larger(&input, &output, "high", &profile, None).unwrap();
+        let done = compress_no_larger(&input, &output, "high", &profile, None).unwrap();
+        let kept = done.kept;
+        // What the result line reports (`not smaller (2.2 KB → 3.9 KB)`): the input's size and
+        // the size the attempt came to, not the kept copy's.
+        assert_eq!(done.before, std::fs::metadata(&input).unwrap().len());
+        if kept {
+            assert!(done.attempt >= done.before, "{done:?}");
+        }
 
         let (in_len, out_len) = (
             std::fs::metadata(&input).unwrap().len(),

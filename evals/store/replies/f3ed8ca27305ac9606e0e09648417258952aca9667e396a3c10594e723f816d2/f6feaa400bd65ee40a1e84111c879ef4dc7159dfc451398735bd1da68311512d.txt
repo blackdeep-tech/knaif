@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "I can't download files - I work on files already on this machine. Which local file should I convert?"}}]}

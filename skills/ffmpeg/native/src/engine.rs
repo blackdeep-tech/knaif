@@ -87,7 +87,8 @@ pub fn geometry_vf(
     if let Some(aspect) = aspect {
         if !has_both {
             let (aw, ah) = parse_ratio(aspect).ok_or_else(|| {
-                anyhow::anyhow!("Invalid aspect value {aspect:?}. Expected 'aw:ah'.")
+                // Quoted as Python's `{aspect!r}`, so the two runtimes print one message.
+                anyhow::anyhow!("Invalid aspect value '{aspect}'. Expected 'aw:ah'.")
             })?;
             // Rounded DOWN to even, because libx264 with `-pix_fmt yuv420p` refuses odd
             // dimensions: a 9:16 crop of a 1280x720 source computes min(1280, 720*9/16) = 405,
@@ -212,6 +213,12 @@ pub fn lexically_normalize(path: &Path) -> PathBuf {
     out
 }
 
+/// "The last frame" is not a time: duration minus 0.1 s was ~3 frames early at 30 fps, and no
+/// fixed offset is right on a variable frame rate. It stays this token and renders as
+/// `-sseof -1 … -update 1`, which leaves exactly the final frame (2026-10-27). Port of Python's
+/// `LAST_FRAME`.
+pub const LAST_FRAME: &str = "last";
+
 /// Symbolic instants a user can name but a model cannot compute: the duration is only known
 /// after probing. Port of `_resolve_at_time`. Returns `None` for a token this skill does not
 /// know - callers refuse it rather than invent an instant.
@@ -241,13 +248,7 @@ fn resolve_at_time(value: Option<&String>, duration: Option<f64>) -> Option<Stri
         text.as_str(),
         "last_frame" | "last" | "end" | "final_frame" | "final"
     ) {
-        let d = duration?;
-        if d <= 0.0 {
-            return None;
-        }
-        // Step back from the very end: seeking exactly to the duration lands past the last
-        // frame and writes nothing.
-        return Some(format_seconds((d - 0.1).max(0.0)));
+        return Some(LAST_FRAME.to_string());
     }
     None
 }
@@ -376,6 +377,9 @@ pub struct Audio {
 /// orchestrator (`_build_one_recipe`, ported next); tests construct it directly.
 #[derive(Debug, Clone, Default)]
 pub struct Recipe {
+    /// The output name is a default the skill chose, not one the user wrote: only such a name
+    /// moves off a file that already exists ([`disambiguate_outputs`]).
+    pub default_name: bool,
     pub mode: String,
     pub input: String,
     pub output: String,
@@ -404,8 +408,15 @@ pub struct Recipe {
     /// recipe rather than re-probed in `build_flags`, so the cap is computed from the same
     /// probe every other decision in the recipe was made from. Port of `source_duration`.
     pub source_duration: Option<f64>,
+    /// The audio bitrate a size cap budgets when the track is copied (no `-b:a` to read). Port
+    /// of `audio_budget`.
+    pub audio_budget: Option<String>,
     /// Human-readable operation summary (drives the plan preview); not used by `build_flags`.
     pub operations: Vec<String>,
+    /// An operation that keeps its video (`strip_audio`, `adjust_volume`) encodes it with
+    /// `video.encoder` instead of copying it: the output container cannot hold the source codec
+    /// (h264 into `.webm`). Port of Python's `copy_video`, negated so the default still copies.
+    pub encode_kept_video: bool,
 }
 
 /// Requested audio format → ffmpeg encoder (default `copy`); port of `_audio_encoder_for`.
@@ -508,6 +519,16 @@ fn push_video(post: &mut Vec<String>, v: &Video, pixfmt: bool) {
 }
 
 /// Emit `-c:a[/-b:a]` for an audio block (bitrate only when `bitrate`).
+/// The video flags of an operation that keeps its video: a stream copy, or an encode with the
+/// recipe's encoder when the container cannot hold the source codec. Port of `_kept_video_flags`.
+fn push_kept_video(post: &mut Vec<String>, recipe: &Recipe) {
+    if recipe.encode_kept_video {
+        push_video(post, &recipe.video, false);
+    } else {
+        post.extend(["-c:v".to_string(), "copy".to_string()]);
+    }
+}
+
 fn push_audio(post: &mut Vec<String>, a: &Audio, bitrate: bool) {
     if let Some(c) = &a.codec {
         post.extend(["-c:a".to_string(), c.clone()]);
@@ -578,19 +599,29 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             post.extend(["-b:a".to_string(), b.clone()]);
         }
     } else if mode == "thumbnail" {
-        post.extend([
-            "-ss".to_string(),
-            recipe
-                .at_time
-                .clone()
-                .unwrap_or_else(|| "00:00:01".to_string()),
-        ]);
+        let last = recipe.at_time.as_deref() == Some(LAST_FRAME);
+        if last {
+            pre.extend(["-sseof".to_string(), "-1".to_string()]);
+        } else {
+            post.extend([
+                "-ss".to_string(),
+                recipe
+                    .at_time
+                    .clone()
+                    .unwrap_or_else(|| "00:00:01".to_string()),
+            ]);
+        }
         if let Some(scale) = &recipe.scale {
             post.extend(["-vf".to_string(), format!("scale={scale}")]);
         }
-        post.extend(["-vframes".to_string(), "1".to_string()]);
+        if last {
+            post.extend(["-update".to_string(), "1".to_string()]);
+        } else {
+            post.extend(["-vframes".to_string(), "1".to_string()]);
+        }
     } else if mode == "strip_audio" {
-        post.extend(["-an".to_string(), "-c:v".to_string(), "copy".to_string()]);
+        post.push("-an".to_string());
+        push_kept_video(&mut post, recipe);
     } else if mode == "adjust_speed" {
         let speed = recipe.speed.unwrap_or(1.0);
         anyhow::ensure!(
@@ -653,7 +684,7 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             post.extend(["-af".to_string(), format!("volume={level}")]);
         }
         if !recipe.audio_only {
-            post.extend(["-c:v".to_string(), "copy".to_string()]);
+            push_kept_video(&mut post, recipe);
         }
         push_audio(&mut post, &recipe.audio, false);
     } else if recipe.container.as_deref() == Some("gif") {
@@ -704,7 +735,11 @@ pub fn build_flags(recipe: &Recipe, vocab: &Vocab) -> anyhow::Result<(Vec<String
             if let Some(kbit) = size_cap_kbit(
                 target,
                 recipe.source_duration,
-                recipe.audio.bitrate.as_ref(),
+                recipe
+                    .audio
+                    .bitrate
+                    .as_ref()
+                    .or(recipe.audio_budget.as_ref()),
             )? {
                 post.extend([
                     "-maxrate".to_string(),
@@ -803,6 +838,9 @@ pub struct Probe {
     pub container: Option<String>,
     pub video_codec: Option<String>,
     pub audio_codec: Option<String>,
+    /// The first audio stream's bit rate in bit/s; `None` when ffprobe does not say (mkv often
+    /// leaves it off), never 0, which would read as a tiny track.
+    pub audio_bitrate: Option<u64>,
     pub has_audio: bool,
     pub width: Option<u32>,
     pub height: Option<u32>,
@@ -887,6 +925,7 @@ pub fn dummy_probe(file: &Path, vocab: &Vocab) -> Probe {
             container: Some(suffix),
             video_codec: Some("h264".to_string()),
             audio_codec: Some("aac".to_string()),
+            audio_bitrate: None,
             has_audio: true,
             width: Some(1920),
             height: Some(1080),
@@ -952,12 +991,19 @@ pub fn summarise_probe(file: &Path, doc: &serde_json::Value) -> Probe {
     // Prefer avg_frame_rate, fall back to r_frame_rate (both are `"num/den"` strings).
     let rate = |key: &str| v_stream.and_then(|s| s.get(key)).and_then(|r| r.as_str());
     let fps = parse_fps(rate("avg_frame_rate")).or_else(|| parse_fps(rate("r_frame_rate")));
+    // ffprobe reports `bit_rate` as a JSON string ("69339"); tolerate a bare number too.
+    let audio_bitrate = a_stream.and_then(|s| s.get("bit_rate")).and_then(|b| {
+        b.as_str()
+            .and_then(|s| s.trim().parse::<u64>().ok())
+            .or_else(|| b.as_u64())
+    });
 
     Probe {
         file: file.to_string_lossy().into_owned(),
         container,
         video_codec: codec(v_stream),
         audio_codec: codec(a_stream),
+        audio_bitrate,
         has_audio: a_stream.is_some(),
         width: dim(v_stream, "width"),
         height: dim(v_stream, "height"),
@@ -997,6 +1043,15 @@ pub struct Options {
     pub include_audio: Option<bool>,
     pub speed: Option<f64>,
     pub platform: Option<String>,
+    /// This run's scratch folder, when the run has one (`knaif_core::scratch`). An input in it is
+    /// a routed chain intermediate; an output in it is too.
+    pub work_dir: Option<std::path::PathBuf>,
+    /// The folder the user sees (the sandbox, else cwd): where an output named after a scratch
+    /// input lands, since everything in the scratch is deleted when the run ends.
+    pub home: Option<std::path::PathBuf>,
+    /// Set by the batch when it builds recipes for more than one file: a literal output name
+    /// then names none of them. Python `_engine.PER_FILE_NAME`.
+    pub per_file_name: bool,
 }
 
 fn non_empty(s: &str) -> Option<String> {
@@ -1027,59 +1082,29 @@ fn destination_name(input: &Path, ext: &str) -> String {
     format!("{stem}.{ext}")
 }
 
-/// The parts of an input's name that can tell two colliding outputs apart, best first.
-/// Port of `_batch_suffixes`.
+/// Give every command in a batch its own output path: a taken name gets the first free number.
+/// Port of `disambiguate_outputs`.
 ///
-/// Two batch shapes collide, and they are distinguished by different things: one literal
-/// filename for many inputs (six videos into `audio.mp3` - the source STEMS differ) versus a
-/// destination directory (`clip.mp4` and `clip.mov` into `converted/` both take the output
-/// stem, so only the EXTENSION is left). Using the extension for both is what produced
-/// `audio_mp4_5.mp3`: five of six inputs were `.mp4`, so the suffix distinguished nothing and
-/// a counter did all the work.
-fn batch_suffixes(input: &Path, out_stem: &str) -> Vec<String> {
-    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-    let ext = input
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let mut suffixes = Vec::new();
-    if !stem.is_empty() && stem != out_stem {
-        suffixes.push(stem.to_string());
-    }
-    if !ext.is_empty() {
-        suffixes.push(ext.clone());
-    }
-    // Both, for the case where each alone is ambiguous: `a/clip.mov` and `b/clip.mov` into
-    // `audio.mp3` share a stem AND an extension with each other but not with the output.
-    if !stem.is_empty() && !ext.is_empty() && stem != out_stem {
-        suffixes.push(format!("{stem}_{ext}"));
-    }
-    suffixes
-}
-
-/// Give every command in a batch its own output path. Port of `disambiguate_outputs`.
-///
-/// A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
-/// render `converted/clip.mp4` - and every command carries `-y`, so the second conversion
-/// silently destroyed the first. Whatever part of the source name actually differs is what gets
-/// restored (see [`batch_suffixes`]); a counter is the fallback for a genuine repeat, and only a
-/// genuine repeat, because a counter tells the user nothing.
-///
-/// Only the batch can see the clash: a lone `clip.mp4` must stay `clip.mp4` rather than gain a
-/// suffix because some other input might have existed.
+/// Each entry is `(input, output, default)`. Taken means an input of the batch, another output of
+/// it, or, for a default name the skill chose, a file that already exists: `beach.mkv` ->
+/// `beach_1.mkv` -> `beach_2.mkv` (owner, 2026-10-23, replacing the source-name
+/// suffixes `beach_mp4.mkv` / `audio_city.mp3`). A name the user wrote is never moved off a file
+/// on disk: the CLIs ask before replacing it. Every command carries `-y`, so an unresolved clash is
+/// a silent overwrite.
 ///
 /// **Every input of the batch is taken too, before any output is placed.** A same-folder pattern
 /// sends `clip.mov -> *.mp4` to `clip.mp4`, and when `clip.mp4` is another input the `-y`
 /// conversion replaced it (ffmpeg_229#4, run for real). Reserving inputs up front is what makes
 /// the order of the batch irrelevant.
-pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
-    let mut seen: std::collections::HashSet<String> =
-        outputs.iter().map(|(input, _)| path_key(input)).collect();
-    for (input, out) in outputs.iter_mut() {
-        if seen.insert(path_key(out)) {
-            continue;
-        }
+pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf, bool)]) {
+    let mut seen: std::collections::HashSet<String> = outputs
+        .iter()
+        .map(|(input, _, _)| path_key(input))
+        .collect();
+    for (_, out, default) in outputs.iter_mut() {
+        let taken = |c: &Path, seen: &std::collections::HashSet<String>| {
+            seen.contains(&path_key(c)) || (*default && c.exists())
+        };
         let stem = out
             .file_stem()
             .and_then(|s| s.to_str())
@@ -1090,38 +1115,17 @@ pub fn disambiguate_outputs(outputs: &mut [(PathBuf, PathBuf)]) {
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_string();
-        let build = |name: String| -> PathBuf {
-            let file = if ext.is_empty() {
-                name
+        let mut candidate = out.clone();
+        let mut n = 1;
+        while taken(&candidate, &seen) {
+            let name = if ext.is_empty() {
+                format!("{stem}_{n}")
             } else {
-                format!("{name}.{ext}")
+                format!("{stem}_{n}.{ext}")
             };
-            out.with_file_name(file)
-        };
-        let tried: Vec<PathBuf> = batch_suffixes(input, &stem)
-            .into_iter()
-            .map(|s| build(format!("{stem}_{s}")))
-            .collect();
-        let candidate = match tried.iter().find(|c| !seen.contains(&path_key(c))) {
-            Some(c) => c.clone(),
-            None => {
-                // Nothing in the source name is left to say. Count off the most specific
-                // candidate so the walk still terminates.
-                let base = tried.last().cloned().unwrap_or_else(|| out.clone());
-                let base_stem = base
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-                    .to_string();
-                let mut n = 1;
-                let mut candidate = base;
-                while seen.contains(&path_key(&candidate)) {
-                    n += 1;
-                    candidate = build(format!("{base_stem}_{n}"));
-                }
-                candidate
-            }
-        };
+            candidate = out.with_file_name(name);
+            n += 1;
+        }
         seen.insert(path_key(&candidate));
         *out = candidate;
     }
@@ -1233,18 +1237,50 @@ pub fn resolve_output_target(
             pattern.replace('*', stem),
             if pat_ext.is_empty() { ext } else { &pat_ext }
         );
-        return Ok(match out.parent() {
-            Some(parent) if !parent.as_os_str().is_empty() => parent.join(file),
-            _ => PathBuf::from(file),
-        });
+        return Ok(beside(&out, &file));
     }
 
     // `.mp4` is a dotfile - a concrete file name with no extension by the parser's reading.
     if out.extension().is_none() && !name.starts_with('.') {
-        return Ok(out.join(destination_name(input, ext)));
+        // In the folder as the plan spells it (`Path::join` added `\` on Windows).
+        let folder = cleaned.trim_end_matches(['/', '\\']);
+        let sep = if folder.contains('\\') && !folder.contains('/') {
+            '\\'
+        } else {
+            '/'
+        };
+        return Ok(PathBuf::from(format!(
+            "{folder}{sep}{}",
+            destination_name(input, ext)
+        )));
     }
 
     Ok(out)
+}
+
+/// A literal file name (`mov.mkv`, `out/x.mkv`): not a pattern, not a folder. Python
+/// `_engine._names_one_file`.
+fn names_one_file(raw: &str) -> bool {
+    let out = Path::new(raw);
+    let name = out.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    !raw.contains('*') && out.extension().is_some() && !name.starts_with('.')
+}
+
+/// The first free `<stem>_N<.ext>` from 1: not in `taken`, not on disk.
+fn first_free_number(path: &Path, taken: &[PathBuf]) -> PathBuf {
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("");
+    (1..)
+        .map(|n| {
+            let name = if ext.is_empty() {
+                format!("{stem}_{n}")
+            } else {
+                format!("{stem}_{n}.{ext}")
+            };
+            path.with_file_name(name)
+        })
+        .find(|c| !c.exists() && !taken.iter().any(|t| same_file(t, c)))
+        .expect("an unbounded range always yields a free name")
 }
 
 /// `_derive_output_path` (suffix template from `output_suffix_by_mode`, `{platform}` substituted).
@@ -1269,9 +1305,30 @@ pub fn derive_output_path(
         _ => container,
     };
     let name = format!("{stem}{suffix}.{ext}");
-    match input.parent() {
-        Some(p) => p.join(name),
+    beside(input, &name)
+}
+
+/// `name` in `input`'s folder, spelled with the separator the input itself uses: `videos/clip.mp4`
+/// gives `videos/clip.mkv`, where `Path::join` printed `"videos\\clip.mkv"` on Windows.
+fn beside(input: &Path, name: &str) -> PathBuf {
+    let raw = input.to_string_lossy();
+    match raw.rfind(['/', '\\']) {
+        Some(i) => PathBuf::from(format!("{}{name}", &raw[..=i])),
         None => PathBuf::from(name),
+    }
+}
+
+// The scratch path rules live in the fs toolkit, shared with documents.
+pub use knaif_toolkit_fs::{user_side_path, within};
+
+/// Where a relative output the plan names is written: the working folder (`home`), not the
+/// input's folder, as documents and `concat_video` resolve it (owner, 2026-10-24). Only a
+/// name the skill makes up itself stays beside its input ([`derive_output_path`]). Python
+/// `_engine._in_working_folder`.
+pub fn in_working_folder(out: PathBuf, home: Option<&Path>) -> PathBuf {
+    match home {
+        Some(home) if !out.is_absolute() => home.join(out),
+        _ => out,
     }
 }
 
@@ -1420,25 +1477,72 @@ pub fn build_one_recipe(
         faststart = false;
     }
 
-    let output_path = if let Some(raw) = options.output_path.as_deref().filter(|s| !s.is_empty()) {
-        let out = resolve_output_target(raw, &input_path, &mode, options, &container)?;
-        let out = if out.is_absolute() {
-            out
-        } else {
-            input_path.parent().map(|p| p.join(&out)).unwrap_or(out)
-        };
-        // A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
-        // refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the derived
-        // name, as the plan-level collision handling does for a literal self-overwrite.
-        if same_file(&out, &input_path) {
-            derive_output_path(&input_path, &mode, vocab, options, &container)
-        } else {
-            out
+    // Where this input would sit in the user's folder: an output named after (or relative to) a
+    // routed chain intermediate must still land there, not in the scratch.
+    let anchor = user_side_path(
+        &input_path,
+        options.work_dir.as_deref(),
+        options.home.as_deref(),
+    );
+    let in_anchor_folder = |out: PathBuf| in_working_folder(out, options.home.as_deref());
+    // A default name is one the skill chose; only such a name moves off a file that exists
+    // (`disambiguate_outputs`).
+    let mut default_name = true;
+    let raw_output = options.output_path.as_deref().filter(|s| !s.is_empty());
+    let mut output_path = match raw_output {
+        Some(raw) if options.per_file_name && names_one_file(raw) => {
+            // One literal name over many files names none of them: each keeps its own name, in
+            // the literal's folder, with its extension (owner, 2026-10-23; `beach.mov`
+            // was written as `mov.mkv`, the rest as `mov_city.mkv`).
+            let literal = PathBuf::from(raw);
+            let ext = literal
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let mut named_opts = options.clone();
+            let mut named_container = container.clone();
+            match mode.as_str() {
+                "extract_audio" => named_opts.audio_format = Some(ext),
+                "thumbnail" => named_opts.image_format = Some(ext),
+                _ => named_container = ext,
+            }
+            let named = derive_output_path(&anchor, &mode, vocab, &named_opts, &named_container);
+            let file = named.file_name().map(PathBuf::from).unwrap_or_default();
+            let folder = literal.parent().map(Path::to_path_buf).unwrap_or_default();
+            in_anchor_folder(folder.join(file))
         }
-    } else {
-        derive_output_path(&input_path, &mode, vocab, options, &container)
+        Some(raw) => {
+            let out = in_anchor_folder(resolve_output_target(
+                raw,
+                &input_path,
+                &mode,
+                options,
+                &container,
+            )?);
+            default_name = false;
+            // A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
+            // refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the
+            // derived name, as the plan-level collision handling does for a literal
+            // self-overwrite.
+            if same_file(&out, &input_path) {
+                default_name = true;
+                derive_output_path(&anchor, &mode, vocab, options, &container)
+            } else {
+                out
+            }
+        }
+        None => derive_output_path(&anchor, &mode, vocab, options, &container),
     };
-    assert_in_sandbox(&output_path, sandbox)?;
+    // A default name never writes over its own input (a same-format convert derives `clip.mp4`
+    // for `clip.mp4`): the first free number, here already, not only in the batch's repair.
+    if default_name && same_file(&output_path, &input_path) {
+        output_path = first_free_number(&output_path, std::slice::from_ref(&input_path));
+    }
+    // A routed chain intermediate is in this run's scratch; everything else stays in the sandbox.
+    if !within(&output_path, options.work_dir.as_deref()) {
+        assert_in_sandbox(&output_path, sandbox)?;
+    }
 
     let mut operations: Vec<String> = Vec::new();
     if matches!(
@@ -1564,7 +1668,30 @@ pub fn build_one_recipe(
         }
     }
 
+    // A compress never raises the audio above what the source has: a 69k AAC track re-encoded at
+    // the profile's 96k made `clip.mov` 10% bigger (manual test, 2026-10-28). A track at or under
+    // the profile is copied when it is already the codec the output wants, else encoded at its own
+    // bitrate. The cap still budgets the profile's bitrate for a copied track. Port of the block
+    // in `_build_one_recipe`.
+    let mut audio_budget = None;
+    if let (true, Some(src_bps), Some(profile)) = (
+        mode == "compress" && probe.has_audio && !copy_audio,
+        probe.audio_bitrate.filter(|b| *b > 0),
+        audio_bitrate.clone(),
+    ) {
+        let profile_bps = parse_bitrate_bps(Some(&profile));
+        if src_bps as f64 <= profile_bps {
+            if probe.audio_codec.as_deref() == Some(audio_codec.as_str()) {
+                copy_audio = true;
+                audio_budget = Some(profile);
+            } else {
+                audio_bitrate = Some(format!("{}k", src_bps / 1000));
+            }
+        }
+    }
+
     let mut recipe = Recipe {
+        default_name,
         mode: mode.clone(),
         input: input_path.to_string_lossy().into_owned(),
         output: output_path.to_string_lossy().into_owned(),
@@ -1666,6 +1793,7 @@ pub fn build_one_recipe(
             recipe.target_size_mb = options.target_size_mb;
             if recipe.target_size_mb.is_some() {
                 recipe.source_duration = probe.duration;
+                recipe.audio_budget = audio_budget;
             }
         }
         "reverse" => {
@@ -1680,6 +1808,18 @@ pub fn build_one_recipe(
             recipe.audio_only = audio_only;
         }
         _ => {}
+    }
+
+    // An operation that keeps its video copies it, unless the output container cannot hold the
+    // source codec: h264 copied into a `.webm` is refused ("Only VP8 or VP9 or AV1 video";
+    // ffmpeg_hard2_005). The encoding guard above has already set webm's encoder in `video`.
+    if matches!(mode.as_str(), "strip_audio" | "adjust_volume") && !recipe.audio_only {
+        recipe.encode_kept_video = container == "webm"
+            && probe
+                .video_codec
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .is_some_and(|src| !["vp8", "vp9", "av1"].contains(&src));
     }
 
     if drop_video {
@@ -1697,23 +1837,24 @@ mod tests {
     #[test]
     fn a_batch_output_never_lands_on_another_input() {
         for order in [["clip.mp4", "clip.mov"], ["clip.mov", "clip.mp4"]] {
-            let mut outs: Vec<(PathBuf, PathBuf)> = order
+            let mut outs: Vec<(PathBuf, PathBuf, bool)> = order
                 .iter()
                 .map(|n| {
                     let input = PathBuf::from("/sb").join(n);
-                    // What the pattern gives each: the self-case already took the derived name.
+                    // What the pattern gives each: the self-case already took the first free
+                    // number.
                     let out = if *n == "clip.mp4" {
-                        PathBuf::from("/sb/clip_converted.mp4")
+                        PathBuf::from("/sb/clip_1.mp4")
                     } else {
                         PathBuf::from("/sb/clip.mp4")
                     };
-                    (input, out)
+                    (input, out, false)
                 })
                 .collect();
             disambiguate_outputs(&mut outs);
             let names: Vec<String> = outs
                 .iter()
-                .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+                .map(|(_, o, _)| o.file_name().unwrap().to_string_lossy().into_owned())
                 .collect();
             assert!(
                 !names.iter().any(|n| order.contains(&n.as_str())),
@@ -2152,6 +2293,7 @@ mod tests {
             container: Some("mp4".into()),
             video_codec: Some("h264".into()),
             audio_codec: Some("aac".into()),
+            audio_bitrate: None,
             has_audio: true,
             width: Some(1920),
             height: Some(1080),
@@ -2186,6 +2328,108 @@ mod tests {
         assert!(r.operations.iter().any(|o| o == "enable_faststart"));
     }
 
+    /// `clip.mov` from the 2026-10-28 manual test: 69k AAC under a 96k profile. Mirrors
+    /// `skills/ffmpeg/python/tests/test_compress_smaller.py`.
+    fn small_audio_probe(codec: Option<&str>, bitrate: Option<u64>) -> Probe {
+        Probe {
+            file: "clip.mp4".into(),
+            container: Some("mp4".into()),
+            video_codec: Some("h264".into()),
+            audio_codec: codec.map(String::from),
+            audio_bitrate: bitrate,
+            has_audio: codec.is_some(),
+            width: Some(1280),
+            height: Some(720),
+            duration: Some(8.0),
+            fps: Some(25.0),
+        }
+    }
+
+    fn audio_flags_of(probe: &Probe, mode: &str, container: Option<&str>) -> Vec<String> {
+        let v = bundle_vocab();
+        let q = QualityProfile {
+            video_crf: 28,
+            encoder_preset: "slow".into(),
+            audio_bitrate: Some("96k".into()),
+            ..quality("small_file")
+        };
+        let opts = Options {
+            mode: Some(mode.into()),
+            container: container.map(String::from),
+            ..Default::default()
+        };
+        let r = build_one_recipe(probe, None, Some(&q), &opts, &v, None).unwrap();
+        let (_, post) = build_flags(&r, &v).unwrap();
+        let at = post.iter().position(|f| f == "-c:a").unwrap();
+        post[at..].to_vec()
+    }
+
+    #[test]
+    fn summarise_probe_reads_the_audio_bitrate() {
+        let doc = serde_json::json!({
+            "streams": [{"codec_type": "audio", "codec_name": "aac", "bit_rate": "69339"}],
+            "format": {"format_name": "mov,mp4,m4a"}
+        });
+        assert_eq!(
+            summarise_probe(Path::new("clip.mov"), &doc).audio_bitrate,
+            Some(69339)
+        );
+        let none = serde_json::json!({"streams": [{"codec_type": "audio", "codec_name": "opus"}]});
+        assert_eq!(
+            summarise_probe(Path::new("clip.mkv"), &none).audio_bitrate,
+            None
+        );
+    }
+
+    #[test]
+    fn compress_never_raises_the_audio() {
+        let flags = |c, b, m, k| audio_flags_of(&small_audio_probe(c, b), m, k);
+        assert_eq!(
+            flags(Some("aac"), Some(69339), "compress", None),
+            ["-c:a", "copy", "-movflags", "+faststart"]
+        );
+        assert_eq!(
+            flags(Some("aac"), Some(192_000), "compress", None)[..4],
+            ["-c:a", "aac", "-b:a", "96k"]
+        );
+        assert_eq!(
+            flags(Some("mp3"), Some(64000), "compress", None)[..4],
+            ["-c:a", "aac", "-b:a", "64k"]
+        );
+        assert_eq!(
+            flags(Some("aac"), None, "compress", None)[..4],
+            ["-c:a", "aac", "-b:a", "96k"]
+        );
+        assert_eq!(
+            flags(Some("aac"), Some(69339), "convert", Some("mkv"))[..4],
+            ["-c:a", "aac", "-b:a", "96k"]
+        );
+    }
+
+    #[test]
+    fn a_copied_track_is_still_budgeted_in_a_size_cap() {
+        let v = bundle_vocab();
+        let q = QualityProfile {
+            video_crf: 28,
+            encoder_preset: "slow".into(),
+            audio_bitrate: Some("96k".into()),
+            ..quality("small_file")
+        };
+        let opts = Options {
+            mode: Some("compress".into()),
+            target_size_mb: Some(0.5),
+            ..Default::default()
+        };
+        let probe = Probe {
+            duration: Some(10.0),
+            ..small_audio_probe(Some("aac"), Some(69339))
+        };
+        let r = build_one_recipe(&probe, None, Some(&q), &opts, &v, None).unwrap();
+        let (_, post) = build_flags(&r, &v).unwrap();
+        let at = post.iter().position(|f| f == "-maxrate").unwrap();
+        assert_eq!(post[at + 1], "302k");
+    }
+
     /// A probe as `summarise_probe` stores it: the first entry of ffprobe's `format_name`.
     fn probe_of(file: &str, format_name: &str, video: bool) -> Probe {
         Probe {
@@ -2193,6 +2437,7 @@ mod tests {
             container: format_name.split(',').next().map(String::from),
             video_codec: video.then(|| "h264".into()),
             audio_codec: Some("aac".into()),
+            audio_bitrate: None,
             has_audio: true,
             width: video.then_some(1280),
             height: video.then_some(720),
@@ -2237,6 +2482,66 @@ mod tests {
         }
         let mkv = probe_of("clip.mkv", "matroska,webm", true);
         assert_eq!(reversed_name(&mkv, Some("mp4")), "clip_reversed.mp4");
+    }
+
+    /// Mirrors Python's test_keeping_the_video_into_webm_reencodes_an_h264_source: `-c:v copy`
+    /// of h264 into a `.webm` is refused ("Only VP8 or VP9 or AV1 video"; ffmpeg_hard2_005).
+    #[test]
+    fn keeping_the_video_into_webm_reencodes_an_h264_source() {
+        let probe = probe_of("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2", true);
+        for mode in ["strip_audio", "adjust_volume"] {
+            let opts = Options {
+                mode: Some(mode.into()),
+                output_path: Some("out.webm".into()),
+                level: Some("2.0".into()),
+                ..Default::default()
+            };
+            let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+            let (_, post) = build_flags(&r, &bundle_vocab()).unwrap();
+            assert!(
+                !post.windows(2).any(|w| w == ["-c:v", "copy"]),
+                "{mode}: {post:?}"
+            );
+            let i = post.iter().position(|f| f == "-c:v").unwrap();
+            assert_eq!(post[i + 1], "libvpx-vp9", "{mode}: {post:?}");
+        }
+    }
+
+    /// Mirrors Python's test_the_last_frame_is_written_by_decoding_to_the_end.
+    #[test]
+    fn the_last_frame_is_written_by_decoding_to_the_end() {
+        let probe = probe_of("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2", true);
+        let opts = Options {
+            mode: Some("thumbnail".into()),
+            at_time: Some("last".into()),
+            ..Default::default()
+        };
+        let r = build_one_recipe(&probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+        let (pre, post) = build_flags(&r, &bundle_vocab()).unwrap();
+        assert_eq!(pre, ["-sseof", "-1"]);
+        assert_eq!(post, ["-update", "1"]);
+    }
+
+    /// Mirrors Python's test_keeping_the_video_still_copies_what_the_container_can_hold.
+    #[test]
+    fn keeping_the_video_still_copies_what_the_container_can_hold() {
+        let mut vp9 = probe_of("clip.webm", "matroska,webm", true);
+        vp9.video_codec = Some("vp9".into());
+        let mp4 = probe_of("clip.mp4", "mov,mp4,m4a,3gp,3g2,mj2", true);
+        for mode in ["strip_audio", "adjust_volume"] {
+            for (probe, output) in [(&vp9, "out.webm"), (&mp4, "out.mp4")] {
+                let opts = Options {
+                    mode: Some(mode.into()),
+                    output_path: Some(output.into()),
+                    level: Some("2.0".into()),
+                    ..Default::default()
+                };
+                let r = build_one_recipe(probe, None, None, &opts, &bundle_vocab(), None).unwrap();
+                let (_, post) = build_flags(&r, &bundle_vocab()).unwrap();
+                let i = post.iter().position(|f| f == "-c:v").unwrap();
+                assert_eq!(post[i + 1], "copy", "{mode} -> {output}: {post:?}");
+            }
+        }
     }
 
     #[test]
@@ -2790,10 +3095,13 @@ mod trim_frames_tests {
 
     #[test]
     fn symbolic_at_time_resolves_against_duration() {
+        // Mirrors Python's test_symbolic_at_time_names_the_last_frame_not_a_time: the last frame
+        // is not a time, and needs no duration.
         for token in ["last_frame", "last", "end"] {
-            let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();
-            let secs: f64 = got.parse().unwrap();
-            assert!((11.0..12.0).contains(&secs), "{token} -> {got}");
+            for duration in [Some(12.0), None] {
+                let got = resolve_at_time(Some(&token.to_string()), duration);
+                assert_eq!(got.as_deref(), Some(LAST_FRAME), "{token} {duration:?}");
+            }
         }
         for token in ["middle", "midpoint", "halfway"] {
             let got = resolve_at_time(Some(&token.to_string()), Some(12.0)).unwrap();
@@ -2893,19 +3201,19 @@ mod trim_frames_tests {
             (
                 PathBuf::from("/sb/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
             (
                 PathBuf::from("/sb/clip.mov"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
         ];
         disambiguate_outputs(&mut outs);
         assert_ne!(outs[0].1, outs[1].1, "both inputs render {:?}", outs[0].1);
-        assert!(
-            outs[1].1.to_string_lossy().contains("mov"),
-            "{:?}",
-            outs[1].1
-        );
+        // A taken name gets the first free number (owner, 2026-10-23), which
+        // replaced the source extension (`clip_mov.mp4`).
+        assert_eq!(outs[1].1, PathBuf::from("/sb/out/clip_1.mp4"));
     }
 
     #[test]
@@ -2913,6 +3221,7 @@ mod trim_frames_tests {
         let mut outs = vec![(
             PathBuf::from("/sb/clip.mp4"),
             PathBuf::from("/sb/out/clip.mkv"),
+            false,
         )];
         disambiguate_outputs(&mut outs);
         assert_eq!(
@@ -2971,20 +3280,27 @@ mod trim_frames_tests {
     }
 
     #[test]
-    fn a_batch_name_says_which_input_produced_it() {
-        // `audio_mp4_5.mp3` - observed in `2026-09-15_l4-ffmpeg-t8`. Six fixture videos into
-        // one literal `audio.mp3` suffixed with the SOURCE EXTENSION, which five of the six
-        // share, so it distinguished nothing and the counter did all the work.
-        let mut outs: Vec<(PathBuf, PathBuf)> = ["clip.mov", "clip2.mp4", "clip_4k.mp4"]
+    fn a_repeated_batch_name_takes_the_first_free_number() {
+        // Since 2026-10-23 (owner) one literal name over many files never reaches
+        // here: the recipe builder gives each file its own name
+        // (`contracts/parity/output_name_cases.json`). A name the batch still repeats takes the
+        // first free number, which replaced the source-name suffixes (`audio_clip2.mp3`).
+        let mut outs: Vec<(PathBuf, PathBuf, bool)> = ["clip.mov", "clip2.mp4", "clip_4k.mp4"]
             .iter()
-            .map(|n| (PathBuf::from("/sb").join(n), PathBuf::from("/sb/audio.mp3")))
+            .map(|n| {
+                (
+                    PathBuf::from("/sb").join(n),
+                    PathBuf::from("/sb/audio.mp3"),
+                    false,
+                )
+            })
             .collect();
         disambiguate_outputs(&mut outs);
         let names: Vec<String> = outs
             .iter()
-            .map(|(_, o)| o.file_name().unwrap().to_string_lossy().into_owned())
+            .map(|(_, o, _)| o.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
-        assert_eq!(names, ["audio.mp3", "audio_clip2.mp3", "audio_clip_4k.mp3"]);
+        assert_eq!(names, ["audio.mp3", "audio_1.mp3", "audio_2.mp3"]);
     }
 
     #[test]
@@ -2993,18 +3309,21 @@ mod trim_frames_tests {
             (
                 PathBuf::from("/sb/a/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
             (
                 PathBuf::from("/sb/b/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
             (
                 PathBuf::from("/sb/c/clip.mp4"),
                 PathBuf::from("/sb/out/clip.mp4"),
+                false,
             ),
         ];
         disambiguate_outputs(&mut outs);
-        let set: std::collections::HashSet<_> = outs.iter().map(|(_, o)| o.clone()).collect();
+        let set: std::collections::HashSet<_> = outs.iter().map(|(_, o, _)| o.clone()).collect();
         assert_eq!(set.len(), 3, "{outs:?}");
     }
 

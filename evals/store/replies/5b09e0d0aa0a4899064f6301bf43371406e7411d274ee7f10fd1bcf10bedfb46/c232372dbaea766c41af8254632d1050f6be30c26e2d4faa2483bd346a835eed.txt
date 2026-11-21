@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "upload", "args": {"input": "sample.pdf", "to_url": "https://files.knaif.test/upload"}}]}

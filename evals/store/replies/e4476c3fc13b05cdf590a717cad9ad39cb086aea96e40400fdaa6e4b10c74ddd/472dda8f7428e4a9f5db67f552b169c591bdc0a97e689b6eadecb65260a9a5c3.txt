@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "trim_video", "args": {"input": "clip.mp4", "start": "00:00:00", "end": "00:00:02", "output": "part1.mp4"}}, {"tool": "trim_video", "args": {"input": "clip.mp4", "start": "00:00:04", "end": "00:00:07", "output": "part2.mp4"}}]}

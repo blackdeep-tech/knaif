@@ -13,6 +13,7 @@ from knaif.evalsuite.runner import (
     AgentOutput,
     _extract_artifact,
     _extract_artifacts,
+    _replay_commands,
     run_corpus,
 )
 
@@ -129,6 +130,56 @@ def test_extract_artifacts_single_intent_returns_one():
         }
     ]
     assert _extract_artifacts(results) == ["ffmpeg -i a.mov a.mp4"]
+
+
+def _split_then_trim_results() -> list:
+    """A split writing three pieces in one batch step, then a trim of each piece."""
+    pieces = [f"clip_part_00{n}.mp4" for n in (1, 2, 3)]
+    return [
+        {
+            "tool": "run_batch",
+            "result": {
+                "mode": "dry_run",
+                "outputs": [{"command": ["ffmpeg", "-i", "clip.mp4", p]} for p in pieces],
+            },
+        },
+        *(
+            {
+                "tool": "run_batch",
+                "result": {"outputs": [{"command": ["ffmpeg", "-i", p, p[:-4] + "_t.mp4"]}]},
+            }
+            for p in pieces
+        ),
+    ]
+
+
+def test_the_replay_runs_every_command_of_a_batch_step():
+    """A split's pieces 2 and 3 must exist before their trims run (ffmpeg_302#1):
+    the replay used to run only each step's first command."""
+    commands, graded = _replay_commands(_split_then_trim_results())
+    assert commands == [
+        "ffmpeg -i clip.mp4 clip_part_001.mp4",
+        "ffmpeg -i clip.mp4 clip_part_002.mp4",
+        "ffmpeg -i clip.mp4 clip_part_003.mp4",
+        "ffmpeg -i clip_part_001.mp4 clip_part_001_t.mp4",
+        "ffmpeg -i clip_part_002.mp4 clip_part_002_t.mp4",
+        "ffmpeg -i clip_part_003.mp4 clip_part_003_t.mp4",
+    ]
+    # Grading keeps one output per step, its first command's, as before.
+    assert graded == [0, 3, 4, 5]
+
+
+def test_the_replay_of_one_command_per_step_is_unchanged():
+    commands, graded = _replay_commands(_two_intent_results())
+    assert commands == _extract_artifacts(_two_intent_results())
+    assert graded == [0, 1]
+
+
+def test_the_replay_falls_back_like_the_artifacts():
+    results = [
+        {"tool": "run_preview", "result": {"command": ["ffmpeg", "-i", "in.mp4", "prev.mp4"]}}
+    ]
+    assert _replay_commands(results) == (["ffmpeg -i in.mp4 prev.mp4"], [0])
 
 
 def test_extract_artifacts_falls_back_to_preview_when_no_batch():
@@ -301,7 +352,12 @@ def test_preview_confirmation_does_not_truncate_executing_eval(tmp_path, monkeyp
         assert len(out.artifact_commands) == 2
         assert "scale=" in out.artifact_commands[0]
         assert out.artifact_commands[1].endswith(".mp3")
-        chain.assert_called_once_with(out.artifact_commands, fixtures, tmp_path / "outputs/r001__0")
+        chain.assert_called_once()
+        assert chain.call_args.args == (
+            out.artifact_commands,
+            fixtures,
+            tmp_path / "outputs/r001__0",
+        )
     else:
         assert confirmations[0]["result"]["status"] == "declined"
         chain.assert_not_called()
@@ -401,3 +457,50 @@ def test_agent_output_dataclass():
     )
     assert ao.error is None
     assert ao.execution_results == []
+
+
+def test_a_verbose_run_announces_its_total_first(capsys):
+    """Watchers (scripts/watch_run.sh) read the denominator from this line, not by guessing."""
+    rows = [_row(), _row()]
+    rows[1].utterances = ["a", "b", "c"]
+    run_corpus(_agent(), rows, verbose=True, execute=True)
+    first = capsys.readouterr().out.splitlines()[0]
+    assert first.strip() == "rows to run: 4"
+
+
+def test_a_non_executing_run_counts_one_utterance_per_row(capsys):
+    rows = [_row(), _row()]
+    rows[1].utterances = ["a", "b", "c"]
+    run_corpus(_agent(), rows, verbose=True)
+    assert capsys.readouterr().out.splitlines()[0].strip() == "rows to run: 2"
+
+
+def test_artifact_runner_rows_start_in_an_empty_folder(tmp_path):
+    """Row folders are deterministic (`<id>__<idx>`) and a failed row's is kept, and so was any
+    folder a killed run never graded. The artifact-runner path wrote into whatever was there, so
+    documents' free-name rule numbered past a stale output (`sample.md` -> `sample-1.md`): 32
+    label moves in a 2026-10-11 full run, and a leftover could satisfy a missing input."""
+    fixture_dir = tmp_path / "fixtures"
+    fixture_dir.mkdir()
+    (fixture_dir / "sample.txt").write_text("hi")
+    sandbox = tmp_path / "sb"
+    stale_row = sandbox / "d1__0"
+    stale_row.mkdir(parents=True)
+    (stale_row / "sample.md").write_text("from an earlier run")
+    stale_scratch = sandbox / "d1__0.work"
+    stale_scratch.mkdir()
+    (stale_scratch / "x.pdf").write_text("old")
+
+    seen: list[list[str]] = []
+
+    def runner(artifact, fixture, out_dir):
+        seen.append(sorted(p.name for p in Path(out_dir).iterdir()))
+        assert not stale_scratch.exists()
+        return None
+
+    row = _row(id="d1", fixture="sample.txt")
+    agent = _agent(execute_return=[{"tool": "convert_document", "result": {"output": "x"}}])
+    agent.artifact_runner = MagicMock(side_effect=runner)
+    run_corpus(agent, [row], execute=True, sandbox=sandbox, fixture_dir=fixture_dir)
+    assert agent.artifact_runner.called
+    assert seen == [[]]

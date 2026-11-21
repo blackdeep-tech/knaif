@@ -1,0 +1,6 @@
+local install of the frozen payload (dist/knaif-1.4.0-linux-x64-cuda-backend) with the shipped binary; URLs only rewritten
+knaif 1.4.0 (inference: llama.cpp)
+Installed the cuda backend -> sandbox/r140/backends-cuda
+It is picked up on the next run; no restart of anything else needed.
+-- verify against the SHIPPED manifest (no override):
+cuda: ok (every file matches the manifest)

@@ -30,6 +30,13 @@
 # release. `url`/`sha256` read "TODO" only for a model that has not been uploaded yet; `pull`
 # refuses such a model and `verify` reports NoChecksum.
 #
+# TRAINED FOR WHICH PROMPT (owner, 2026-10-26): `trained_for: N` is the prompt generation
+# (contracts/runtime/prompt_generation.yaml) the model was trained on; the value comes from the
+# dataset's `union_chat.meta.json`. A knaif release knows its own generation, and the CLI says when
+# the model it runs was trained for another one ("results may be worse", naming the model to pull).
+# Models from before generations were counted (v1, v2) carry no `trained_for`. The version number
+# stays a publication counter: the generation, not the number, says what a model fits.
+#
 # NAMING & VERSIONS: the manifest key + `file` carry the PUBLIC RELEASE version (v1, v2, … — +1
 # per publication, contiguous). Internal fine-tune cycles (sft-v3, sft-v8, …) live in `training_run`
 # (provenance only) — never in the public name, so the public version can't leak gappy R&D numbers.

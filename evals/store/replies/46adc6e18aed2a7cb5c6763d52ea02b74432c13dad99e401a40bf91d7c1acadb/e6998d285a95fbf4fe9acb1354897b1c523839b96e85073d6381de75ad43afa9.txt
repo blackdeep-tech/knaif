@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "merge_pdfs", "args": {"inputs": ["sample.pdf", "sample-scanned.pdf"], "output": "combined.pdf"}}, {"tool": "add_page_numbers", "args": {"input": "combined.pdf"}}]}

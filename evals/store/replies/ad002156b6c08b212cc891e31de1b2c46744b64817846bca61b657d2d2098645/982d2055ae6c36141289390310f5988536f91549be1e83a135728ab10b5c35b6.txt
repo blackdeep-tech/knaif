@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "That would require a 10-second clip, but you asked to trim it to 10 seconds. Is that correct?"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Sending files outside this skill is outside its safety policy; outputs stay on this machine."}}]}

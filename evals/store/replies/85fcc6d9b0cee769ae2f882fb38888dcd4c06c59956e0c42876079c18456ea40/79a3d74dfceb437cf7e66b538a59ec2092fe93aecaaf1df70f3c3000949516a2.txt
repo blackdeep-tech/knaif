@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Should I trim the first 2 seconds from each file, then join them into one video?"}}]}

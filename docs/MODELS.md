@@ -236,10 +236,12 @@ contain no personal or third-party content. Attribution notices live in
 2. Build the deployment quant (4B → Q4_K_M, 1.7B → Q6_K).
 3. Upload to `blackdeep/knaif` and add a manifest entry with a **commit-SHA-pinned** resolve
    URL (never `main` — it moves under a fixed `sha256` and breaks `verify`), plus `sha256`,
-   `size_bytes`, `base_model`, `base_model_license`, `skills`, and `training_run`.
-   `scripts/publish_model.py` fills the checksum and size.
+   `size_bytes`, `base_model`, `base_model_license`, `skills`, `training_run` and
+   `trained_for` (the prompt generation from the dataset's `union_chat.meta.json`; see
+   `contracts/runtime/prompt_generation.yaml`). `scripts/publish_model.py` fills the checksum
+   and size.
 4. Add a `models.yaml` entry mirroring the validated eval config (`n_ctx 8192`,
-   `max_tokens 512`, `thinking_enabled false`).
+   `max_tokens 512`, `thinking_enabled false`), with the same `trained_for`.
 5. Point **only the trained skills'** `recommended_model:` at it; leave untrained skills and
    the project-wide `default:` alone.
 6. Bump the public version by exactly one (`v1` → `v2`); keep the FT-cycle name in

@@ -1,0 +1,1773 @@
+{
+  "_comment": "One display for both CLIs, based on native (owner, 2026-10-23). What `run` prints, end to end, for a canned model output (KNAIF_LLM_BACKEND=mock, KNAIF_LLM_MOCK_RESPONSE), run in a folder holding only the case's `files` (empty) and `fixtures` (copied from sandbox/fixtures/<skill>/; a case whose fixture is missing, or that runs ffmpeg when it is not on PATH, is skipped) with stdin closed: stdout and stderr byte for byte (`stderr_prefix`: only its start, where the cause is each runtime's own validator message), and whether the run succeeded; `files_after`, when given, is the folder's files once the run ended; `file_bytes`, written by hand and never recorded, is a saved file's exact bytes, line ends included. `\"view\": \"rich\"` runs the terminal view (KNAIF_VIEW=rich, NO_COLOR=1); there every `x.xxx s` timing is compared as `<t> s`, and native's live ffmpeg progress line (redrawn in place, then erased) is left out. Native is the reference: apps/cli/tests/cli_output_parity.rs records the cases under KNAIF_RECORD_CONTRACT=1 and checks them otherwise; Python python/core/tests/test_cli_output_parity.py runs knaif.app's `run` on the same cases.",
+  "cases": [
+    {
+      "name": "a dry run of one step prints only the command",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "strip audio from clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a dry-run chain numbers its steps and shows the scratch as <work>",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "strip audio from clip.mp4 and resize it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "silent.mp4"
+              ],
+              "height": 720,
+              "output": "small.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "step 1 of 2:\nffmpeg -y -i clip.mp4 -an -c:v copy <work>/silent.mp4\nstep 2 of 2:\nffmpeg -y -i <work>/silent.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart small.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a chain whose intermediate the user named keeps it",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "strip audio from clip.mp4 into silent.mp4 and resize silent.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "silent.mp4"
+              ],
+              "height": 720,
+              "output": "small.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "step 1 of 2:\nffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\nstep 2 of 2:\nffmpeg -y -i silent.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart small.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a question is one prefixed line",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "resize clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "Which file?"
+            }
+          }
+        ]
+      },
+      "stdout": "clarify: Which file?\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a refusal is one prefixed line",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "resize clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "reject",
+            "args": {
+              "reason": "Not allowed."
+            }
+          }
+        ]
+      },
+      "stdout": "reject: Not allowed.\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "done says there is nothing to do",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "resize clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "done",
+            "args": {}
+          }
+        ]
+      },
+      "stdout": "Nothing to do.\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "an unsafe request is refused before any plan is read",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "run rm -rf on the media folder",
+      "plan": {
+        "plan": []
+      },
+      "stdout": "reject: this request is blocked by the ffmpeg skill's safety policy.\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a count with no names asks which ones",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert 2 of the videos to mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mov"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "files": [
+        "a.mov",
+        "b.mov",
+        "c.mov"
+      ],
+      "stdout": "clarify: Which 2 of the 3 videos? Name them.\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a password the user typed is used",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "protect sample.pdf with password a\\b",
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "a/b"
+            }
+          }
+        ]
+      },
+      "stdout": "would password-protect →\n  sample-protected.pdf\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "an invented password is asked for",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "protect sample.pdf with a password",
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "hunter2"
+            }
+          }
+        ]
+      },
+      "stdout": "clarify: What password should I use?\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a dry run of a document write",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "rotate page 1 of report.pdf",
+      "plan": {
+        "plan": [
+          {
+            "tool": "rotate_pages",
+            "args": {
+              "input": "report.pdf",
+              "pages": "1",
+              "degrees": 90,
+              "output": "rotated.pdf"
+            }
+          }
+        ]
+      },
+      "stdout": "would rotate pages →\n  rotated.pdf\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a dry run of extract_text names the text file",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "extract the text of report.pdf",
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "report.pdf"
+            }
+          }
+        ]
+      },
+      "stdout": "would save the text →\n  report.txt\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a dry run over many files",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert all the mov files to mp4 and make them 480p",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "dog.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mov"
+              ],
+              "container": "mp4",
+              "output": "clip.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 480
+            }
+          }
+        ]
+      },
+      "stdout": "step 1 of 6:\nffmpeg -y -i beach.mov -c copy -movflags +faststart <work>/beach.mp4\nstep 2 of 6:\nffmpeg -y -i <work>/beach.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart beach_resized.mp4\nstep 3 of 6:\nffmpeg -y -i city.mov -c copy -movflags +faststart <work>/city.mp4\nstep 4 of 6:\nffmpeg -y -i <work>/city.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart city_resized.mp4\nstep 5 of 6:\nffmpeg -y -i dog.mov -c copy -movflags +faststart <work>/dog.mp4\nstep 6 of 6:\nffmpeg -y -i <work>/dog.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart dog_resized.mp4\n",
+      "stderr": "3 done in <t> s, 0 B\n",
+      "ok": true
+    },
+    {
+      "name": "the tree: one step",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "strip audio from clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 1 step\n │   └─ 1  strip_audio  clip.mp4 → silent.mp4\n │   leaves silent.mp4\n │\n ├─ Step 1/1 · strip_audio\n │   $ ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n │\n └─ Done · dry run, nothing executed · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a chain with <work>",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "strip audio from clip.mp4 and resize it",
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "silent.mp4"
+              ],
+              "height": 720,
+              "output": "small.mp4"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 2 steps\n │   ├─ 1  strip_audio   clip.mp4 → <work>/silent.mp4\n │   └─ 2  resize_video  <work>/silent.mp4 → small.mp4\n │   leaves small.mp4\n │\n ├─ Step 1/2 · strip_audio\n │   $ ffmpeg -y -i clip.mp4 -an -c:v copy <work>/silent.mp4\n ├─ Step 2/2 · resize_video\n │   $ ffmpeg -y -i <work>/silent.mp4 -vf scale=-2:720 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart small.mp4\n │\n └─ Done · dry run, nothing executed · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a question closes it",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "resize clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "clarify",
+            "args": {
+              "question": "Which file?"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n └─ ? I need more detail: Which file?  (<t> s)\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: nothing to do",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "resize clip.mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "done",
+            "args": {}
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n └─ ✓ Nothing to do.  (<t> s)\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: an unsafe request",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "run rm -rf on the media folder",
+      "plan": {
+        "plan": []
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n └─ ⊘ I won't do that: this request is blocked by the ffmpeg skill's safety policy.  (<t> s)\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a count asks",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert 2 of the videos to mp4",
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mov"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "files": [
+        "a.mov",
+        "b.mov",
+        "c.mov"
+      ],
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n └─ ? I need more detail: Which 2 of the 3 videos? Name them.  (<t> s)\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a document write",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "protect sample.pdf with password secret1",
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "secret1"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  protect_pdf  sample.pdf\n │   leaves 1 pdf\n │\n ├─ Step 1/1 · protect_pdf\n │   would password-protect\n │   → sample-protected.pdf\n │\n └─ Done · dry run, nothing executed · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: extract_text",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "extract the text of report.pdf",
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "report.pdf"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  extract_text  report.pdf\n │   leaves 1 text file\n │\n ├─ Step 1/1 · extract_text\n │   would save the text\n │   → report.txt\n │\n └─ Done · dry run, nothing executed · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: many files",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert all the mov files to mp4 and make them 480p",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "dog.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mov"
+              ],
+              "container": "mp4",
+              "output": "clip.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "height": 480
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 2 steps\n │   ├─ 1  convert_video  beach.mov → <work>/beach.mp4\n │   └─ 2  resize_video   <work>/beach.mp4\n │   the same for 2 more files: city.mov, dog.mov\n │   leaves 3 mp4\n │\n ├─ Step 1/6 · convert_video\n │   $ ffmpeg -y -i beach.mov -c copy -movflags +faststart <work>/beach.mp4\n ├─ Step 2/6 · resize_video\n │   $ ffmpeg -y -i <work>/beach.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart beach_resized.mp4\n ├─ Step 3/6 · convert_video\n │   $ ffmpeg -y -i city.mov -c copy -movflags +faststart <work>/city.mp4\n ├─ Step 4/6 · resize_video\n │   $ ffmpeg -y -i <work>/city.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart city_resized.mp4\n ├─ Step 5/6 · convert_video\n │   $ ffmpeg -y -i dog.mov -c copy -movflags +faststart <work>/dog.mp4\n ├─ Step 6/6 · resize_video\n │   $ ffmpeg -y -i <work>/dog.mp4 -vf scale=-2:480 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart dog_resized.mp4\n │\n └─ Done · dry run, nothing executed · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a run writes its file",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "strip audio from clip.mp4",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "✓ silent.mp4\n",
+      "stderr": "running: ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n",
+      "ok": true
+    },
+    {
+      "name": "a run of a chain",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "strip audio from clip.mp4 and make it 240p",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "silent.mp4"
+              ],
+              "height": 240,
+              "output": "small.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "step 1 of 2:\n✓ <work>/silent.mp4\nstep 2 of 2:\n✓ small.mp4\n",
+      "stderr": "running: ffmpeg -y -i clip.mp4 -an -c:v copy <work>/silent.mp4\nrunning: ffmpeg -y -i <work>/silent.mp4 -vf scale=-2:240 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart small.mp4\n",
+      "ok": true
+    },
+    {
+      "name": "an existing output stops a run with no terminal",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "strip audio from clip.mp4",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "files": [
+        "silent.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "",
+      "stderr": "Error: the step failed\n\nCaused by:\n    silent.mp4 already exists. Re-run with --allow overwrite to replace it, or name a different output.\n",
+      "ok": false
+    },
+    {
+      "name": "--allow overwrite replaces it",
+      "skill": "ffmpeg",
+      "flags": [
+        "--allow",
+        "overwrite"
+      ],
+      "utterance": "strip audio from clip.mp4",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "files": [
+        "silent.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "✓ silent.mp4\n",
+      "stderr": "running: ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n",
+      "ok": true
+    },
+    {
+      "name": "a document write",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "protect sample.pdf with password secret1",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "secret1"
+            }
+          }
+        ]
+      },
+      "stdout": "password-protect\n✓ wrote sample-protected.pdf\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "extract_text saves and previews",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "extract the text of sample.pdf",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "sample.pdf"
+            }
+          }
+        ]
+      },
+      "stdout": "save the text\n✓ wrote sample.txt\nAlpha page one\nBeta page two\nGamma page three\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a document inspected",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "inspect sample.pdf",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "inspect_document",
+            "args": {
+              "input": "sample.pdf"
+            }
+          }
+        ]
+      },
+      "stdout": "pdf: 3 page(s), 2227 bytes, encrypted=false, text_layer=true\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a run writes its file",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "strip audio from clip.mp4",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 1 step\n │   └─ 1  strip_audio  clip.mp4 → silent.mp4\n │   leaves silent.mp4\n │\n ├─ Step 1/1 · strip_audio\n │   $ ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\n │   └─ ✓ silent.mp4 ···························· <t> s\n │\n └─ Done · 1 file written · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a run of a chain",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "strip audio from clip.mp4 and make it 240p",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "silent.mp4"
+              ],
+              "height": 240,
+              "output": "small.mp4"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 2 steps\n │   ├─ 1  strip_audio   clip.mp4 → <work>/silent.mp4\n │   └─ 2  resize_video  <work>/silent.mp4 → small.mp4\n │   leaves small.mp4\n │\n ├─ Step 1/2 · strip_audio\n │   $ ffmpeg -y -i clip.mp4 -an -c:v copy <work>/silent.mp4\n │   └─ ✓ <work>/silent.mp4 ····················· <t> s\n ├─ Step 2/2 · resize_video\n │   $ ffmpeg -y -i <work>/silent.mp4 -vf scale=-2:240 -c:v libx264 -crf 23 -preset medium -pix_fmt yuv420p -c:a copy -movflags +faststart small.mp4\n │   └─ ✓ small.mp4 ····························· <t> s\n │\n └─ Done · 2 files written · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a document write",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "protect sample.pdf with password secret1",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "secret1"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  protect_pdf  sample.pdf\n │   leaves 1 pdf\n │\n ├─ Step 1/1 · protect_pdf\n │   password-protect\n │   → sample-protected.pdf\n │   └─ ✓ sample-protected.pdf ·················· <t> s\n │\n └─ Done · 1 file written · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: extract_text saves and previews",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "extract the text of sample.pdf",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "sample.pdf"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  extract_text  sample.pdf\n │   leaves 1 text file\n │\n ├─ Step 1/1 · extract_text\n │   save the text\n │   → sample.txt\n │   └─ ✓ sample.txt ···························· <t> s\n │   Alpha page one\n │   Beta page two\n │   Gamma page three\n │\n └─ Done · 1 file written · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a document inspected",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "inspect sample.pdf",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "inspect_document",
+            "args": {
+              "input": "sample.pdf"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  inspect_document  sample.pdf\n │\n ├─ Step 1/1 · inspect_document\n │   PDF · 3 pages · 2.2 KB · has a text layer\n │\n └─ Done · no files written · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: a search in a document",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "find Beta in sample.pdf",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "find_in_document",
+            "args": {
+              "input": "sample.pdf",
+              "query": "Beta"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  find_in_document  sample.pdf\n │\n ├─ Step 1/1 · find_in_document\n │   page 2: Beta page two\n │\n └─ Done · no files written · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a URL input in a dry run",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "extract the text of https://files.knaif.test/report.pdf",
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "https://files.knaif.test/report.pdf"
+            }
+          }
+        ]
+      },
+      "stdout": "would save the text →\n  report.txt\n",
+      "stderr": "would download https://files.knaif.test/report.pdf → report.pdf (downloaded)\n",
+      "ok": true
+    },
+    {
+      "name": "the tree: a URL input in a dry run",
+      "skill": "documents",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "extract the text of https://files.knaif.test/report.pdf",
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "https://files.knaif.test/report.pdf"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n │   would download https://files.knaif.test/report.pdf → report.pdf (downloaded)\n ├─ Plan · 1 step\n │   └─ 1  extract_text  report.pdf (downloaded)\n │   leaves 1 text file\n │\n ├─ Step 1/1 · extract_text\n │   would save the text\n │   → report.txt\n │\n └─ Done · dry run, nothing executed · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "--confirm with nobody to ask stops",
+      "skill": "ffmpeg",
+      "flags": [
+        "--confirm"
+      ],
+      "utterance": "strip audio from clip.mp4",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "silent.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "",
+      "stderr": "  ffmpeg -y -i clip.mp4 -an -c:v copy silent.mp4\nError: the step failed\n\nCaused by:\n    1 destructive ffmpeg command(s) pending. Re-run with --yes to proceed, or --dry-run to preview.\n",
+      "ok": false
+    },
+    {
+      "name": "--confirm with nobody to ask stops a document write",
+      "skill": "documents",
+      "flags": [
+        "--confirm"
+      ],
+      "utterance": "protect sample.pdf with password secret1",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "secret1"
+            }
+          }
+        ]
+      },
+      "stdout": "password-protect\n",
+      "stderr": "  sample-protected.pdf\nError: the step failed\n\nCaused by:\n    1 destructive output file(s) pending. Re-run with --yes to proceed, or --dry-run to preview.\n",
+      "ok": false
+    },
+    {
+      "name": "--confirm --yes acts",
+      "skill": "documents",
+      "flags": [
+        "--confirm",
+        "--yes"
+      ],
+      "utterance": "protect sample.pdf with password secret1",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "secret1"
+            }
+          }
+        ]
+      },
+      "stdout": "password-protect\n✓ wrote sample-protected.pdf\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "--stdout prints the text alone and saves nothing",
+      "skill": "documents",
+      "flags": [
+        "--stdout"
+      ],
+      "utterance": "extract the text of sample.txt",
+      "fixtures": [
+        "sample.txt"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "sample.txt"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "sample.txt"
+      ],
+      "stdout": "Sample document\nInvoice Alpha\nTotal: 42 EUR\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "the tree: --stdout draws on stderr",
+      "skill": "documents",
+      "flags": [
+        "--stdout"
+      ],
+      "utterance": "extract the text of sample.txt",
+      "fixtures": [
+        "sample.txt"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "sample.txt"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "sample.txt"
+      ],
+      "view": "rich",
+      "stdout": "Sample document\nInvoice Alpha\nTotal: 42 EUR\n",
+      "stderr": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  extract_text  sample.txt\n │   leaves 1 text file\n │\n ├─ Step 1/1 · extract_text\n │\n └─ Done · no files written · total <t> s\n\n",
+      "ok": true
+    },
+    {
+      "name": "--stdout refuses a step with no text answer",
+      "skill": "documents",
+      "flags": [
+        "--stdout"
+      ],
+      "utterance": "protect sample.pdf with password secret1",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "protect_pdf",
+            "args": {
+              "input": "sample.pdf",
+              "password": "secret1"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "sample.pdf"
+      ],
+      "stdout": "",
+      "stderr": "Error: --stdout prints a text answer, and protect_pdf has none: run it without --stdout.\n",
+      "ok": false
+    },
+    {
+      "name": "--stdout of a PDF: pages one blank line apart",
+      "skill": "documents",
+      "flags": [
+        "--stdout"
+      ],
+      "utterance": "extract the text of sample.pdf",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "sample.pdf"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "sample.pdf"
+      ],
+      "stdout": "Alpha page one\n\nBeta page two\n\nGamma page three\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a PDF's saved text: pages one blank line apart, \\n line ends",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "extract the text of sample.pdf",
+      "fixtures": [
+        "sample.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "sample.pdf"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "sample.pdf",
+        "sample.txt"
+      ],
+      "file_bytes": {
+        "sample.txt": "Alpha page one\n\nBeta page two\n\nGamma page three\n"
+      },
+      "stdout": "save the text\n✓ wrote sample.txt\nAlpha page one\nBeta page two\nGamma page three\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "an output with its own folder is under the working folder",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert videos/clip.mp4 to out/clip.mkv",
+      "files": [
+        "videos/clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "videos/clip.mp4"
+              ],
+              "output": "out/clip.mkv"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i videos/clip.mp4 -c copy out/clip.mkv\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a bare output name is in the working folder",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert videos/clip.mp4 to clip.mkv",
+      "files": [
+        "videos/clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "videos/clip.mp4"
+              ],
+              "output": "clip.mkv"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i videos/clip.mp4 -c copy clip.mkv\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a name knaif makes up stays beside its input",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert videos/clip.mp4 to mkv",
+      "files": [
+        "videos/clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "videos/clip.mp4"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i videos/clip.mp4 -c copy videos/clip.mkv\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "an output pattern is in the working folder",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert the videos/*.mov files to *.mp4",
+      "files": [
+        "videos/beach.mov",
+        "videos/city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "videos/*.mov"
+              ],
+              "container": "mp4",
+              "output": "*.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i videos/beach.mov -c copy -movflags +faststart beach.mp4\nffmpeg -y -i videos/city.mov -c copy -movflags +faststart city.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "an output pattern with its own folder is under the working folder",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert the videos/*.mov files to small/*.mp4",
+      "files": [
+        "videos/beach.mov",
+        "videos/city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "videos/*.mov"
+              ],
+              "container": "mp4",
+              "output": "small/*.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i videos/beach.mov -c copy -movflags +faststart small/beach.mp4\nffmpeg -y -i videos/city.mov -c copy -movflags +faststart small/city.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a run into a folder names it with one separator",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "strip audio from clip.mp4 into out/silent.mp4",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "strip_audio",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "out/silent.mp4"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "clip.mp4",
+        "out"
+      ],
+      "stdout": "✓ out/silent.mp4\n",
+      "stderr": "running: ffmpeg -y -i clip.mp4 -an -c:v copy out/silent.mp4\n",
+      "ok": true
+    },
+    {
+      "name": "a chain whose later step would fail runs nothing",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "convert clip.mp4 to a.mkv and crop it",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "a.mkv"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "a.mkv"
+              ],
+              "aspect": "not-an-aspect"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "clip.mp4"
+      ],
+      "stdout": "",
+      "stderr": "Error: step 2 of 2 would fail, so nothing ran\n\nCaused by:\n    Invalid aspect value 'not-an-aspect'. Expected 'aw:ah'.\n",
+      "ok": false
+    },
+    {
+      "name": "the tree: a chain whose later step would fail runs nothing",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "convert clip.mp4 to a.mkv and crop it",
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "a.mkv"
+            }
+          },
+          {
+            "tool": "resize_video",
+            "args": {
+              "inputs": [
+                "a.mkv"
+              ],
+              "aspect": "not-an-aspect"
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "files_after": [
+        "clip.mp4"
+      ],
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 2 steps\n │   ├─ 1  convert_video  clip.mp4 → a.mkv\n │   └─ 2  resize_video   a.mkv\n │   leaves 2 mkv\n │\n │\n └─ ✗ step 2 of 2 would fail, so nothing ran · total <t> s\n      Invalid aspect value 'not-an-aspect'. Expected 'aw:ah'.\n\n",
+      "stderr": "",
+      "ok": false
+    },
+    {
+      "name": "a protected PDF in a batch is out before the others run, once",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "extract the text of every pdf here",
+      "fixtures": [
+        "sample.pdf",
+        "sample-protected.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "*.pdf"
+            }
+          }
+        ]
+      },
+      "files_after": [
+        "sample-protected.pdf",
+        "sample.pdf",
+        "sample.txt"
+      ],
+      "stdout": "step 2 of 2:\nsave the text\n✓ wrote sample.txt\nAlpha page one\nBeta page two\nGamma page three\n",
+      "stderr": "✗ sample-protected.pdf: Cannot extract text from encrypted PDF without a password. Unlock it first.\n1 done, 1 failed in <t> s, 48 B\n",
+      "ok": false
+    },
+    {
+      "name": "a step that raises says which step and why, with no folder",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "extract the text of broken.pdf",
+      "files": [
+        "broken.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_text",
+            "args": {
+              "input": "broken.pdf"
+            }
+          }
+        ]
+      },
+      "stdout": "",
+      "stderr_prefix": "Error: the step failed\n\nCaused by:\n    could not open PDF broken.pdf: ",
+      "ok": false
+    },
+    {
+      "name": "a protected PDF a step cannot open says so",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "rotate sample-protected.pdf by 90 degrees",
+      "fixtures": [
+        "sample-protected.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "rotate_pages",
+            "args": {
+              "input": "sample-protected.pdf",
+              "degrees": 90
+            }
+          }
+        ]
+      },
+      "stdout": "",
+      "stderr": "Error: the step failed\n\nCaused by:\n    sample-protected.pdf is password-protected. Unlock it first (with the password), then try again.\n",
+      "ok": false
+    },
+    {
+      "name": "the tree: a protected PDF a step cannot open says so",
+      "skill": "documents",
+      "flags": [],
+      "utterance": "rotate sample-protected.pdf by 90 degrees",
+      "fixtures": [
+        "sample-protected.pdf"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "rotate_pages",
+            "args": {
+              "input": "sample-protected.pdf",
+              "degrees": 90
+            }
+          }
+        ]
+      },
+      "view": "rich",
+      "stdout": " knaif · documents\n │\n ├─ Plan · 1 step\n │   └─ 1  rotate_pages  sample-protected.pdf\n │   leaves 1 pdf\n │\n ├─ Step 1/1 · rotate_pages\n │\n └─ ✗ the step failed · total <t> s\n      sample-protected.pdf is password-protected. Unlock it first (with the password), then try again.\n\n",
+      "stderr": "",
+      "ok": false
+    },
+    {
+      "name": "plain names pass both gates",
+      "why": "'convert beach and city from mov to mkv' passed the hallucinated-filename guard once a plain word could name a file, then the NL clarify gate asked 'Which beach.mov did you mean?' on both CLIs (2026-10-24).",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert beach and city from mov to mkv",
+      "files": [
+        "beach.mov",
+        "city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i beach.mov -c copy beach.mkv\nffmpeg -y -i city.mov -c copy city.mkv\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a folder called out keeps the pattern's folder",
+      "why": "For 'put them in a folder called out' the model wrote output out/*.mp4, and the invented-folder repair dropped out/ on both CLIs (2026-10-24).",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert all the mov videos to mp4 and put them in a folder called out",
+      "files": [
+        "beach.mov",
+        "city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mov"
+              ],
+              "container": "mp4",
+              "output": "out/*.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i beach.mov -c copy -movflags +faststart out/beach.mp4\nffmpeg -y -i city.mov -c copy -movflags +faststart out/city.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a batch shows each file after its own command",
+      "why": "Python printed every running: line, then every check line; native prints each file's line after its command (2026-10-24). stdout and stderr are each the same either way, so `merged` holds the two in the order written.",
+      "skill": "ffmpeg",
+      "flags": [],
+      "utterance": "convert clip.mov and clip.mp4 to mkv",
+      "fixtures": [
+        "clip.mov",
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mov",
+                "clip.mp4"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "stdout": "✓ clip.mkv\n✓ clip_1.mkv\n",
+      "stderr": "running: ffmpeg -y -i clip.mov -c copy clip.mkv\nrunning: ffmpeg -y -i clip.mp4 -c copy clip_1.mkv\n2 done in <t> s, 436.8 KB\n",
+      "merged": "running: ffmpeg -y -i clip.mov -c copy clip.mkv\n✓ clip.mkv\nrunning: ffmpeg -y -i clip.mp4 -c copy clip_1.mkv\n✓ clip_1.mkv\n2 done in <t> s, 436.8 KB\n",
+      "ok": true
+    },
+    {
+      "name": "a local folder holding the inputs is where the output goes",
+      "why": "The plan names videos/small and the inputs are in the local videos folder, so that folder is meant (owner, 2026-10-25); until then both CLIs asked which Videos folder.",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert the mov files in videos to mp4 into a folder called small",
+      "files": [
+        "videos/beach.mov",
+        "videos/city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "videos/*.mov"
+              ],
+              "container": "mp4",
+              "output": "videos/small"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i videos/beach.mov -c copy -movflags +faststart videos/small/beach.mp4\nffmpeg -y -i videos/city.mov -c copy -movflags +faststart videos/small/city.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a batch convert skips a file already in that format",
+      "why": "'convert every video to mp4 except the mov files' copied each mp4 to a numbered twin (concert_1.mp4) on both CLIs (owner, 2026-10-25). A file of a batch that the step would only copy, as it is, beside itself is skipped, and one note says so.",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert every video to mp4",
+      "files": [
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mp4",
+                "*.mkv"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i garden.mkv -c copy -movflags +faststart garden.mp4\n",
+      "stderr": "note: skipped concert.mp4, dog.mp4 (already mp4)\n",
+      "ok": true
+    },
+    {
+      "name": "a batch into another folder copies a file already in that format",
+      "why": "Copying an mp4 into the folder the request names is work, not a twin.",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert every video to mp4 into out",
+      "files": [
+        "concert.mp4",
+        "dog.mp4",
+        "garden.mkv"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mp4",
+                "*.mkv"
+              ],
+              "container": "mp4",
+              "output": "out/*.mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "ffmpeg -y -i concert.mp4 -c copy -movflags +faststart out/concert.mp4\nffmpeg -y -i dog.mp4 -c copy -movflags +faststart out/dog.mp4\nffmpeg -y -i garden.mkv -c copy -movflags +faststart out/garden.mp4\n",
+      "stderr": "",
+      "ok": true
+    },
+    {
+      "name": "a batch with every file already in that format has nothing to do",
+      "why": "Skipping every file is not a run that did the work.",
+      "skill": "ffmpeg",
+      "flags": [
+        "--dry-run"
+      ],
+      "utterance": "convert every video to mp4",
+      "files": [
+        "concert.mp4",
+        "dog.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "*.mp4"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "stdout": "",
+      "stderr_prefix": "Error: ",
+      "ok": false
+    },
+    {
+      "name": "the tree: an existing output stops a run with no terminal",
+      "why": "Native draws the plan, the step, its command and the warning before it stops; Python stopped after the header alone (owner's terminal check, 2026-10-25).",
+      "skill": "ffmpeg",
+      "flags": [],
+      "view": "rich",
+      "utterance": "convert clip.mp4 to out.mkv",
+      "files": [
+        "out.mkv"
+      ],
+      "fixtures": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "output": "out.mkv"
+            }
+          }
+        ]
+      },
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 1 step\n │   └─ 1  convert_video  clip.mp4 → out.mkv\n │   leaves out.mkv\n │\n ├─ Step 1/1 · convert_video\n │   $ ffmpeg -y -i clip.mp4 -c copy out.mkv\n │   ⚠ out.mkv already exists\n │\n └─ ✗ the step failed · total <t> s\n      out.mkv already exists. Re-run with --allow overwrite to replace it, or name a different output.\n\n",
+      "stderr": "",
+      "ok": false
+    },
+    {
+      "name": "the tree: a batch shows each command, then its file",
+      "why": "Tree view (owner, 2026-10-25: \"each command, then its result\"): each file's command, then its check line, as the plain view orders them; native's tree listed every command first. The counts and size join the closing line.",
+      "skill": "ffmpeg",
+      "flags": [],
+      "view": "rich",
+      "utterance": "convert clip.mov and clip.mp4 to mkv",
+      "fixtures": [
+        "clip.mov",
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mov",
+                "clip.mp4"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "stdout": " knaif · ffmpeg\n │\n ├─ Plan · 1 step\n │   └─ 1  convert_video  clip.mov (+1 more)\n │   leaves 2 mkv\n │\n ├─ Step 1/1 · convert_video\n │   $ ffmpeg -y -i clip.mov -c copy clip.mkv\n │   └─ ✓ clip.mkv ······························ <t> s\n │   $ ffmpeg -y -i clip.mp4 -c copy clip_1.mkv\n │   └─ ✓ clip_1.mkv ···························· <t> s\n │\n └─ Done · 2 files written · 436.8 KB · total <t> s\n\n",
+      "stderr": "",
+      "ok": true
+    }
+  ]
+}

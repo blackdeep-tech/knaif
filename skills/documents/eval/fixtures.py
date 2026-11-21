@@ -14,7 +14,30 @@ FIXTURE_NAMES = (
     "sample.png",
     "sample.txt",
     "sample.md",
+    # One PDF into many: "one file per page", "chunks of 10 pages".
+    "report.pdf",
+    # The folder a folder row copies whole ("compress every pdf here and add page numbers").
+    "batch_pdf/invoice.pdf",
+    "batch_pdf/contract.pdf",
+    "batch_pdf/minutes.pdf",
+    "batch_pdf/locked.pdf",
+    "batch_pdf/scan.pdf",
+    # A one-file folder for the one-PDF-into-many folder rows: only report.pdf, so every file the
+    # run leaves can be graded.
+    "one_report/report.pdf",
+    # "merge all the PDFs here into one": numbered so that natural order differs from text
+    # order, one page each whose text names the part.
+    "pdfs/part1.pdf",
+    "pdfs/part2.pdf",
+    "pdfs/part10.pdf",
 )
+
+#: The subfolder holding the folder-row PDFs.
+BATCH_DIR = "batch_pdf"
+
+#: Every subfolder a fixture name may sit in. Regen runs this module with each fixture name as
+#: the output path; a name inside one of them still generates into the fixture root.
+FOLDER_DIRS = (BATCH_DIR, "one_report", "pdfs")
 
 _FIXTURE_COMMAND = "uv run python skills/documents/eval/fixtures.py {output}"
 FIXTURES: dict[str, str] = dict.fromkeys(FIXTURE_NAMES, _FIXTURE_COMMAND)
@@ -79,6 +102,51 @@ def _generate_pdf_fixtures(root: Path, manifest: dict[str, Path]) -> None:
     image.save(scanned_pdf, "PDF", resolution=100.0)
     manifest["scanned_pdf"] = scanned_pdf
 
+    report = root / "report.pdf"
+    c = canvas.Canvas(str(report), pagesize=letter)
+    for n in range(1, 31):
+        c.drawString(72, 720, f"Report page {n}")
+        c.showPage()
+    c.save()
+    manifest["report_pdf"] = report
+
+    # Folder-row PDFs: three plain, one password-protected (a step that cannot open it fails
+    # while the others finish) and one scanned (an image, no text layer).
+    batch = root / BATCH_DIR
+    batch.mkdir(exist_ok=True)
+    for stem, title in (
+        ("invoice", "Invoice 1042"),
+        ("contract", "Service contract"),
+        ("minutes", "Meeting minutes"),
+    ):
+        out = batch / f"{stem}.pdf"
+        c = canvas.Canvas(str(out), pagesize=letter)
+        for page in (1, 2):
+            c.drawString(72, 720, f"{title}, page {page}")
+            c.showPage()
+        c.save()
+        manifest[f"batch_{stem}"] = out
+    with pikepdf.open(batch / "invoice.pdf") as src:
+        src.save(batch / "locked.pdf", encryption=pikepdf.Encryption(owner="secret", user="secret"))
+    manifest["batch_locked"] = batch / "locked.pdf"
+    image.save(batch / "scan.pdf", "PDF", resolution=100.0)
+    manifest["batch_scan"] = batch / "scan.pdf"
+
+    one = root / "one_report"
+    one.mkdir(exist_ok=True)
+    (one / "report.pdf").write_bytes(report.read_bytes())
+    manifest["one_report"] = one / "report.pdf"
+
+    parts = root / "pdfs"
+    parts.mkdir(exist_ok=True)
+    for n in (1, 2, 10):
+        out = parts / f"part{n}.pdf"
+        c = canvas.Canvas(str(out), pagesize=letter)
+        c.drawString(72, 720, f"Part {n}")
+        c.showPage()
+        c.save()
+        manifest[f"part{n}"] = out
+
 
 def _generate_office_fixtures(root: Path, manifest: dict[str, Path]) -> None:
     import docx
@@ -131,4 +199,5 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         raise SystemExit("Usage: fixtures.py OUTPUT_FILE")
-    generate_documents_fixtures(Path(sys.argv[1]).parent)
+    out_dir = Path(sys.argv[1]).parent
+    generate_documents_fixtures(out_dir.parent if out_dir.name in FOLDER_DIRS else out_dir)

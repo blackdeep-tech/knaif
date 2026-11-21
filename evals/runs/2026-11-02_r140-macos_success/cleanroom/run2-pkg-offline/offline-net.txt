@@ -1,0 +1,6 @@
+Fri 20 Nov 2026 03:40:18 PST
+An asterisk (*) denotes that a network service is disabled.
+com.redhat.spice.0
+tart-version-2.32.1
+*Ethernet
+route: writing to routing socket: not in table

@@ -30,10 +30,10 @@ def _coerce_inputs(value: Any) -> list[str]:
     raise ValueError("'inputs' must be a string or list of strings.")
 
 
-#: Suffix walked when an explicit output would overwrite its own input. The user asked for
-#: a *copy*, so "_converted" says what happened; the numbered variants exist because the
-#: first candidate can itself be taken.
-_COLLISION_SUFFIX = "_converted"
+#: No suffix when an explicit output would overwrite its own input: the copy takes the first
+#: free number, ``clip_1.mp4`` (owner, 2026-10-23; ``_converted`` could itself be
+#: taken, and said nothing a number does not).
+_COLLISION_SUFFIX = ""
 
 #: Suffix for the OTHER kind of collision repair: renaming a chained intermediate so the name
 #: the user asked for can stay on the step that actually produces what they described. Calling
@@ -42,7 +42,8 @@ _INTERMEDIATE_SUFFIX = "_intermediate"
 
 
 def next_free_output(requested: Path, taken: set[Path], suffix: str = _COLLISION_SUFFIX) -> Path:
-    """First free ``<stem><suffix>[_N]<.ext>``. **Never returns *requested* itself.**
+    """First free ``<stem><suffix><.ext>`` then ``<stem><suffix>_N<.ext>``; with no suffix, the
+    first free ``<stem>_N<.ext>`` from 1. **Never returns *requested* itself.**
 
     *taken* holds every path the caller has committed to — each input of the plan and each
     output the plan declares — and the filesystem is consulted on top of it.
@@ -65,12 +66,40 @@ def next_free_output(requested: Path, taken: set[Path], suffix: str = _COLLISION
         return candidate not in taken and not candidate.exists()
 
     stem, ext = requested.stem, requested.suffix
-    candidate = requested.with_name(f"{stem}{suffix}{ext}")
     n = 2
+    candidate = requested.with_name(f"{stem}{suffix}{ext}" if suffix else f"{stem}_1{ext}")
     while not is_free(candidate):
         candidate = requested.with_name(f"{stem}{suffix}_{n}{ext}")
         n += 1
     return candidate
+
+
+def _within(p: Path | str, folder: Path | None) -> bool:
+    """Is *p* inside *folder* (both resolved)? False when there is no folder."""
+    if folder is None:
+        return False
+    return Path(p).resolve().is_relative_to(Path(folder).resolve())
+
+
+def _user_side_path(path: Path, work_dir: Path | None, home: Path | None) -> Path:
+    """*path*, or where it would sit in the user's folder (*home*) if it is in the run scratch.
+
+    Routing keeps an intermediate's place relative to the user's folder (`videos/x.mp4` ->
+    `<work>/videos/x.mp4`), so the mapping back is exact.
+    """
+    if home is None or not _within(path, work_dir):
+        return path
+    return Path(home) / Path(path).resolve().relative_to(Path(work_dir).resolve())  # type: ignore[arg-type]
+
+
+def _in_working_folder(out: Path, home: Path | None) -> Path:
+    """Where a relative output the plan names is written: the working folder (*home*), not the
+    input's folder, as documents and `concat_video` resolve it (owner, 2026-10-24). Only a
+    name the skill makes up itself stays beside its input (`_derive_output_path`).
+    """
+    if out.is_absolute() or home is None:
+        return out
+    return Path(home) / out
 
 
 def _assert_in_sandbox(p: Path, sandbox: Path | None) -> None:
@@ -125,6 +154,11 @@ def _summarise_probe(file: Path, probe: dict[str, Any]) -> dict[str, Any]:
     fps: float | None = None
     if v_stream:
         fps = _parse_fps(v_stream.get("avg_frame_rate")) or _parse_fps(v_stream.get("r_frame_rate"))
+    # Unknown (mkv often leaves it off the stream) is None, never 0: 0 would read as tiny.
+    try:
+        audio_bitrate: int | None = int(a_stream["bit_rate"]) if a_stream else None
+    except (KeyError, TypeError, ValueError):
+        audio_bitrate = None
     return {
         "file": str(file),
         "container": fmt.get("format_name", "").split(",")[0],
@@ -135,6 +169,7 @@ def _summarise_probe(file: Path, probe: dict[str, Any]) -> dict[str, Any]:
         "fps": fps,
         "video_codec": v_stream.get("codec_name") if v_stream else None,
         "audio_codec": a_stream.get("codec_name") if a_stream else None,
+        "audio_bitrate": audio_bitrate,
         "has_audio": a_stream is not None,
     }
 
@@ -161,6 +196,7 @@ def _dummy_probe(file: Path) -> dict[str, Any]:
             "fps": None,
             "video_codec": None,
             "audio_codec": _AUDIO_EXTS[suffix],
+            "audio_bitrate": None,
             "has_audio": True,
         }
     return {
@@ -173,6 +209,7 @@ def _dummy_probe(file: Path) -> dict[str, Any]:
         "fps": 30.0,
         "video_codec": "h264",
         "audio_codec": "aac",
+        "audio_bitrate": None,
         "has_audio": True,
     }
 
@@ -505,9 +542,12 @@ _AT_TIME_END_TOKENS = frozenset({"last_frame", "last", "end", "final_frame", "fi
 _AT_TIME_START_TOKENS = frozenset({"first", "first_frame", "start", "beginning"})
 _AT_TIME_MIDDLE_TOKENS = frozenset({"middle", "midpoint", "halfway", "mid", "centre", "center"})
 
-# Step back from the very end: seeking exactly to the duration lands past the last frame and
-# writes nothing.
-_LAST_FRAME_EPSILON = 0.1
+# "The last frame" is not a time. Duration minus 0.1 s was ~3 frames early at 30 fps, and no fixed
+# offset is right on a variable frame rate. It stays this token and renders as a seek to a second
+# before the end with every decoded frame written over the one image (`-sseof -1 … -update 1`),
+# which leaves exactly the final frame (checked against the frame selected by number on 30 fps,
+# 24 fps, variable-fps, 0.4 s and long-GOP clips, 2026-10-27). Rust: `LAST_FRAME`.
+LAST_FRAME = "last"
 
 
 def _resolve_at_time(value: Any, *, duration: float | None) -> Any:
@@ -528,9 +568,7 @@ def _resolve_at_time(value: Any, *, duration: float | None) -> Any:
             return None
         return _format_seconds(duration / 2.0)
     if text in _AT_TIME_END_TOKENS:
-        if duration is None or duration <= 0:
-            return None
-        return _format_seconds(max(0.0, duration - _LAST_FRAME_EPSILON))
+        return LAST_FRAME
     return None
 
 
@@ -727,44 +765,20 @@ def _destination_name(input_path: Path, ext: str) -> str:
     return f"{input_path.stem}.{ext}"
 
 
-def _batch_suffixes(input_path: Path, out_stem: str) -> list[str]:
-    """The parts of an input's name that can tell two colliding outputs apart, best first.
-
-    Two batch shapes collide, and they are distinguished by different things:
-
-    * **One literal filename for many inputs** — six fixture videos extracted to ``audio.mp3``.
-      The source *stems* differ and the extensions mostly do not, so the stem is the answer.
-    * **A destination directory** — ``clip.mp4`` and ``clip.mov`` into ``converted/`` both take
-      the output stem ``clip``, and only the extension is left.
-
-    Using the extension for both is what produced ``audio_mp4_5.mp3``: five of six inputs were
-    `.mp4`, so the suffix distinguished nothing and a counter did all the work.
-    """
-    stem, ext = input_path.stem, input_path.suffix.lstrip(".").lower()
-    suffixes: list[str] = []
-    if stem and stem != out_stem:
-        suffixes.append(stem)
-    if ext:
-        suffixes.append(ext)
-    # Both, for the case where each alone is ambiguous: `a/clip.mov` and `b/clip.mov` into
-    # `audio.mp3` share a stem AND an extension with each other but not with the output.
-    if stem and ext and stem != out_stem:
-        suffixes.append(f"{stem}_{ext}")
-    return suffixes
+#: A recipe whose output name is a default the skill chose, not one the user wrote: only such a
+#: name is moved off a file that already exists. Removed before recipes leave.
+DEFAULT_NAME = "_default_name"
 
 
 def disambiguate_outputs(recipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Give every recipe in a batch its own output path.
+    """Give every recipe in a batch its own output path: a taken name gets the first free number.
 
-    A destination directory collapses the source extension, so `clip.mp4` and `clip.mov` both
-    render `converted/clip.mp4` — and every command carries `-y`, so the second conversion
-    silently destroyed the first. Whatever part of the source name actually differs is what
-    gets restored (see `_batch_suffixes`); a counter is the fallback for a genuine repeat, and
-    only a genuine repeat, because a counter tells the user nothing.
-
-    Doing it here rather than per file is deliberate: only the batch knows whether there is a
-    clash at all, and a lone `clip.mp4 -> converted/` should stay `clip.mp4`, not become
-    `clip_mp4.mkv` because some other input might have existed.
+    Taken means an input of the batch, another output of it, or, for a default name the skill
+    chose (``DEFAULT_NAME``), a file that already exists: ``beach.mkv`` -> ``beach_1.mkv`` ->
+    ``beach_2.mkv`` (owner, 2026-10-23, replacing the source-name suffixes
+    ``beach_mp4.mkv`` / ``audio_city.mp3``). A name the user wrote is never moved off a file on
+    disk: the CLIs ask before replacing it. Every command carries ``-y``, so an unresolved clash
+    is a silent overwrite.
 
     **Every input of the batch is taken too, before any output is placed.** A same-folder
     pattern sends `clip.mov -> *.mp4` to `clip.mp4`, and when `clip.mp4` is another input the
@@ -777,24 +791,19 @@ def disambiguate_outputs(recipes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     seen: set[str] = {key(r["input"]) for r in recipes if r.get("input")}
     for recipe in recipes:
+        default = bool(recipe.pop(DEFAULT_NAME, False))
         out = recipe.get("output")
         if not out:
             continue
-        if key(out) not in seen:
-            seen.add(key(out))
-            continue
         path = Path(out)
-        suffixes = _batch_suffixes(Path(recipe.get("input", "")), path.stem)
-        tried = [path.with_name(f"{path.stem}_{s}{path.suffix}") for s in suffixes]
-        candidate = next((c for c in tried if key(c) not in seen), None)
-        if candidate is None:
-            # Nothing in the source name is left to say. Count off the most specific candidate
-            # so the walk still terminates.
-            base = tried[-1] if tried else path
-            candidate, n = base, 1
-            while key(candidate) in seen:
-                n += 1
-                candidate = base.with_name(f"{base.stem}_{n}{base.suffix}")
+
+        def taken(candidate: Path, default: bool = default) -> bool:
+            return key(candidate) in seen or (default and candidate.exists())
+
+        candidate, n = path, 1
+        while taken(candidate):
+            candidate = path.with_name(f"{path.stem}_{n}{path.suffix}")
+            n += 1
         recipe["output"] = str(candidate)
         seen.add(key(candidate))
     return recipes
@@ -885,6 +894,23 @@ def _same_file(a: Path, b: Path) -> bool:
     return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
 
 
+#: Set by the batch step when it builds recipes for more than one file.
+PER_FILE_NAME = "_per_file_name"
+
+
+def _names_one_file(raw_output: str) -> bool:
+    """A literal file name (``mov.mkv``, ``out/x.mkv``): not a pattern, not a folder."""
+    out = Path(raw_output)
+    return "*" not in raw_output and bool(out.suffix) and not out.name.startswith(".")
+
+
+def _with_extension(options: dict[str, Any], mode: str, literal: Path) -> dict[str, Any]:
+    """*options* with the format the literal name's extension gives, for the derived name."""
+    ext = literal.suffix.lstrip(".").lower()
+    key = {"extract_audio": "audio_format", "thumbnail": "image_format"}.get(mode, "container")
+    return {**options, key: ext}
+
+
 def _derive_output_path(input_path: Path, mode: str, options: dict[str, Any]) -> Path:
     suffix_template = _OUTPUT_SUFFIX_BY_MODE.get(mode, "_out")
     platform = options.get("platform") or ""
@@ -932,9 +958,15 @@ def _build_one_recipe(
     quality_profile: dict[str, Any] | None,
     options: dict[str, Any],
     sandbox: Path | None = None,
+    work_dir: Path | None = None,
+    home: Path | None = None,
 ) -> dict[str, Any]:
     mode = options.get("mode", "platform")
     input_path = Path(probe["file"])
+    # Where this input would sit in the user's folder. A chain intermediate lives in the run
+    # scratch (`work_dir`), and an output named after it, or relative to it, must still land in
+    # the user's folder: everything in the scratch is deleted when the run ends.
+    anchor = _user_side_path(input_path, work_dir, home)
 
     container = options.get("container") or (platform_profile or {}).get("container", "mp4")
     if mode in _EDIT_MODES and not options.get("container"):
@@ -993,25 +1025,40 @@ def _build_one_recipe(
     output_options = dict(options)
     output_options["container"] = container
     raw_output = options.get("output_path")
-    if raw_output:
+    # A default name is one the skill chose; only such a name moves off a file that exists
+    # (`disambiguate_outputs`).
+    default_name = True
+    if raw_output and options.get(PER_FILE_NAME) and _names_one_file(raw_output):
+        # One literal name over many files names none of them: each keeps its own name, in the
+        # literal's folder, with its extension (owner, 2026-10-23; `beach.mov` was
+        # written as `mov.mkv`, the rest as `mov_city.mkv`).
+        literal = Path(_legal_output_path(raw_output))
+        named = _derive_output_path(anchor, mode, _with_extension(output_options, mode, literal))
+        output_path = _in_working_folder(literal.parent / named.name, home)
+    elif raw_output:
         out = _resolve_output_target(
             raw_output, input_path=input_path, mode=mode, options=output_options
         )
-        if not out.is_absolute():
-            out = input_path.parent / out
-        output_path = out
+        output_path = _in_working_folder(out, home)
+        default_name = False
         # A same-folder pattern (`*.mp4`, `*`) resolves `clip.mp4` onto itself, and ffmpeg
         # refuses to write over its input ("Invalid argument"; ffmpeg_229#4). Take the
         # derived name, as the plan-level collision handling does for a literal self-overwrite.
         if _same_file(output_path, input_path):
-            output_path = _derive_output_path(input_path, mode, output_options)
+            output_path = _derive_output_path(anchor, mode, output_options)
+            default_name = True
     else:
-        output_path = _derive_output_path(input_path, mode, output_options)
+        output_path = _derive_output_path(anchor, mode, output_options)
+    # A default name never writes over its own input (a same-format convert derives `clip.mp4`
+    # for `clip.mp4`): the first free number, here already, not only in the batch's repair.
+    if default_name and _same_file(output_path, input_path):
+        output_path = next_free_output(output_path, {input_path})
 
     # Explicit/user-supplied output paths must stay inside the sandbox when one
     # is set. No-op in open/CLI mode (sandbox=None), where the user writes
-    # wherever they ask.
-    _assert_in_sandbox(output_path, sandbox)
+    # wherever they ask. A routed chain intermediate is in this run's scratch.
+    if not _within(output_path, work_dir):
+        _assert_in_sandbox(output_path, sandbox)
 
     operations: list[str] = []
     if mode in ("platform", "compress", "convert", "resize", "trim", "batch"):
@@ -1113,7 +1160,28 @@ def _build_one_recipe(
         if audio_codec in ("flac", "pcm_s16le", "alac"):
             audio_bitrate = None
 
+    # A compress never raises the audio above what the source has: a 69k AAC track re-encoded
+    # at the profile's 96k made `clip.mov` 10% bigger (manual test, 2026-10-28). A track at or
+    # under the profile is copied when it is already the codec the output wants, else encoded
+    # at its own bitrate. The cap still budgets the profile's bitrate for a copied track.
+    audio_budget = None
+    src_bps = probe.get("audio_bitrate")
+    if (
+        mode == "compress"
+        and probe.get("has_audio")
+        and not copy_audio
+        and src_bps
+        and audio_bitrate
+        and src_bps <= _parse_bitrate_bps(audio_bitrate)
+    ):
+        if probe.get("audio_codec") == audio_codec:
+            copy_audio = True
+            audio_budget = audio_bitrate
+        else:
+            audio_bitrate = f"{src_bps // 1000}k"
+
     recipe: dict[str, Any] = {
+        DEFAULT_NAME: default_name,
         "mode": mode,
         "input": str(input_path),
         "output": str(output_path),
@@ -1180,6 +1248,8 @@ def _build_one_recipe(
         recipe.pop("audio", None)
     if mode == "compress" and options.get("target_size_mb") is not None:
         recipe["target_size_mb"] = options["target_size_mb"]
+        if audio_budget:
+            recipe["audio_budget"] = audio_budget
         # The duration is what turns a size into a bitrate, and `_build_flags` sees only the
         # recipe. Carried here rather than re-probed there, so the cap is computed from the
         # same probe every other decision in this recipe was made from.
@@ -1191,6 +1261,14 @@ def _build_one_recipe(
         recipe.pop("audio", None)
     if mode == "adjust_speed":
         recipe["speed"] = float(options.get("speed", 1.0))
+    # An operation that keeps its video copies it (`-c:v copy`), unless the output container
+    # cannot hold the source's codec: h264 copied into a `.webm` is refused ("Only VP8 or VP9 or
+    # AV1 video"; ffmpeg_hard2_005, 2026-10-18). Then the video is encoded with the container's
+    # encoder, which the encoding guard above has already put in `recipe["video"]`.
+    if mode in ("strip_audio", "adjust_volume") and not recipe.get("audio_only"):
+        src_video = probe.get("video_codec")
+        compatible = _COMPATIBLE_VIDEO.get(container)
+        recipe["copy_video"] = not (src_video and compatible and src_video not in compatible)
 
     # Audio-only re-encode into a single-codec container: no video stream to map,
     # so the render path must not emit -c:v / -pix_fmt / scale.
@@ -1345,13 +1423,17 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
         if bitrate:
             post += ["-b:a", str(bitrate)]
     elif mode == "thumbnail":
-        post += ["-ss", str(recipe.get("at_time", "00:00:01"))]
+        last = recipe.get("at_time") == LAST_FRAME
+        if last:
+            pre += ["-sseof", "-1"]
+        else:
+            post += ["-ss", str(recipe.get("at_time", "00:00:01"))]
         scale = recipe.get("scale")
         if scale:
             post += ["-vf", f"scale={scale}"]
-        post += ["-vframes", "1"]
+        post += ["-update", "1"] if last else ["-vframes", "1"]
     elif mode == "strip_audio":
-        post += ["-an", "-c:v", "copy"]
+        post += ["-an", *_kept_video_flags(recipe)]
     elif mode == "adjust_speed":
         speed = float(recipe.get("speed", 1.0))
         if not math.isfinite(speed) or speed <= 0:
@@ -1421,7 +1503,7 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             level = _coerce_volume_level(recipe.get("level"))
             post += ["-af", f"volume={level}"]
         if not recipe.get("audio_only"):
-            post += ["-c:v", "copy"]  # video input: keep the video stream untouched
+            post += _kept_video_flags(recipe)  # video input: keep the video stream
         audio = recipe.get("audio", {})
         if audio.get("codec"):
             post += ["-c:a", audio["codec"]]
@@ -1483,7 +1565,7 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             kbit = _size_cap_kbit(
                 recipe["target_size_mb"],
                 recipe.get("source_duration"),
-                (recipe.get("audio") or {}).get("bitrate"),
+                (recipe.get("audio") or {}).get("bitrate") or recipe.get("audio_budget"),
             )
             if kbit is not None:
                 post += [
@@ -1503,6 +1585,21 @@ def _build_flags(recipe: dict[str, Any]) -> tuple[list[str], list[str]]:
             post += ["-movflags", "+faststart"]
 
     return pre, post
+
+
+def _kept_video_flags(recipe: dict[str, Any]) -> list[str]:
+    """The video flags of an operation that keeps its video: a stream copy, or, when the output
+    container cannot hold the source codec (`recipe["copy_video"]` false), an encode with the
+    recipe's encoder, as rotate and reverse render one."""
+    if recipe.get("copy_video", True):
+        return ["-c:v", "copy"]
+    video = recipe.get("video", {})
+    flags = ["-c:v", video["encoder"]]
+    if video.get("crf") is not None:
+        flags += ["-crf", str(video["crf"])]
+    if video.get("preset"):
+        flags += ["-preset", video["preset"]]
+    return flags
 
 
 def _render_command(recipe: dict[str, Any], *, preview: dict[str, Any] | None = None) -> list[str]:
@@ -1526,7 +1623,16 @@ def _audio_encoder_for(audio_format: str) -> str:
     return _AUDIO_FORMAT_ENCODER.get(audio_format, "copy")
 
 
-def _preview_output_for(recipe: dict[str, Any]) -> str:
+def _preview_output_for(recipe: dict[str, Any], work_dir: Path | None = None) -> str:
+    """Where the preview clip renders: the run scratch, so it never lands in the user's folder.
+
+    It is the one scratch path shown to the user (they are meant to watch it), and it is
+    deleted when the run ends, whatever they answer. Without a scratch (a bare caller) it falls
+    back to the old place beside the input.
+    """
     p = Path(recipe["input"])
     container = recipe.get("container", "mp4")
-    return str(p.with_name(f"{p.stem}_preview.{container}"))
+    name = f"{p.stem}_preview.{container}"
+    if work_dir is not None:
+        return str(Path(work_dir) / "preview" / name)
+    return str(p.with_name(name))

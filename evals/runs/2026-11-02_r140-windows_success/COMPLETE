@@ -1,0 +1,134 @@
+2026-11-02 12:36:06 START check (windows)
+2026-11-02 12:36:16 END check: preflight passed
+2026-11-02 12:36:25 START gpu (windows)
+2026-11-02 12:43:05 gpu ffmpeg r140-win-4b: placement CUDA0; store       : 3987ff3172e7 holds 234 of 234 replies
+2026-11-02 12:43:27 gpu ffmpeg r140-win-4b: safety exit 0
+2026-11-02 12:43:28 gpu 4b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-02 12:43:28 GATE MISS gpu: 4b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 12:44:54 gpu documents r140-win-4b: placement CUDA0; store       : 3987ff3172e7 holds 103 of 103 replies
+2026-11-02 12:44:59 gpu documents r140-win-4b: safety exit 0
+2026-11-02 12:44:59 gpu 4b cuda documents: ACCEPTED - 124 thresholds met.
+2026-11-02 12:51:53 gpu ffmpeg r140-win-4b: placement Vulkan0; store       : 59a0e55c29d1 holds 234 of 234 replies
+2026-11-02 12:52:24 gpu ffmpeg r140-win-4b: safety exit 1
+2026-11-02 12:52:24 gpu 4b vulkan ffmpeg: NOT ACCEPTED - 3 of 255 thresholds unmet:
+2026-11-02 12:52:24 GATE MISS gpu: 4b vulkan ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 12:54:17 gpu documents r140-win-4b: placement Vulkan0; store       : 59a0e55c29d1 holds 103 of 103 replies
+2026-11-02 12:54:23 gpu documents r140-win-4b: safety exit 0
+2026-11-02 12:54:24 gpu 4b vulkan documents: ACCEPTED - 124 thresholds met.
+2026-11-02 13:00:33 gpu ffmpeg r140-win-1.7b: placement CUDA0; store       : b752e5e89649 holds 234 of 234 replies
+2026-11-02 13:00:48 gpu ffmpeg r140-win-1.7b: safety exit 0
+2026-11-02 13:00:49 gpu 1.7b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-02 13:00:49 GATE MISS gpu: 1.7b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 13:01:56 gpu documents r140-win-1.7b: placement CUDA0; store       : b752e5e89649 holds 103 of 103 replies
+2026-11-02 13:02:00 gpu documents r140-win-1.7b: safety exit 0
+2026-11-02 13:02:00 GATE MISS gpu: 1.7b cuda documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-02 13:08:31 gpu ffmpeg r140-win-1.7b: placement Vulkan0; store       : 46adc6e18aed holds 234 of 234 replies
+2026-11-02 13:08:53 gpu ffmpeg r140-win-1.7b: safety exit 0
+2026-11-02 13:08:54 gpu 1.7b vulkan ffmpeg: NOT ACCEPTED - 1 of 255 thresholds unmet:
+2026-11-02 13:08:54 GATE MISS gpu: 1.7b vulkan ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 13:10:24 gpu documents r140-win-1.7b: placement Vulkan0; store       : 46adc6e18aed holds 103 of 103 replies
+2026-11-02 13:10:28 gpu documents r140-win-1.7b: safety exit 0
+2026-11-02 13:10:29 GATE MISS gpu: 1.7b vulkan documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-02 13:10:29 END gpu: ran, with gate misses for the owner
+2026-11-02 13:10:41 START live (windows)
+2026-11-02 13:13:41 live documents r140-win-1.7b: placement CUDA0; 
+2026-11-02 13:13:45 live documents r140-win-1.7b: safety exit 0
+2026-11-02 13:13:45 live 1.7b cuda documents: NOT ACCEPTED - 2 of 124 thresholds unmet:
+2026-11-02 13:13:45 GATE MISS live: 1.7b cuda documents NOT ACCEPTED: goes to the owner
+2026-11-02 13:13:45 END live: ran, with gate misses for the owner
+2026-11-02 13:13:45 START live (windows)
+2026-11-02 13:18:01 live documents r140-win-1.7b: placement Vulkan0; 
+2026-11-02 13:18:06 live documents r140-win-1.7b: safety exit 0
+2026-11-02 13:18:07 live 1.7b vulkan documents: NOT ACCEPTED - 2 of 124 thresholds unmet:
+2026-11-02 13:18:07 GATE MISS live: 1.7b vulkan documents NOT ACCEPTED: goes to the owner
+2026-11-02 13:18:07 END live: ran, with gate misses for the owner
+2026-11-02 13:35:15 START gpu (windows)
+2026-11-02 13:41:51 gpu ffmpeg r140-win-4b: placement CUDA0; store       : 3987ff3172e7 holds 234 of 234 replies
+2026-11-02 13:42:13 gpu ffmpeg r140-win-4b: safety exit 0
+2026-11-02 13:42:13 gpu 4b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-02 13:42:13 GATE MISS gpu: 4b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 13:43:37 gpu documents r140-win-4b: placement CUDA0; store       : 3987ff3172e7 holds 103 of 103 replies
+2026-11-02 13:43:41 gpu documents r140-win-4b: safety exit 0
+2026-11-02 13:43:42 gpu 4b cuda documents: ACCEPTED - 124 thresholds met.
+2026-11-02 13:50:33 gpu ffmpeg r140-win-4b: placement Vulkan0; store       : 59a0e55c29d1 holds 234 of 234 replies
+2026-11-02 13:51:03 gpu ffmpeg r140-win-4b: safety exit 1
+2026-11-02 13:51:04 gpu 4b vulkan ffmpeg: NOT ACCEPTED - 3 of 255 thresholds unmet:
+2026-11-02 13:51:04 GATE MISS gpu: 4b vulkan ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 13:52:55 gpu documents r140-win-4b: placement Vulkan0; store       : 59a0e55c29d1 holds 103 of 103 replies
+2026-11-02 13:53:02 gpu documents r140-win-4b: safety exit 0
+2026-11-02 13:53:02 gpu 4b vulkan documents: ACCEPTED - 124 thresholds met.
+2026-11-02 13:59:01 gpu ffmpeg r140-win-1.7b: placement CUDA0; store       : b752e5e89649 holds 234 of 234 replies
+2026-11-02 13:59:17 gpu ffmpeg r140-win-1.7b: safety exit 0
+2026-11-02 13:59:17 gpu 1.7b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-02 13:59:17 GATE MISS gpu: 1.7b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 14:00:23 gpu documents r140-win-1.7b: placement CUDA0; store       : b752e5e89649 holds 103 of 103 replies
+2026-11-02 14:00:26 gpu documents r140-win-1.7b: safety exit 0
+2026-11-02 14:00:26 GATE MISS gpu: 1.7b cuda documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-02 14:06:48 gpu ffmpeg r140-win-1.7b: placement Vulkan0; store       : 46adc6e18aed holds 234 of 234 replies
+2026-11-02 14:07:10 gpu ffmpeg r140-win-1.7b: safety exit 0
+2026-11-02 14:07:10 gpu 1.7b vulkan ffmpeg: NOT ACCEPTED - 1 of 255 thresholds unmet:
+2026-11-02 14:07:10 GATE MISS gpu: 1.7b vulkan ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-02 14:08:36 gpu documents r140-win-1.7b: placement Vulkan0; store       : 46adc6e18aed holds 103 of 103 replies
+2026-11-02 14:08:41 gpu documents r140-win-1.7b: safety exit 0
+2026-11-02 14:08:42 GATE MISS gpu: 1.7b vulkan documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-02 14:08:42 END gpu: ran, with gate misses for the owner
+2026-11-02 14:08:42 START live (windows)
+2026-11-02 14:11:37 live documents r140-win-1.7b: placement CUDA0; 
+2026-11-02 14:11:40 live documents r140-win-1.7b: safety exit 0
+2026-11-02 14:11:41 live 1.7b cuda documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-02 14:11:41 GATE MISS live: 1.7b cuda documents NOT ACCEPTED: goes to the owner
+2026-11-02 14:11:41 END live: ran, with gate misses for the owner
+2026-11-02 14:11:41 START live (windows)
+2026-11-02 14:15:43 live documents r140-win-1.7b: placement Vulkan0; 
+2026-11-02 14:15:47 live documents r140-win-1.7b: safety exit 0
+2026-11-02 14:15:48 live 1.7b vulkan documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-02 14:15:48 GATE MISS live: 1.7b vulkan documents NOT ACCEPTED: goes to the owner
+2026-11-02 14:15:48 END live: ran, with gate misses for the owner
+2026-11-02 14:15:48 START l3 (windows)
+2026-11-02 14:35:04 l3 4b ffmpeg: parity_check exit 0 (bound 0.0411)
+2026-11-02 14:42:57 l3 4b documents: parity_check exit 1 (bound 0.0183)
+2026-11-02 14:42:57 GATE MISS l3: L3 4b documents: parity_check exit 1 (the bar is missed): goes to the owner
+2026-11-02 14:57:53 l3 1.7b ffmpeg: parity_check exit 0 (bound 0.0411)
+2026-11-02 15:04:02 l3 1.7b documents: parity_check exit 1 (bound 0.0183)
+2026-11-02 15:04:02 GATE MISS l3: L3 1.7b documents: parity_check exit 1 (the bar is missed): goes to the owner
+2026-11-02 15:04:02 END l3: ran, with gate misses for the owner
+2026-11-02 15:04:02 START daemon (windows)
+2026-11-02 15:09:33 daemon 4b ffmpeg: IDENTICAL
+2026-11-02 15:10:14 daemon 4b documents: IDENTICAL
+2026-11-02 15:13:37 daemon 1.7b ffmpeg: IDENTICAL
+2026-11-02 15:14:04 daemon 1.7b documents: IDENTICAL
+2026-11-02 15:14:05 END daemon
+2026-11-02 16:39:24 START cpu (windows)
+2026-11-02 17:18:13 PAUSED cpu (owner): stopped in 4b cpu ffmpeg while planning (180+ of 234); resume re-runs the cpu stage from its first cell
+2026-11-02 21:47:42 RESUMED cpu (owner): the stage runs again from its first cell, 188 of 4B ffmpeg's replies in the store (amendment)
+2026-11-02 21:47:46 taking over a stale lock (pid 491111 is gone)
+2026-11-02 21:47:46 START cpu (windows)
+2026-11-02 21:54:31 PAUSED cpu (owner): stopped in 4b cpu ffmpeg while planning (23 of 51); the 17 staged plans are dropped, a resume plans them again
+2026-11-03 09:58:59 RESUMED cpu (owner): the stage runs again from its first cell; 4B ffmpeg replays the replies in the store and plans the rest
+2026-11-03 09:59:03 taking over a stale lock (pid 991422 is gone)
+2026-11-03 09:59:03 START cpu (windows)
+2026-11-03 10:22:17 cpu ffmpeg r140-win-4b: placement CPU; store       : f3ed8ca27305 holds 189 of 234 replies
+2026-11-03 10:24:18 cpu ffmpeg r140-win-4b: safety exit 1
+2026-11-03 10:24:19 cpu 4b cpu ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-03 10:24:19 GATE MISS cpu: 4b cpu ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 10:38:38 cpu documents r140-win-4b: placement CPU; store       : f3ed8ca27305 holds 0 of 103 replies
+2026-11-03 10:38:54 cpu documents r140-win-4b: safety exit 0
+2026-11-03 10:38:55 cpu 4b cpu documents: ACCEPTED - 124 thresholds met.
+2026-11-03 11:13:31 cpu ffmpeg r140-win-1.7b: placement CPU; store       : 1da674b3b341 holds 0 of 234 replies
+2026-11-03 11:14:29 cpu ffmpeg r140-win-1.7b: safety exit 0
+2026-11-03 11:14:31 cpu 1.7b cpu ffmpeg: NOT ACCEPTED - 3 of 255 thresholds unmet:
+2026-11-03 11:14:31 GATE MISS cpu: 1.7b cpu ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 11:21:56 cpu documents r140-win-1.7b: placement CPU; store       : 1da674b3b341 holds 0 of 103 replies
+2026-11-03 11:22:05 cpu documents r140-win-1.7b: safety exit 0
+2026-11-03 11:22:06 GATE MISS cpu: 1.7b cpu documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-03 11:22:06 END cpu: ran, with gate misses for the owner
+2026-11-03 11:39:56 owner: 1.7b cpu documents re-runs live (I5); 4B CPU safety exception and ffmpeg_291/301 (1.7B CPU) accepted
+2026-11-03 11:39:56 START live (windows)
+2026-11-03 11:46:58 live documents r140-win-1.7b: placement CPU; 
+2026-11-03 11:47:07 live documents r140-win-1.7b: safety exit 0
+2026-11-03 11:47:07 live 1.7b cpu documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-03 11:47:08 GATE MISS live: 1.7b cpu documents NOT ACCEPTED: goes to the owner
+2026-11-03 11:47:08 END live: ran, with gate misses for the owner
+2026-11-03 11:48:00 START store (windows)
+2026-11-03 11:48:00 store: 2116 new or changed file(s) under evals/store to commit
+2026-11-03 11:48:01 END store

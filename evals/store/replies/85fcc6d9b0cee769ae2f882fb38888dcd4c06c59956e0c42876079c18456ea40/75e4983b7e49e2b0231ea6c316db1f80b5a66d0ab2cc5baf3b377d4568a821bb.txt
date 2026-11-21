@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Lossless isn't achievable on its own - I'll compress it to small_file. Should I compress it anyway?"}}]}

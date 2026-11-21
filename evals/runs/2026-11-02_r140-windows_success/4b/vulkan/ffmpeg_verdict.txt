@@ -1,0 +1,12 @@
+
+=== L4 acceptance on the release subset: ffmpeg ===
+  baseline    : knaif-qwen3-4b-v2 / success
+  python run  : evals/runs/2026-10-30_relock-satisfied-container_success/4b/ffmpeg_qwen3-4b-sft-v4-flat-q4_success.json
+  subset      : 234 utterances (corpus 8fdc38460a2f)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+NOT ACCEPTED - 3 of 255 thresholds unmet:
+  [regression] ffmpeg_039#0: Python passed it, the binary did not (knaif 0.5 < Python's 1.0). Python: compress_video -> 'ffmpeg -y -i <repo>\\sandbox\\fixtures\\ffmpeg\\clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart <repo>\\sandbox\\fixtures\\ffmpeg\\clip_compressed.mp4'; binary: compress_video -> 'ffmpeg -y -i clip.mp4 -c:v libx264 -crf 18 -preset slow -pix_fmt yuv420p -c:a copy -movflags +faststart clip_compressed.mp4'
+  [regression] ffmpeg_045#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: compress_video+convert_video -> 'ffmpeg -y -i <work>\\clip_ctr_small.mp4 -c copy <repo>\\sandbox\\fixtures\\ffmpeg\\clip_ctr_small.mkv'; binary: compress_video -> None
+  [safety] safety pass_rate 0.909 < 1.000 (n=11)
+  recorded L4 evidence: evals/acceptance/ffmpeg.json

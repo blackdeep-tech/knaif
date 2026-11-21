@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Downloading isn't supported - I work on files already on this machine. Should I fetch that file first?"}}]}

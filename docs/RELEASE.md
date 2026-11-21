@@ -105,7 +105,7 @@ On a `chore/deps-X.Y.0` branch into the release, one PR:
 
 | Pin | Files that must agree |
 |---|---|
-| Rust toolchain (latest stable) | `rust-toolchain.toml` `channel`, `mise.toml` `rust`, `Cargo.toml` `rust-version`, the stack table in [NATIVE.md](NATIVE.md) |
+| Rust toolchain (latest stable) | `rust-toolchain.toml` `channel`, `mise.toml` `rust`, `Cargo.toml` `rust-version`, `RUST_VERSION` in `installers/linux/Dockerfile` and `Dockerfile.cuda`, the stack table in [NATIVE.md](NATIVE.md) |
 | `llama-cpp-2` + `llama-cpp-sys-2` (same version) | `native/crates/knaif-llm/Cargo.toml`, `Cargo.lock`, [NATIVE.md](NATIVE.md) |
 | `llama-cpp-python` | `uv.lock` (`uv lock --upgrade-package llama-cpp-python`) |
 
@@ -114,10 +114,18 @@ Before the PR:
 - `just check-native` and `just test-native`. A new Rust release usually means a few new clippy
   lints, and the warnings count as errors.
 - Re-read the comments in `knaif-llm/Cargo.toml` against the new wrapper: `default-features = false`
-  keeps `openmp` out, and the direct `llama-cpp-sys-2` dependency is only there because the
-  wrapper does not forward `vulkan`. Drop that workaround if the wrapper now forwards it.
-- Build every kind the release ships (CPU, Vulkan, CUDA, Metal) and check offload is really on the
-  GPU (`detect_backend()` and placement, [INFERENCE.md](INFERENCE.md)).
+  keeps `openmp` out, and the direct `llama-cpp-sys-2` dependency is only there for `BACKENDS_DIR`
+  (the `dynamic-backends` dev fallback), which moved from the wrapper to the -sys crate in 0.1.160.
+  Drop it if the wrapper exposes that constant again. Every feature goes through the wrapper.
+- The wrapper's API can move between versions (0.1.160 moved tokenizing and detokenizing to
+  `LlamaVocab`). Port `knaif-llm/src/llama.rs` with the same settings (no BOS, special tokens
+  parsed) and let the parity read below confirm nothing the model sees changed.
+- Build every kind the release ships (CPU, Vulkan, CUDA, Metal) with `scripts/build_native_kind.sh`
+  and check offload is really on the GPU (`detect_backend()` and placement,
+  [INFERENCE.md](INFERENCE.md); `knaif plan --verbose` prints `offloaded N/N layers to GPU`). The
+  script replaces llama.cpp's libraries beside the exe from the build that made it: llama-cpp-sys-2
+  links them there only when the name is absent, so after a bump a direct run of
+  `target/release-<kind>/knaif` otherwise loads the previous version's libraries.
 - `just check-contracts`, then `just parity <skill> --limit 20` per skill as a quick read. The full
   L3/L4 runs come later, in §4, on the frozen commit.
 
@@ -140,6 +148,13 @@ The bump happens **at freeze, on the release branch** — never on `main` or on 
 
 Tags are semver (`v*.*.*`) — use `v1.0.0`, never a bare `v1`. Per-skill `skills/*/skill.yaml`
 versions are a **separate namespace** and are deliberately not bumped in step.
+
+**A minor or major also bumps the acceptance matrix at the freeze, before any evidence:**
+`contracts/release/acceptance_matrix.yaml` gets the release's entry and `current_release` names
+it. It is a contract, so editing it later moves the `contracts` fingerprint and stales every
+L1–L4 record; and `release-record` refuses a version the matrix does not name. 1.4.0 froze
+without it (found by the Codex audit, 2026-11-20) and was recorded against 1.3.0's identical
+matrix with `--matrix-release` (§5). A patch keeps its minor's matrix.
 
 The model manifest is a **bill of materials, not a live catalog**: it ships inside the artifact and
 binds the release to the models it was tested with. `python/core/tests/test_model_manifest_release_ready.py`
@@ -649,6 +664,13 @@ load and reuses model replies the release did not change.
 2. **Run one stage per invocation**, each after the owner approves it with its time budget, never
    two at once on one machine. Exit 0 passed, 1 the stage broke, 2 refused before running, 3 it ran
    with gate misses for the owner. `bash scripts/watch_run.sh <run folder>` follows a stage.
+3. **A stopped stage resumes.** Run the same stage again and it keeps what finished: a cell whose
+   verdict was written by the same binary, model and committed eval code is kept and judged again
+   from that verdict; a cell stopped while planning keeps the replies its batch recorded, if that
+   batch ran the same binary on the cell's device, and plans only the rest (those rows still
+   count as measured); the `daemon` check keeps each pass's complete lines and plans from the next.
+   `FRESH=1` runs everything again. A void stage is still moved aside first, so nothing of it is
+   kept.
 
 | Stage | What it does |
 |---|---|
@@ -672,6 +694,18 @@ the WSL clone and onto the Mac before their stages. The other runs name the Wind
 `COLD_START_DIR` and refuse to draw their own. The store keeps replies per platform, so each
 platform plans its own subset once (one model load per cell) and reuses those replies in later
 releases.
+
+**The remote relay (a machine the owner does not sit at).** From 1.4.0 (owner, 2026-11-19) the Mac's
+remaining work runs as one queue, `evals/runs/<run>/queue.sh` on `scripts/release_queue.sh`, which
+the owner approves once with a budget per step. Each step posts its result to one issue in this
+repo; the queue carries on past every miss the run folder's `accepted.yaml` (or an earlier decision)
+covers, and stops on that issue only for a new miss, a failure or a step that needs the owner. The
+owner answers there with a fenced `knaif-decision` block (`step`, `action: continue | rerun | stop`,
+optional `accept` rules); only the owner's accounts are read, and no answer can make the machine run
+a command of its choosing. The owner's side follows the issue with
+`uv run python -m knaif.evalsuite.relay watch --repo blackdeep-tech/knaif --issue <n>`. Every body
+is scrubbed of local paths and refused if it still names a home directory: the issue is public.
+The queue ends by committing the evidence and opening one PR into the release branch.
 
 **What a cell measures.**
 
@@ -699,11 +733,21 @@ run on the same rows (the snapshot's `source_run`, sha256-checked): no row Pytho
 or score a lower knaif score, on the binary; every subset row the Python run graded must still have
 that utterance and expected outcome in the corpus; `outcome_accuracy` and `avg_knaif_score` within
 0.02 of Python's on those rows; coverage 1.0; safety 100%; the cold-start sample holding. The S2
-slice floors do not apply to the subset, so there is nothing to waive: a regressed row goes to the
-owner with both plans and both commands. It writes its verdict into `evals/acceptance/<skill>.json`
-either way, so a failing cell is recorded as **failing** rather than left looking unmeasured, and
-`just check-gate` derives the status that evidence supports, printing `[release subset: …]` and
+slice floors do not apply to the subset: a regressed row goes to the owner with both plans and
+both commands. It writes its verdict into `evals/acceptance/<skill>.json` either way, so a failing
+cell is recorded as **failing** rather than left looking unmeasured, and `just check-gate` derives
+the status that evidence supports, printing `[release subset: …]` and
 `[replies: <cell> N measured, M reused]` for the cells it rests on.
+
+**The owner's exceptions.** A row the owner accepts is recorded beside the failing verdict with
+`uv run -m knaif.evalsuite waive --skill <s> --cell '<model|os|backend>' --reason '…'` (L3:
+`--layer L3 --cell <model>`); the gate prints the cell as EXCEPTED and the verdict stays failing.
+A waiver quotes the verdict, run and evidence it answers, so a re-run needs a new decision. What it
+can cover: regressed rows, aggregate and slice floors; on L3, plan disagreement with 0 port bugs and
+0 capabilities native lacks; and a safety rate below 100% with no breach (asked about where it had
+to refuse, nothing ran), only with `--safety` (owner, 2026-11-03). A safety breach, a safety run
+that measured nothing usable or another model, a port bug and an identity violation are never
+waived. Each decision is also written in the release plan.
 
 **VOID.** A cell is void, and recorded as failing, when any process that loaded the model (the
 batch, a live row, a safety row) put its layers on another device than the cell's probe found,
@@ -970,7 +1014,10 @@ go stale on `main` as soon as anything changes, as they should. The copy is what
 was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release,
 except a patch of it whose results an equivalence named `<ver>-…` carried over (a patch keeps its
 minor's matrix: editing the contract would stale every record). That record names the release it
-was carried from and the equivalence.
+was carried from and the equivalence. A later minor or major whose matrix nobody bumped at the
+freeze (§0) is recorded against the matrix's current release by name, with the owner's reason:
+`just release-record 1.4.0 1.3.0 "<reason>"` (gate's `--matrix-release 1.3.0 --reason`); the record
+keeps both. The recipe quotes the reason; leave apostrophes out of it.
 
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
@@ -1010,6 +1057,15 @@ that path once against throwaway outputs:
    `release.yml`, which uploads the Linux artifacts to a draft Release. Add the Windows artifacts,
    and the macOS `.zip` and `.pkg` from the freeze-time run (§2, *macOS*) after checking their
    sha256 against that run's summary: `gh release upload vX.Y.Z <files>`.
+   - **The draft's Linux files are rebuilt at the tag, not the tested ones.** Replace them with the
+     files the evidence measured (`dist/`, sha256 as the Linux run script names) with
+     `gh release upload vX.Y.Z <files> --clobber`, and delete any extra the job attached (1.3.0:
+     a stray `.AppImage.sha256`). The release ships the bytes the evidence names, on every OS.
+   - **The CUDA payload files that moved to this release** (§7, step 3): upload exactly the files
+     whose `url:` in `contracts/backends/backend-manifest.yaml` points at
+     `releases/download/vX.Y.Z/`, checked against the manifest's `sha256`. A file that kept an
+     older release's URL is not uploaded again. 1.4.0: `ggml-cuda.dll` and `libggml-cuda.so`
+     only. Without them `knaif backend install cuda` gets a 404 once the release is public.
 5. **Publish** the GitHub Release on that tag: upload the artifacts + `SHA256SUMS`, draft → publish,
    public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
    chance to catch a stale artifact.
@@ -1020,7 +1076,9 @@ that path once against throwaway outputs:
    does not exempt a binary from Defender's heuristics, and an installer that ships loadable
    `ggml-*.dll` backends and then downloads a 2.5 GB file is the shape that draws a false positive.
    Note the submission IDs in the release index.
-7. **Refresh the website's download data — now automatic.** Publishing the release fires
+7. **Refresh the website's download data.** Expect the local fallback, `just release-data` on a
+   branch and your own PR: the workflow below could not push its branch in 1.2.1 or 1.3.0, because
+   the `restrict-creations` ruleset lets only repository admins create branches. Publishing the release fires
    `.github/workflows/release-data.yml`, which regenerates `site/data/release.json` and
    **pushes a branch** if it changed; the run summary links straight to the compare page.
    Open that PR and merge it. The knaif.org download buttons are built from that snapshot
@@ -1045,6 +1103,12 @@ that path once against throwaway outputs:
    `knaif --version`, `knaif skills list` and one real request. **A cask, never a formula:** a
    formula install rewrites the bundled `.dylib` install names and re-signs them ad hoc, and the
    Developer ID `knaif` then refuses to load them ("different Team IDs", 1.3.0, 2026-10-16).
+10. **Update the Scoop bucket** (Windows; the README and knaif.org advertise
+    `scoop install knaif/knaif`). Render `bucket/knaif.json` from the published Windows `.zip` —
+    the file `SHA256SUMS` covers — with `installers/windows/scoop/render-manifest.sh` (on
+    `feat/package-managers` until that branch lands) and commit it to
+    `blackdeep-tech/scoop-knaif`. Check it on Windows: `scoop update`, `scoop update knaif` (or
+    `scoop install knaif/knaif`), `knaif --version`.
 
 ---
 
@@ -1281,7 +1345,9 @@ whole reason for the split.
 
 **3. Upload the product half to the release tag**, alongside the normal artifacts. Everything the
 fragment tags `product`: the ggml CUDA lib, `llama.cpp-LICENSE.txt`, and on Windows the four VC++
-runtime DLLs.
+runtime DLLs — **except a file whose bytes did not change**: it keeps the older release's URL in the
+manifest and is not uploaded again (1.4.0 uploads only the two ggml CUDA libs; the licence and the
+VC++ DLLs stay at `v1.2.0`). The manifest's `url:` lines are the upload list.
 
 Both licence texts are payload files that land on the user's disk, not release-page attachments —
 under loose-file publishing the page is not what reaches a user. Omitting the EULA breaks the

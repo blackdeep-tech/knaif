@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "rotate_video", "args": {"inputs": ["clip.mp4"], "angle": 90}}]}

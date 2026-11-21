@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Working on files outside the sandbox is outside this skill's safety policy."}}]}

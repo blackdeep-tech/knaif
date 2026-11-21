@@ -1,0 +1,1 @@
+First attempt: container: mp4 was dropped, so the one compress of the starved clip_tiny.mov wrote nothing (ffmpeg_size_003 #0 knaif 0.75, no mp4). Owner (2026-10-29): the asked format is still delivered, as the stream copy convert_video would write; re-run with that.

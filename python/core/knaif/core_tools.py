@@ -1,4 +1,4 @@
-"""Built-in Step classes for the four core control-flow tools.
+"""Built-in Handler classes for the four core control-flow tools.
 
 These replace the CORE_HANDLERS function dict while keeping identical behavior.
 They are merged into every skill's tool_map by the loader (new OOP path).
@@ -11,31 +11,31 @@ from typing import Any
 
 from .handler_api import HandlerContext
 from .registry import ToolDef, load_registry
-from .tool import Step
+from .tool import Handler
 
 
-class ClarifyStep(Step):
+class ClarifyHandler(Handler):
     name = "clarify"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         return {"status": "clarification_needed", "question": args["question"]}
 
 
-class RejectStep(Step):
+class RejectHandler(Handler):
     name = "reject"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         return {"status": "rejected", "reason": args["reason"]}
 
 
-class DoneStep(Step):
+class DoneHandler(Handler):
     name = "done"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
         return {"status": "done"}
 
 
-class WaitForConfirmationStep(Step):
+class WaitForConfirmationHandler(Handler):
     name = "wait_for_confirmation"
 
     def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
@@ -45,18 +45,32 @@ class WaitForConfirmationStep(Step):
         return {"status": "confirmed" if ok else "declined", "prompt": prompt}
 
 
-CORE_STEPS: list[type[Step]] = [
-    ClarifyStep,
-    RejectStep,
-    DoneStep,
-    WaitForConfirmationStep,
+class AlertWhenDoneHandler(Handler):
+    """A run option, not a step: ``planner.split_alert`` removes it before execution.
+
+    Kept as a class so the tool map and core_tools.yaml stay 1:1. Reaching it means a caller
+    executed a plan without splitting the alert off first, which is a bug in that caller.
+    """
+
+    name = "alert_when_done"
+
+    def handle(self, args: dict[str, Any], ctx: HandlerContext) -> dict[str, Any]:
+        raise RuntimeError("alert_when_done is a run option; split_alert() removes it first")
+
+
+CORE_TOOLS: list[type[Handler]] = [
+    ClarifyHandler,
+    RejectHandler,
+    DoneHandler,
+    WaitForConfirmationHandler,
+    AlertWhenDoneHandler,
 ]
 
-CORE_STEP_MAP: dict[str, Step] = {cls.name: cls() for cls in CORE_STEPS}
+CORE_TOOL_MAP: dict[str, Handler] = {cls.name: cls() for cls in CORE_TOOLS}
 
 
 def _resolve_runtime_yaml(filename: str) -> Path:
-    """Locate a shared runtime-contract YAML (core_tools.yaml / steps.yaml).
+    """Locate a shared runtime-contract YAML (e.g. core_tools.yaml).
 
     Canonical source is repo-root ``contracts/runtime/`` (language-neutral, read by the Rust
     runtime too). ``core_tools.yaml`` is also import-critical, so a synced copy ships inside
@@ -77,7 +91,7 @@ def _resolve_runtime_yaml(filename: str) -> Path:
 
 
 # Metadata for the four core tools, loaded from core_tools.yaml through the same
-# registry loader as a skill's tools.yaml. Co-located with the Step classes so
+# registry loader as a skill's tools.yaml. Co-located with the Handler classes so
 # behavior and metadata stay together. `_merge_core_tool_defs` injects these into
 # every skill registry by name.
 CORE_TOOLS_YAML: Path = _resolve_runtime_yaml("core_tools.yaml")

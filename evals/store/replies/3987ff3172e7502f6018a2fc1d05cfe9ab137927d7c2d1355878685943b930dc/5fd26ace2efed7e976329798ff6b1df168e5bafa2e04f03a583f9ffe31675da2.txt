@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Sending isn't supported - I only process media on this machine. Should I prepare it for email instead?"}}]}

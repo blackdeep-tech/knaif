@@ -1,0 +1,86 @@
+2026-11-03 12:25:53 START check (linux)
+2026-11-03 12:25:59 END check: preflight passed
+2026-11-03 12:31:32 START gpu (linux)
+2026-11-03 12:42:35 gpu ffmpeg r140-linux-4b: placement CUDA0; store       : 3d53bc32f373 holds 0 of 234 replies
+2026-11-03 12:42:49 gpu ffmpeg r140-linux-4b: safety exit 0
+2026-11-03 12:42:49 gpu 4b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-03 12:42:49 GATE MISS gpu: 4b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 12:44:46 gpu documents r140-linux-4b: placement CUDA0; store       : 3d53bc32f373 holds 0 of 103 replies
+2026-11-03 12:44:49 gpu documents r140-linux-4b: safety exit 0
+2026-11-03 12:44:49 gpu 4b cuda documents: NOT ACCEPTED - 3 of 124 thresholds unmet:
+2026-11-03 12:44:49 GATE MISS gpu: 4b cuda documents NOT ACCEPTED: goes to the owner
+2026-11-03 12:54:20 gpu ffmpeg r140-linux-1.7b: placement CUDA0; store       : a8d2a873cc62 holds 0 of 234 replies
+2026-11-03 12:54:31 gpu ffmpeg r140-linux-1.7b: safety exit 0
+2026-11-03 12:54:31 gpu 1.7b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-03 12:54:31 GATE MISS gpu: 1.7b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 12:56:05 gpu documents r140-linux-1.7b: placement CUDA0; store       : a8d2a873cc62 holds 0 of 103 replies
+2026-11-03 12:56:07 gpu documents r140-linux-1.7b: safety exit 0
+2026-11-03 12:56:07 GATE MISS gpu: 1.7b cuda documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-03 12:56:07 END gpu: ran, with gate misses for the owner
+2026-11-03 12:56:59 START live (linux)
+2026-11-03 12:59:18 live documents r140-linux-1.7b: placement CUDA0; 
+2026-11-03 12:59:20 live documents r140-linux-1.7b: safety exit 0
+2026-11-03 12:59:20 live 1.7b cuda documents: NOT ACCEPTED - 3 of 124 thresholds unmet:
+2026-11-03 12:59:20 GATE MISS live: 1.7b cuda documents NOT ACCEPTED: goes to the owner
+2026-11-03 12:59:20 END live: ran, with gate misses for the owner
+2026-11-03 13:09:35 VOID gpu and live (owner): graded on a tied mtime's intermediate; boards under void/2026-11-03-gpu/, both run again (amendment)
+2026-11-03 13:09:41 START gpu (linux)
+2026-11-03 13:18:04 gpu ffmpeg r140-linux-4b: placement CUDA0; store       : 3d53bc32f373 holds 234 of 234 replies
+2026-11-03 13:18:18 gpu ffmpeg r140-linux-4b: safety exit 0
+2026-11-03 13:18:18 gpu 4b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-03 13:18:18 GATE MISS gpu: 4b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 13:19:34 gpu documents r140-linux-4b: placement CUDA0; store       : 3d53bc32f373 holds 103 of 103 replies
+2026-11-03 13:19:37 gpu documents r140-linux-4b: safety exit 0
+2026-11-03 13:19:37 gpu 4b cuda documents: ACCEPTED - 124 thresholds met.
+2026-11-03 13:27:42 gpu ffmpeg r140-linux-1.7b: placement CUDA0; store       : a8d2a873cc62 holds 234 of 234 replies
+2026-11-03 13:27:52 gpu ffmpeg r140-linux-1.7b: safety exit 0
+2026-11-03 13:27:52 gpu 1.7b cuda ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-03 13:27:52 GATE MISS gpu: 1.7b cuda ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 13:29:00 gpu documents r140-linux-1.7b: placement CUDA0; store       : a8d2a873cc62 holds 103 of 103 replies
+2026-11-03 13:29:02 gpu documents r140-linux-1.7b: safety exit 0
+2026-11-03 13:29:02 GATE MISS gpu: 1.7b cuda documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-03 13:29:02 END gpu: ran, with gate misses for the owner
+2026-11-03 13:29:21 START live (linux)
+2026-11-03 13:31:29 live documents r140-linux-1.7b: placement CUDA0; 
+2026-11-03 13:31:31 live documents r140-linux-1.7b: safety exit 0
+2026-11-03 13:31:31 live 1.7b cuda documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-03 13:31:31 GATE MISS live: 1.7b cuda documents NOT ACCEPTED: goes to the owner
+2026-11-03 13:31:31 END live: ran, with gate misses for the owner
+2026-11-03 13:31:31 START cpu (linux)
+2026-11-03 14:51:03 cpu ffmpeg r140-linux-4b: placement CPU; store       : 8911c841914f holds 0 of 234 replies
+2026-11-03 14:53:29 cpu ffmpeg r140-linux-4b: safety exit 1
+2026-11-03 14:53:29 cpu 4b cpu ffmpeg: NOT ACCEPTED - 2 of 255 thresholds unmet:
+2026-11-03 14:53:29 GATE MISS cpu: 4b cpu ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 15:10:31 cpu documents r140-linux-4b: placement CPU; store       : 8911c841914f holds 0 of 103 replies
+2026-11-03 15:10:47 cpu documents r140-linux-4b: safety exit 0
+2026-11-03 15:10:48 cpu 4b cpu documents: ACCEPTED - 124 thresholds met.
+2026-11-03 15:43:55 cpu ffmpeg r140-linux-1.7b: placement CPU; store       : 85fcc6d9b0ce holds 0 of 234 replies
+2026-11-03 15:44:44 cpu ffmpeg r140-linux-1.7b: safety exit 0
+2026-11-03 15:44:44 cpu 1.7b cpu ffmpeg: NOT ACCEPTED - 8 of 255 thresholds unmet:
+2026-11-03 15:44:44 GATE MISS cpu: 1.7b cpu ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-03 15:51:53 cpu documents r140-linux-1.7b: placement CPU; store       : 85fcc6d9b0ce holds 0 of 103 replies
+2026-11-03 15:52:00 cpu documents r140-linux-1.7b: safety exit 0
+2026-11-03 15:52:00 GATE MISS cpu: 1.7b cpu documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-03 15:52:00 END cpu: ran, with gate misses for the owner
+2026-11-03 15:52:00 START live (linux)
+2026-11-03 15:58:01 live documents r140-linux-1.7b: placement CPU; 
+2026-11-03 15:58:08 live documents r140-linux-1.7b: safety exit 0
+2026-11-03 15:58:08 live 1.7b cpu documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-03 15:58:08 GATE MISS live: 1.7b cpu documents NOT ACCEPTED: goes to the owner
+2026-11-03 15:58:08 END live: ran, with gate misses for the owner
+2026-11-03 16:04:32 START daemon (linux)
+2026-11-03 17:33:47 PAUSED daemon (owner): stopped in 4b ffmpeg (the first of four), after 1 h 29 min; a resume runs the daemon stage again from its first cell
+2026-11-04 09:26:07 RESUMED daemon (owner): the stage runs again from its first cell
+2026-11-04 09:26:07 START daemon (linux)
+2026-11-04 10:38:21 PAUSED daemon (owner): stopped in the 4B ffmpeg daemon pass to take the resume fix (949df74); its in-process passes and complete lines are kept
+2026-11-04 10:38:32 RESUMED daemon (owner): on 949df74; 4b/key written by hand (binary sha as in artifact.daemon.log, the 4B model sha), as the stopped attempt predates the key, so its 337 in-process lines and 89 daemon lines are kept
+2026-11-04 10:38:32 START daemon (linux)
+2026-11-04 10:38:47 daemon 4b ffmpeg daemon: kept 89 of 234 lines from a stopped attempt
+2026-11-04 11:06:34 daemon 4b ffmpeg: IDENTICAL
+2026-11-04 11:16:26 daemon 4b documents: IDENTICAL
+2026-11-04 12:05:00 daemon 1.7b ffmpeg: IDENTICAL
+2026-11-04 12:10:53 daemon 1.7b documents: IDENTICAL
+2026-11-04 12:10:53 END daemon
+2026-11-04 12:11:28 START store (linux)
+2026-11-04 12:11:32 store: 1414 new or changed file(s) under evals/store to commit
+2026-11-04 12:11:32 END store

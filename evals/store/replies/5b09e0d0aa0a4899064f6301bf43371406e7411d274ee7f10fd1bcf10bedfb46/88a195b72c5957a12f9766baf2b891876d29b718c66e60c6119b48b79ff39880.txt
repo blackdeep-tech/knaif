@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "prepare_for_platform", "args": {"inputs": ["clip.mov"], "platform": "youtube", "preview": true, "quality": "visually_good"}}, {"tool": "create_thumbnail", "args": {"input": "clip.mov", "at_time": "00:00:01", "image_format": "jpeg"}}]}

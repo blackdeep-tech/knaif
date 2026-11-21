@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Sending files isn't outside this skill's safety policy, but I don't send emails. Should I convert clip.mp4 first?"}}]}

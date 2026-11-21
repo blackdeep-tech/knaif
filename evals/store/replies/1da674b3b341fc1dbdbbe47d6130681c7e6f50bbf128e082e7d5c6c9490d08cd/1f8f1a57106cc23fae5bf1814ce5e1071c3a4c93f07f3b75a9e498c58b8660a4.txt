@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Should I normalize the audio, or change it by a specific dB amount?"}}]}

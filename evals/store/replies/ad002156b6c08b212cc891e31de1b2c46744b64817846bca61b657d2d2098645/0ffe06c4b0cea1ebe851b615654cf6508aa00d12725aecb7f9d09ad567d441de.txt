@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reverse_video", "args": {"inputs": ["video.mp4"], "output": "video_rev.mp4"}}, {"tool": "compress_video", "args": {"inputs": ["video_rev.mp4"]}}]}

@@ -9,12 +9,17 @@
     "macos": "CI"
   },
   "registries": {
-    "demo": "convert_video:\n  description: \"Convert a video to a different container or codec.\"\n  keywords: [convert, transcode, mp4, webm, convertir, 转换]\n  required_args: [inputs]\n  optional_args: [container, output]\n  arg_schemas:\n    container: {type: enum, enum: [mp4, webm, mkv], help: \"target container\"}\ncompress_video:\n  description: \"Compress a video to a smaller file size.\"\n  keywords: [compress, smaller, shrink, comprimir, 压缩]\n  required_args: [inputs]\n  optional_args: [quality]\n  arg_schemas:\n    quality: {type: enum, enum: [low, high]}\ntrim_video:\n  description: \"Trim a video to a time range.\"\n  keywords: [trim, cut, shorten]\n  required_args: [inputs, start]\n  optional_args: [end]\nlist_formats:\n  description: \"List the container formats this skill supports.\"\n  keywords: [formats, list]\nrun_batch:\n  description: \"Internal batch executor.\"\n  internal: true\n  required_args: [commands]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"
+    "demo": "convert_video:\n  description: \"Convert a video to a different container or codec.\"\n  keywords: [convert, transcode, mp4, webm, convertir, 转换]\n  required_args: [inputs]\n  optional_args: [container, output]\n  arg_schemas:\n    container: {type: enum, enum: [mp4, webm, mkv], help: \"target container\"}\ncompress_video:\n  description: \"Compress a video to a smaller file size.\"\n  keywords: [compress, smaller, shrink, comprimir, 压缩]\n  required_args: [inputs]\n  optional_args: [quality]\n  arg_schemas:\n    quality: {type: enum, enum: [low, high]}\ntrim_video:\n  description: \"Trim a video to a time range.\"\n  keywords: [trim, cut, shorten]\n  required_args: [inputs, start]\n  optional_args: [end]\nlist_formats:\n  description: \"List the container formats this skill supports.\"\n  keywords: [formats, list]\nrun_batch:\n  description: \"Internal batch executor.\"\n  internal: true\n  required_args: [commands]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n",
+    "optional_only": "concat_video:\n  description: \"Join several videos into one.\"\n  keywords: [concat, join, merge]\n  required_args: []\n  optional_args: [inputs, output]\n"
   },
   "prompt_overrides": {
     "pinned": {
       "system_header": "You are a command planner. Emit only JSON.\n\n",
       "examples_block": "\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n"
+    },
+    "rendered": {
+      "system_header": "You are a command planner. Emit only JSON.\n\n",
+      "examples_block": "Examples:\n  request: \"join a.mp4 and b.mp4\"\n  output:  {\"plan\": [{\"tool\": \"concat_video\", \"args\": {\"inputs\": [\"a.mp4\", \"b.mp4\"]}}]}\n"
     }
   },
   "cases": [
@@ -23,7 +28,7 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "convert clip.mp4 to webm",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "convert clip.mp4 to webm"
     },
     {
@@ -31,7 +36,7 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "make it smaller please",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "make it smaller please"
     },
     {
@@ -39,7 +44,7 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "convert C:\\Users\\me\\clip.mp4 to webm",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "convert C:/Users/me/clip.mp4 to webm"
     },
     {
@@ -47,7 +52,7 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "trim .\\clip.mov from 0 to 10",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "trim ./clip.mov from 0 to 10"
     },
     {
@@ -55,7 +60,7 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "convert \"C:\\Users\\me\\my clip.mp4\" to webm",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "convert \"C:\\Users\\me\\my clip.mp4\" to webm"
     },
     {
@@ -63,7 +68,7 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "what does \\ mean here",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "what does \\ mean here"
     },
     {
@@ -71,7 +76,7 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "rename a\\b to c",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "rename a/b to c"
     },
     {
@@ -79,8 +84,24 @@
       "registry": "demo",
       "prompt_overrides": "pinned",
       "utterance": "comprimir el vídeo",
-      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args: \n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - convert_video: Convert a video to a different container or codec.\n    args: inputs (required), container (optional, target container), output (optional)\n  - compress_video: Compress a video to a smaller file size.\n    args: inputs (required), quality (optional)\n  - trim_video: Trim a video to a time range.\n    args: inputs (required), start (required), end (optional)\n  - list_formats: List the container formats this skill supports.\n    args:\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
       "expected_user": "comprimir el vídeo"
+    },
+    {
+      "name": "optional_only_args_have_no_leading_comma",
+      "registry": "optional_only",
+      "prompt_overrides": "pinned",
+      "utterance": "join a.mp4 and b.mp4",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - concat_video: Join several videos into one.\n    args: inputs (optional), output (optional)\n\nExamples:\nrequest: convert clip.mp4 to webm\n{\"plan\": [{\"tool\": \"convert_video\", \"args\": {\"inputs\": [\"clip.mp4\"], \"container\": \"webm\"}}]}\n",
+      "expected_user": "join a.mp4 and b.mp4"
+    },
+    {
+      "name": "a_rendered_examples_block_starts_on_its_own_line",
+      "registry": "optional_only",
+      "prompt_overrides": "rendered",
+      "utterance": "join a.mp4 and b.mp4",
+      "expected_system": "You are a command planner. Emit only JSON.\n\nAvailable tools:\n  - concat_video: Join several videos into one.\n    args: inputs (optional), output (optional)\nExamples:\n  request: \"join a.mp4 and b.mp4\"\n  output:  {\"plan\": [{\"tool\": \"concat_video\", \"args\": {\"inputs\": [\"a.mp4\", \"b.mp4\"]}}]}\n",
+      "expected_user": "join a.mp4 and b.mp4"
     }
   ]
 }

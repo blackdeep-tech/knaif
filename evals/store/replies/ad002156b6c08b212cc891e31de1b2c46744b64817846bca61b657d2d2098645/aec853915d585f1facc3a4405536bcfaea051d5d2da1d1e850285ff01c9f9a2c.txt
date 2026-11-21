@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_speed", "args": {"inputs": ["clip.mp4"], "speed": 2.0, "output": "clip_fast.mp4"}}, {"tool": "trim_video", "args": {"input": "clip_fast.mp4", "start": "00:00:00", "end": "00:00:03"}}]}

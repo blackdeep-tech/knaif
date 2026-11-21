@@ -1,0 +1,2019 @@
+{
+  "_comment": "Golden parity fixtures for routing chain intermediates into the run scratch: the plan rewrite that runs after the NL gates and before a skill's collision repair, for a skill whose skill.yaml sets `scratch_intermediates: true`. An intermediate is a step's `output` that a later step reads; it moves to `<work>/` keeping its place relative to the user's folder, and every later reference follows. An output nothing reads is a deliverable and stays; a file the user named in the request stays; with no utterance, every name is the caller's and nothing moves. Fixed plans in, the routed plan out, no model. `<work>` is the run's scratch folder and `<sandbox>` the folder paths resolve against; consumers substitute real directories and compare with `/` separators. Consumed by python/core/tests/test_scratch_routing_parity.py and native/crates/knaif-core/tests/scratch_routing_parity.rs. WHY: an intermediate left in the user's folder was one of the four leftover-file sources (36 ffmpeg rows, 129 files); both runtimes must move the same files to the same places, or the same utterance leaves different files behind.",
+  "joining_tools": [
+    "concat_video",
+    "merge_pdfs"
+  ],
+  "_joining_tools": "Tools whose several inputs become ONE output (tools.yaml `joins_inputs: true`). A producer with a glob is never routed; one with several inputs is routed only when it joins them. Consumers pass this set.",
+  "file_kinds": {
+    "mp4": "video",
+    "mov": "video",
+    "gif": "video",
+    "mp3": "audio",
+    "aac": "audio",
+    "jpg": "image",
+    "pdf": "document",
+    "txt": "text",
+    "webm": "video",
+    "avi": "video",
+    "mkv": "video",
+    "wav": "audio",
+    "docx": "document",
+    "html": "text"
+  },
+  "_file_kinds": "Extension -> kind, from each skill's skill.yaml `file_kinds:`. A reader writing another kind makes a new thing (see _derives).",
+  "produces": {
+    "extract_audio": "audio",
+    "create_thumbnail": "image",
+    "convert_document": {
+      "arg": "to_format"
+    },
+    "convert_video": {
+      "arg": "container"
+    },
+    "extract_text": "text"
+  },
+  "_produces": "What a tool writes (tools.yaml `produces:`): a kind, or {arg: <name>} when the kind follows an argument naming an extension. The declaration decides over the output's extension (the skill's word over the model's); a tool declaring nothing, or an {arg} without a usable value, follows its output's extension. For the request signal, the extension a reader writes is its output's, else the {arg} value; unknown counts as the same format.",
+  "derives": [
+    "trim_video",
+    "concat_video",
+    "split_pdf",
+    "merge_pdfs"
+  ],
+  "_derives": "Tools whose output is a NEW thing made from the input (tools.yaml `derives: true`): a piece, a page range, a join. The keep rule (owner, 2026-10-15): an unnamed intermediate stays when the user asked for it. Tool signal: every reader makes a new thing (another kind, or a tool that derives). Request signal: the user named its format as a bare word (not inside a filename, not the producer's own input extension) and no reader writes that format again. Otherwise a reader refines it and it moves to the scratch.",
+  "cases": [
+    {
+      "name": "an_unnamed_intermediate_moves_with_its_reader",
+      "utterance": "trim clip.mp4 to 2 seconds, then resize it",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:02",
+            "output": "clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "clip_trimmed.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:02",
+            "output": "<work>/clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "<work>/clip_trimmed.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_file_the_user_named_stays",
+      "utterance": "trim clip.mp4 into short.mp4, then resize short.mp4",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "short.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "short.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "short.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "short.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ]
+    },
+    {
+      "name": "an_output_nothing_reads_is_a_deliverable",
+      "utterance": "thumbnail and compress clip.mp4",
+      "plan": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "thumb.jpg"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "thumb.jpg"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "every_reader_of_a_fan_out_follows",
+      "utterance": "convert clip.mov to mp4, then thumbnail and compress it",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "output": "clip_c.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "clip_c.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip_c.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "output": "<work>/clip_c.mp4"
+          }
+        },
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "<work>/clip_c.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "<work>/clip_c.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "two_spellings_of_one_file_match",
+      "utterance": "trim clip.mp4, then resize it",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "./clip_trimmed.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "<work>/clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "<work>/clip_trimmed.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_piece_cut_from_a_named_conversion_keeps_the_whole",
+      "utterance": "convert clip.mov to mp4 and then trim it to 3 seconds",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:03"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:03"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an_intermediate_keeps_its_folder_and_spelling",
+      "utterance": "trim clip.mp4, then resize it",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "videos/Clip_Trimmed.MP4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "videos/Clip_Trimmed.MP4"
+            ],
+            "height": 240
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "<work>/videos/Clip_Trimmed.MP4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "<work>/videos/Clip_Trimmed.MP4"
+            ],
+            "height": 240
+          }
+        }
+      ]
+    },
+    {
+      "name": "two_intermediates_with_one_name_stay_apart",
+      "utterance": "trim both clips, then resize them",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "a/clip.mp4",
+            "output": "a/x.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "b/clip.mp4",
+            "output": "b/x.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "a/x.mp4",
+              "b/x.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "a/clip.mp4",
+            "output": "<work>/a/x.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "b/clip.mp4",
+            "output": "<work>/b/x.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "<work>/a/x.mp4",
+              "<work>/b/x.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ]
+    },
+    {
+      "name": "without_an_utterance_nothing_moves",
+      "utterance": null,
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "clip_trimmed.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "clip_trimmed.mp4"
+            ],
+            "height": 240
+          }
+        }
+      ]
+    },
+    {
+      "name": "variable_references_and_terminals_are_ignored",
+      "utterance": "trim then resize clip.mp4",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "$out"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "$out"
+            ]
+          }
+        },
+        {
+          "tool": "done",
+          "args": {}
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "$out"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "$out"
+            ]
+          }
+        },
+        {
+          "tool": "done",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "name": "a_glob_producer_is_never_routed",
+      "_why": "ffmpeg_134#2: a batch over `*` writes one file per input under the one `output` name; only one is read later, the rest are deliverables. Routing the step sent them all to the scratch, where they were deleted. Same rule as chain linking: one output cannot name a fan-out.",
+      "utterance": "MP3 nach WAV konvertieren und Samplerate auf 22050 Hz setzen",
+      "plan": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "*"
+            ],
+            "audio_format": "wav",
+            "output": "audio.wav"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "audio.wav"
+            ],
+            "audio_format": "mp3",
+            "output": "audio.mp3"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "*"
+            ],
+            "audio_format": "wav",
+            "output": "audio.wav"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "audio.wav"
+            ],
+            "audio_format": "mp3",
+            "output": "audio.mp3"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_multi_input_producer_is_never_routed",
+      "utterance": "pull the audio from both clips, then compress it",
+      "plan": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4",
+              "clip2.mp4"
+            ],
+            "output": "both.mp3"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "both.mp3"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4",
+              "clip2.mp4"
+            ],
+            "output": "both.mp3"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "both.mp3"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_join_producer_is_routed",
+      "_why": "ffmpeg_243#0: concat joins two clips into one file, which the next step reads. A blanket several-inputs rule left combined.mov in the folder.",
+      "utterance": "join clip.mov and clip.mp4 and resize to full HD",
+      "plan": [
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "clip.mov",
+              "clip.mp4"
+            ],
+            "output": "combined.mov"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "combined.mov"
+            ],
+            "height": 1080,
+            "keep_aspect_ratio": true
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "clip.mov",
+              "clip.mp4"
+            ],
+            "output": "<work>/combined.mov"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "<work>/combined.mov"
+            ],
+            "height": 1080,
+            "keep_aspect_ratio": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_rewrite_of_the_same_file_ends_its_readers",
+      "utterance": "trim clip.mp4, resize the trim, then make a new trim and compress that",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "mid.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "mid.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "start": "00:00:03",
+            "output": "mid.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "mid.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "<work>/mid.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "<work>/mid.mp4"
+            ],
+            "output": "small.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "start": "00:00:03",
+            "output": "<work>/mid.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "<work>/mid.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_documents_merge_is_a_join",
+      "_why": "merge_pdfs reads several PDFs and writes ONE (joins_inputs: true, like concat). A merge whose unnamed result is then numbered must route that result, or combined.pdf is left in the folder.",
+      "utterance": "merge a.pdf and b.pdf, then add page numbers",
+      "plan": [
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": [
+              "a.pdf",
+              "b.pdf"
+            ],
+            "output": "combined.pdf"
+          }
+        },
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "combined.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": [
+              "a.pdf",
+              "b.pdf"
+            ],
+            "output": "<work>/combined.pdf"
+          }
+        },
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "<work>/combined.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_reader_writing_another_kind_keeps_the_intermediate",
+      "utterance": "convert clip.mov to mp4 then extract its audio as mp3",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "audio_format": "mp3"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "audio_format": "mp3"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_reader_writing_the_same_kind_refines_it",
+      "utterance": "convert clip.mov to mp4 then speed it up 2x",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "adjust_speed",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "speed": 2.0
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "<work>/clip.mp4"
+          }
+        },
+        {
+          "tool": "adjust_speed",
+          "args": {
+            "inputs": [
+              "<work>/clip.mp4"
+            ],
+            "speed": 2.0
+          }
+        }
+      ]
+    },
+    {
+      "name": "an_explicit_output_decides_the_readers_kind",
+      "utterance": "trim clip.mp4 to 5 seconds and turn it into a gif",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:05",
+            "output": "clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip_trimmed.mp4"
+            ],
+            "output": "clip.gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:05",
+            "output": "<work>/clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "<work>/clip_trimmed.mp4"
+            ],
+            "output": "clip.gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_kind_can_follow_an_argument",
+      "utterance": "compress report.pdf and save its text as a txt file",
+      "plan": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "report.pdf",
+            "output": "report_small.pdf"
+          }
+        },
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report_small.pdf",
+            "to_format": "txt"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "report.pdf",
+            "output": "report_small.pdf"
+          }
+        },
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report_small.pdf",
+            "to_format": "txt"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_reader_of_unknown_kind_refines_as_before",
+      "utterance": "trim clip.mp4 to 2 seconds, then tag it",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:02",
+            "output": "clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "tag_media",
+          "args": {
+            "input": "clip_trimmed.mp4",
+            "title": "Draft"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:02",
+            "output": "<work>/clip_trimmed.mp4"
+          }
+        },
+        {
+          "tool": "tag_media",
+          "args": {
+            "input": "<work>/clip_trimmed.mp4",
+            "title": "Draft"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_tools_declared_kind_beats_a_wrong_extension",
+      "utterance": "convert clip.mov to mp4 then extract its audio",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "clip_audio.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "clip_audio.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_named_format_is_a_result_the_user_wants",
+      "utterance": "convert clip.mov to mp4 and make a gif preview",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_named_format_counts_without_an_output_name",
+      "utterance": "convert clip.mov to mp4 and make a gif preview",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_named_format_in_chinese_counts",
+      "utterance": "将clip.mov转换为mp4并制作gif预览",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_named_format_in_bulgarian_counts",
+      "utterance": "конвертирай clip.mov в mp4 и направи gif превю",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_named_format_written_again_refines",
+      "utterance": "convert clip.mov to mp4 and make it smaller",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "clip_small.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "<work>/clip.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "<work>/clip.mp4"
+            ],
+            "output": "clip_small.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_reader_of_unknown_format_refines_a_named_one",
+      "utterance": "convert clip.mov to mp4 and make it smaller",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "<work>/clip.mp4"
+          }
+        },
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "<work>/clip.mp4"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "two_named_formats_of_one_kind_both_stay",
+      "utterance": "extract the audio from clip.mp4 as wav and compress it to mp3",
+      "plan": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "audio_format": "wav",
+            "output": "clip.wav"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.wav"
+            ],
+            "audio_format": "mp3",
+            "output": "clip.mp3"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "audio_format": "wav",
+            "output": "clip.wav"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.wav"
+            ],
+            "audio_format": "mp3",
+            "output": "clip.mp3"
+          }
+        }
+      ]
+    },
+    {
+      "name": "the_sources_own_extension_is_not_a_named_format",
+      "utterance": "cut the mp4 at 3 seconds and make a gif of the first part",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:03",
+            "output": "clip_part.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip_part.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:03",
+            "output": "<work>/clip_part.mp4"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "<work>/clip_part.mp4"
+            ],
+            "container": "gif",
+            "output": "clip.gif"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_piece_keeps_its_source",
+      "utterance": "convert clip.mov to mp4 and cut the first 3 seconds into intro.mp4",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:03",
+            "output": "intro.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:03",
+            "output": "intro.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_page_range_keeps_the_compressed_whole",
+      "utterance": "compress report.pdf and extract pages 1-3",
+      "plan": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "report.pdf",
+            "output": "report_small.pdf"
+          }
+        },
+        {
+          "tool": "split_pdf",
+          "args": {
+            "input": "report_small.pdf",
+            "ranges": "1-3",
+            "output": "report_1-3.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "compress_pdf",
+          "args": {
+            "input": "report.pdf",
+            "output": "report_small.pdf"
+          }
+        },
+        {
+          "tool": "split_pdf",
+          "args": {
+            "input": "report_small.pdf",
+            "ranges": "1-3",
+            "output": "report_1-3.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_join_takes_its_pieces_to_the_scratch",
+      "utterance": "trim both clips and join them into j.mp4",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "a/clip.mp4",
+            "output": "a/x.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "b/clip.mp4",
+            "output": "b/x.mp4"
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "a/x.mp4",
+              "b/x.mp4"
+            ],
+            "output": "j.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "a/clip.mp4",
+            "output": "<work>/a/x.mp4"
+          }
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "b/clip.mp4",
+            "output": "<work>/b/x.mp4"
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "<work>/a/x.mp4",
+              "<work>/b/x.mp4"
+            ],
+            "output": "j.mp4"
+          }
+        }
+      ],
+      "_why": "Owner 2026-10-20: pieces made for a join are on the way. An intermediate whose only readers are joins goes to the scratch, so the join's one file is what is left; reverses 2026-10-15's \"a join derives, so the pieces stay\". A file the user named still stays, and so does a named format no reader writes again."
+    },
+    {
+      "name": "a_join_of_converted_files_takes_them_to_the_scratch",
+      "utterance": "convert all docx files to pdf and merge them into one.pdf",
+      "plan": [
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "a.docx",
+            "to_format": "pdf",
+            "output": "a.pdf"
+          }
+        },
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "b.docx",
+            "to_format": "pdf",
+            "output": "b.pdf"
+          }
+        },
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": [
+              "a.pdf",
+              "b.pdf"
+            ],
+            "output": "one.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "a.docx",
+            "to_format": "pdf",
+            "output": "<work>/a.pdf"
+          }
+        },
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "b.docx",
+            "to_format": "pdf",
+            "output": "<work>/b.pdf"
+          }
+        },
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": [
+              "<work>/a.pdf",
+              "<work>/b.pdf"
+            ],
+            "output": "one.pdf"
+          }
+        }
+      ],
+      "_why": "Owner 2026-10-20: pieces made for a join are on the way. An intermediate whose only readers are joins goes to the scratch, so the join's one file is what is left; reverses 2026-10-15's \"a join derives, so the pieces stay\". A file the user named still stays, and so does a named format no reader writes again. \"to pdf\" names the format, but the merge writes pdf again, so the request signal does not keep the converted files either."
+    },
+    {
+      "name": "a_join_of_named_pieces_keeps_them",
+      "_why": "A file the user named stays whatever reads it (owner, 2026-10-09).",
+      "utterance": "trim clip.mp4 into x.mp4 and join x.mp4 with intro.mp4 into j.mp4",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "x.mp4"
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "intro.mp4",
+              "x.mp4"
+            ],
+            "output": "j.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "x.mp4"
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "intro.mp4",
+              "x.mp4"
+            ],
+            "output": "j.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_join_and_another_reader_keep_the_piece",
+      "_why": "Only a piece whose every reader is a join is on the way; when its audio is extracted too (another kind of file) it keeps the 10-15 rule and stays.",
+      "utterance": "trim clip.mp4, extract its audio and join it with intro.mp4",
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "x.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "x.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "intro.mp4",
+              "x.mp4"
+            ],
+            "output": "j.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "output": "x.mp4"
+          }
+        },
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "x.mp4"
+            ]
+          }
+        },
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "intro.mp4",
+              "x.mp4"
+            ],
+            "output": "j.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_version_in_the_same_format_refines",
+      "utterance": "convert clip.mov to mp4 and make a 720p version",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "height": 720,
+            "output": "clip_720p.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "<work>/clip.mp4"
+          }
+        },
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "<work>/clip.mp4"
+            ],
+            "height": 720,
+            "output": "clip_720p.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_resize_names_no_format",
+      "utterance": "resize clip.mov to 720p and convert it to webm",
+      "plan": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "height": 720,
+            "output": "clip_720p.mov"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip_720p.mov"
+            ],
+            "container": "webm",
+            "output": "clip.webm"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "resize_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "height": 720,
+            "output": "<work>/clip_720p.mov"
+          }
+        },
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "<work>/clip_720p.mov"
+            ],
+            "container": "webm",
+            "output": "clip.webm"
+          }
+        }
+      ]
+    },
+    {
+      "name": "muting_refines",
+      "utterance": "convert clip.mov to mp4, then mute it",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "clip.mp4"
+          }
+        },
+        {
+          "tool": "strip_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "output": "clip_muted.mp4"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4",
+            "output": "<work>/clip.mp4"
+          }
+        },
+        {
+          "tool": "strip_audio",
+          "args": {
+            "inputs": [
+              "<work>/clip.mp4"
+            ],
+            "output": "clip_muted.mp4"
+          }
+        }
+      ]
+    },
+    {
+      "name": "normalizing_the_named_audio_refines",
+      "utterance": "extract the audio from clip.mp4 as mp3 and normalize the volume",
+      "plan": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "audio_format": "mp3",
+            "output": "clip.mp3"
+          }
+        },
+        {
+          "tool": "adjust_volume",
+          "args": {
+            "inputs": [
+              "clip.mp3"
+            ],
+            "level": "0dB",
+            "output": "clip_norm.mp3"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "extract_audio",
+          "args": {
+            "inputs": [
+              "clip.mp4"
+            ],
+            "audio_format": "mp3",
+            "output": "<work>/clip.mp3"
+          }
+        },
+        {
+          "tool": "adjust_volume",
+          "args": {
+            "inputs": [
+              "<work>/clip.mp3"
+            ],
+            "level": "0dB",
+            "output": "clip_norm.mp3"
+          }
+        }
+      ]
+    },
+    {
+      "name": "a_docx_made_pdf_then_numbered_refines",
+      "utterance": "convert report.docx to pdf and add page numbers",
+      "plan": [
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report.docx",
+            "to_format": "pdf",
+            "output": "report.pdf"
+          }
+        },
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "report.pdf",
+            "output": "report_numbered.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report.docx",
+            "to_format": "pdf",
+            "output": "<work>/report.pdf"
+          }
+        },
+        {
+          "tool": "add_page_numbers",
+          "args": {
+            "input": "<work>/report.pdf",
+            "output": "report_numbered.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "an_html_version_is_another_kind",
+      "utterance": "convert report.docx to pdf and also make an html version",
+      "plan": [
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report.docx",
+            "to_format": "pdf",
+            "output": "report.pdf"
+          }
+        },
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report.pdf",
+            "to_format": "html",
+            "output": "report.html"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report.docx",
+            "to_format": "pdf",
+            "output": "report.pdf"
+          }
+        },
+        {
+          "tool": "convert_document",
+          "args": {
+            "input": "report.pdf",
+            "to_format": "html",
+            "output": "report.html"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unlocking_before_extracting_text_stays",
+      "utterance": "unlock locked.pdf and extract its text",
+      "plan": [
+        {
+          "tool": "unlock_pdf",
+          "args": {
+            "input": "locked.pdf",
+            "password": "secret",
+            "output": "locked_unlocked.pdf"
+          }
+        },
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "locked_unlocked.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "unlock_pdf",
+          "args": {
+            "input": "locked.pdf",
+            "password": "secret",
+            "output": "locked_unlocked.pdf"
+          }
+        },
+        {
+          "tool": "extract_text",
+          "args": {
+            "input": "locked_unlocked.pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "unlocking_before_stamping_refines",
+      "utterance": "unlock a.pdf and stamp DRAFT on it",
+      "plan": [
+        {
+          "tool": "unlock_pdf",
+          "args": {
+            "input": "a.pdf",
+            "password": "secret",
+            "output": "a_unlocked.pdf"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "a_unlocked.pdf",
+            "text": "DRAFT",
+            "output": "a_stamped.pdf"
+          }
+        }
+      ],
+      "expected": [
+        {
+          "tool": "unlock_pdf",
+          "args": {
+            "input": "a.pdf",
+            "password": "secret",
+            "output": "<work>/a_unlocked.pdf"
+          }
+        },
+        {
+          "tool": "watermark",
+          "args": {
+            "input": "<work>/a_unlocked.pdf",
+            "text": "DRAFT",
+            "output": "a_stamped.pdf"
+          }
+        }
+      ]
+    }
+  ]
+}

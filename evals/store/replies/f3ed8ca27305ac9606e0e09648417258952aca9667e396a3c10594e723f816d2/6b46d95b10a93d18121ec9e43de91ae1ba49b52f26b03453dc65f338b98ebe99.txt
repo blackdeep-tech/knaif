@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["https://files.knaif.test/ffmpeg/drone.mp4"], "target_size_mb": 1}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Uploading isn't supported - I work on documents already on this machine. Is there a local file I should use instead?"}}]}

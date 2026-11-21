@@ -153,6 +153,9 @@ def evidence_tuple(
             f"skills/{skill}",
             ("*.yaml", "python/**/*.py", "native/src/**/*.rs"),
         ),
+        # The toolkits the skill declares (`toolkits: [fs]`): their tools run inside the skill's
+        # plans, so a toolkit edit can change a run without touching the bundle.
+        "toolkits": _toolkits_fingerprint(skill, root),
         # Shared contracts both runtimes read.
         "contracts": _tree("contracts", ("**/*.yaml", "**/*.json")),
         # Shared planning AND execution code: changes plans for every skill, touching no
@@ -194,6 +197,23 @@ def evidence_tuple(
     if native_binary is not None:
         tuple_["native_binary"] = _sha256_file(native_binary)
     return tuple_
+
+
+def _toolkits_fingerprint(skill: str, root: Path) -> str | None:
+    """One hash over every toolkit the skill declares, in declaration order; None if none."""
+    skill_yaml = root / "skills" / skill / "skill.yaml"
+    if not skill_yaml.is_file():
+        return None
+    manifest = yaml.safe_load(skill_yaml.read_text(encoding="utf-8")) or {}
+    kits = [str(k) for k in (manifest.get("toolkits") or [])]
+    if not kits:
+        return None
+    parts = []
+    for kit in kits:
+        path = root / "toolkits" / kit
+        tree = _sha256_tree(path, ("*.yaml", "python/**/*.py", "native/src/**/*.rs"))
+        parts.append(f"{kit}:{tree if path.is_dir() else 'missing'}")
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
 def _recommended_model_sha(skill: str, root: Path) -> str | None:
@@ -931,7 +951,7 @@ def _layer_state(
             layer, "failing", f"record carries no true/false verdict ({entry.get('passed')!r})"
         )
     if entry.get("passed") is False:
-        waiver = _waiver_that_holds(entry, cell)
+        waiver = _waiver_that_holds(entry, cell, layer)
         if waiver is not None:
             return LayerState(
                 layer,
@@ -952,42 +972,86 @@ def _layer_state(
 #: exception ranks just below a clean pass: it supports the claim, and it is always printed.
 _SEVERITY = ("failing", "stale", "pending", "excepted", "valid")
 
-#: The only thresholds an owner may waive: quality (an aggregate or a capability slice). Safety
-#: is never lowered, and an identity violation (wrong model, verifier, policy, coverage) means the
-#: run did not measure the thing at all, so there is nothing to accept.
-WAIVABLE_KINDS = frozenset({"aggregate", "slice"})
+#: The thresholds an owner may waive: quality (an aggregate or a capability slice) and, on the
+#: release subset, a row that regressed against the Python run (Part I, I3: it goes to the owner).
+#: An identity violation (wrong model, verifier, policy, coverage) means the run did not measure
+#: the thing at all, so there is nothing to accept.
+WAIVABLE_KINDS = frozenset({"aggregate", "slice", "regression"})
+
+#: The one safety miss an owner may accept, and only when asking for it by name: a rate below
+#: 100% with no breach beside it, so a request that had to be refused was asked about and nothing
+#: ran (owner, 2026-11-03, 1.4.0's `ffmpeg_safety_overwrite_original`). A breach, or a safety run
+#: that measured nothing usable or another model, is never waived.
+_SAFETY_RATE_MISS = re.compile(r"\[safety\] safety pass_rate \d+\.\d+ < \d+\.\d+ \(n=\d+\)")
+
+#: L3 waived on plan disagreement alone: both runtimes asked to do the same is the port's bar,
+#: so a port bug or a capability native lacks is never accepted.
+_L3_DISAGREEMENT_MISS = re.compile(
+    r": port_bugs=0 not_implemented=0 plan_disagreement=\d+(\.\d+)? <= \d+(\.\d+)? passed=False$"
+)
 
 
 _UNMET_HEADER = re.compile(r"NOT ACCEPTED - (\d+) of \d+ thresholds unmet:")
+# A bracket that could be a threshold's kind: not one opening quoted JSON or a list, as the
+# reference's plan shows for a row with no command (`'{"plan": [{"tool": ...}]}'`).
+_KIND_BRACKET = re.compile(r"\[(?![{\"'\[\]])")
 
 
 def _unmet_kinds(summary: str) -> list[str] | None:
     """The kind of every unmet threshold a recorded verdict names (`[slice] ...`), or None when
     the summary does not account for all of them: the header's count must match the kinds
-    listed, and every bracket must be a well-formed kind. A summary that hides a miss (a
-    mangled `[safety ]`, a dropped line) must not be waivable (Codex, 2026-09-28)."""
+    listed, and every bracket that could be a kind must be a well-formed one. A summary that
+    hides a miss (a mangled `[safety ]`, a dropped line) must not be waivable (Codex,
+    2026-09-28); a quoted JSON plan's brackets are not kinds (2026-11-20)."""
     header = _UNMET_HEADER.match(summary)
     kinds = re.findall(r"\[(\w+)\] ", summary)
     if header is None or not kinds:
         return None
-    if int(header.group(1)) != len(kinds) or summary.count("[") != len(kinds):
+    if int(header.group(1)) != len(kinds) or len(_KIND_BRACKET.findall(summary)) != len(kinds):
         return None
     return kinds
 
 
-def _waivable(summary: str) -> bool:
+def _waivable(summary: str, *, safety: bool = False) -> bool:
     kinds = _unmet_kinds(summary)
-    return kinds is not None and set(kinds) <= WAIVABLE_KINDS
+    if kinds is None:
+        return False
+    rest = [k for k in kinds if k != "safety"]
+    misses = len(kinds) - len(rest)
+    if misses and (not safety or misses != len(_SAFETY_RATE_MISS.findall(summary))):
+        return False
+    return set(rest) <= WAIVABLE_KINDS
 
 
-def _waiver_that_holds(entry: dict[str, Any], cell: str | None) -> dict[str, Any] | None:
+def _l3_waivable(entry: dict[str, Any]) -> bool:
+    """Plan disagreement is the only miss: the counts, not only the summary, say 0."""
+    summary = str(entry.get("summary") or "")
+    return (
+        entry.get("port_bugs") == 0
+        and entry.get("native_not_implemented") == 0
+        and _L3_DISAGREEMENT_MISS.search(summary) is not None
+    )
+
+
+def _entry_waivable(entry: dict[str, Any], layer: str, *, safety: bool = False) -> bool:
+    if layer == "L3":
+        return _l3_waivable(entry)
+    return _waivable(str(entry.get("summary") or ""), safety=safety)
+
+
+def _waiver_that_holds(
+    entry: dict[str, Any], cell: str | None, layer: str = "L4"
+) -> dict[str, Any] | None:
     """The cell's owner exception, if it still applies: given for THIS cell and THIS
     measurement (its verdict quoted verbatim, its run and evidence the ones recorded, so a
-    re-run or a copy onto another cell is not covered), with a reason, over quality thresholds
-    only. Checked here too, not only when written, since the record is a file."""
+    re-run or a copy onto another cell is not covered), with a reason, over what may be waived
+    (a safety miss only when the waiver says `safety`). Checked here too, not only when written,
+    since the record is a file."""
     waiver = entry.get("owner_exception")
     summary = str(entry.get("summary") or "")
-    if not isinstance(waiver, dict) or not _waivable(summary):
+    if not isinstance(waiver, dict) or not _entry_waivable(
+        entry, layer, safety=waiver.get("safety") is True
+    ):
         return None
     bound = (
         waiver.get("waives") == summary
@@ -1000,12 +1064,22 @@ def _waiver_that_holds(entry: dict[str, Any], cell: str | None) -> dict[str, Any
     return waiver
 
 
-def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, date: str) -> Path:
-    """Record the owner's decision to ship a cell that failed a quality threshold.
+def waive_cell(
+    skill: str,
+    root: Path,
+    layer: str,
+    cell: str,
+    *,
+    reason: str,
+    date: str,
+    safety: bool = False,
+) -> Path:
+    """Record the owner's decision to ship a cell that failed a threshold it may waive.
 
     The verdict stays as measured (`passed: false`, its summary); the waiver sits beside it and
     quotes the verdict it answers. Re-recording the cell replaces the whole entry, so a new
-    verdict needs a new decision. Refuses anything the gate would not honour.
+    verdict needs a new decision. A safety miss needs *safety*, so it is never waived in passing.
+    Refuses anything the gate would not honour.
     """
     record = load_acceptance_record(skill, root)
     cells = (((record or {}).get("layers") or {}).get(layer) or {}).get("cells") or {}
@@ -1013,10 +1087,11 @@ def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, da
     if not isinstance(entry, dict) or entry.get("passed") is not False:
         raise ValueError(f"{skill} {layer} {cell}: only a recorded failing verdict can be waived")
     summary = str(entry.get("summary") or "")
-    if not _waivable(summary):
+    if not _entry_waivable(entry, layer, safety=safety):
         raise ValueError(
             f"{skill} {layer} {cell}: {summary!r} is not waivable; only "
-            f"{sorted(WAIVABLE_KINDS)} thresholds are, and the verdict must name them"
+            f"{sorted(WAIVABLE_KINDS)} thresholds are, a safety rate miss with no breach when "
+            "asked for with safety, and on L3 plan disagreement alone; the verdict must name them"
         )
     if not reason.strip():
         raise ValueError("a waiver needs the reason for the decision")
@@ -1027,6 +1102,7 @@ def waive_cell(skill: str, root: Path, layer: str, cell: str, *, reason: str, da
         "cell": cell,
         "run": entry.get("run"),
         "evidence": entry.get("evidence"),
+        **({"safety": True} if safety else {}),
     }
     path = root / ACCEPTANCE_DIR / f"{skill}.json"
     record = redact_local_paths(record, root=root)
@@ -1346,11 +1422,22 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
 RELEASES_DIR = ACCEPTANCE_DIR / "releases"
 
 
+def _is_later_minor(version: str, base: str) -> bool:
+    """`1.4.0` is a later minor (or major) than `1.3.0`: plain semver, a higher major.minor."""
+    parts = [p.split(".") for p in (version, base)]
+    if not all(len(p) == 3 and all(x.isdigit() for x in p) for p in parts):
+        return False
+    (vmaj, vmin, _), (bmaj, bmin, _) = parts
+    return (int(vmaj), int(vmin)) > (int(bmaj), int(bmin))
+
+
 def write_release_record(
     root: Path,
     version: str,
     skills: list[str] | None = None,
     native_binary: Path | list[Path] | None = None,
+    matrix_release: str | None = None,
+    reason: str | None = None,
 ) -> Path:
     """Keep what was true for *version*: the acceptance records and the gate's verdict at the tag.
 
@@ -1361,12 +1448,31 @@ def write_release_record(
     another's number would be a false statement about that release. The one exception is a patch
     of that release whose results an honoured equivalence named `<patch>-…` carried over (1.2.1):
     its record says so in `carried_from` and `equivalences`.
+
+    *matrix_release* (with a *reason*) is the owner's way past a matrix nobody bumped at the
+    freeze (1.4.0): bumping it afterwards moves the `contracts` fingerprint and stales every
+    record. It must be the matrix's current release, *version* a later minor or major, and the
+    record keeps both, so it never reads as that release's own matrix (owner, 2026-11-20).
     """
     from .matrix import load_matrix
 
     matrix = load_matrix(root)
     carried: list[str] = []
-    if matrix is not None and matrix["current_release"] != version:
+    if matrix_release is not None:
+        if not (reason or "").strip():
+            raise ValueError("naming the matrix by hand needs a reason, written into the record")
+        current = matrix["current_release"] if matrix is not None else None
+        if matrix_release != current:
+            raise ValueError(
+                f"the acceptance matrix's current release is {current}, not {matrix_release}"
+            )
+        if not _is_later_minor(version, matrix_release):
+            raise ValueError(
+                f"{version} is not a later minor or major than {matrix_release}; a patch keeps its "
+                "minor's matrix through an equivalence, and an older release is never recorded "
+                "under a newer matrix"
+            )
+    elif matrix is not None and matrix["current_release"] != version:
         # A patch keeps its minor's matrix: bumping the contract moves the `contracts`
         # fingerprint and stales every record. It may be recorded under its own number only
         # when an honoured equivalence named for it carried the results over.
@@ -1404,12 +1510,17 @@ def write_release_record(
             "derived": gate.derived,
             "layers": {s.layer: {"state": s.state, "detail": s.detail} for s in gate.layers},
         }
-    matrix_release = matrix["current_release"] if carried and matrix else version
-    release = (matrix or {}).get("releases", {}).get(matrix_release) if matrix else None
+    named = matrix_release
+    if named is None:
+        named = matrix["current_release"] if carried and matrix else version
+    release = (matrix or {}).get("releases", {}).get(named) if matrix else None
     doc: dict[str, Any] = {"version": version, "skills": verdicts, "matrix": release}
     if carried:
-        doc["carried_from"] = matrix_release
+        doc["carried_from"] = named
         doc["equivalences"] = carried
+    if matrix_release is not None:
+        doc["matrix_release"] = matrix_release
+        doc["matrix_reason"] = reason
     (out / "release.json").write_text(
         json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )

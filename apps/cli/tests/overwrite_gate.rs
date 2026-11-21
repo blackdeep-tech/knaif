@@ -1,4 +1,5 @@
-//! 1.3.0: a step acts without asking, but never replaces an existing file without `--overwrite`.
+//! 1.3.0: a step acts without asking, but never replaces an existing file unless allowed
+//! (`--allow overwrite`, or `--yes`, which allows everything since 2026-10-23).
 //!
 //! Real execution, so these need `ffmpeg` on PATH and skip (loudly) when it is missing. No model:
 //! `KNAIF_LLM_BACKEND=mock` plus `KNAIF_LLM_MOCK_RESPONSE` feeds the runtime an exact plan. Stdin is
@@ -118,18 +119,22 @@ fn an_existing_output_is_not_replaced_without_overwrite() {
     };
     std::fs::write(s.path("silent.mp4"), b"precious").unwrap();
     let (out, ok) = run(&s.0, &[]);
-    assert!(!ok, "no terminal, no --overwrite: it must stop:\n{out}");
-    assert!(out.contains("--overwrite"), "names the flag:\n{out}");
+    assert!(
+        !ok,
+        "no terminal, no --allow overwrite: it must stop:\n{out}"
+    );
+    assert!(out.contains("--allow overwrite"), "names the flag:\n{out}");
     assert_eq!(std::fs::read(s.path("silent.mp4")).unwrap(), b"precious");
 }
 
+/// `--yes` is `--allow all` (owner, 2026-10-23); before, it never covered this.
 #[test]
-fn yes_does_not_approve_replacing_a_file() {
+fn yes_approves_replacing_a_file() {
     let Some(s) = Scratch::new("yes") else { return };
     std::fs::write(s.path("silent.mp4"), b"precious").unwrap();
     let (out, ok) = run(&s.0, &["--yes"]);
-    assert!(!ok, "--yes is not --overwrite:\n{out}");
-    assert_eq!(std::fs::read(s.path("silent.mp4")).unwrap(), b"precious");
+    assert!(ok, "--yes allows everything:\n{out}");
+    assert_ne!(std::fs::read(s.path("silent.mp4")).unwrap(), b"precious");
 }
 
 #[test]
@@ -138,8 +143,8 @@ fn overwrite_replaces_the_file() {
         return;
     };
     std::fs::write(s.path("silent.mp4"), b"precious").unwrap();
-    let (out, ok) = run(&s.0, &["--overwrite"]);
-    assert!(ok, "--overwrite approves it:\n{out}");
+    let (out, ok) = run(&s.0, &["--allow", "overwrite"]);
+    assert!(ok, "--allow overwrite approves it:\n{out}");
     assert_ne!(std::fs::read(s.path("silent.mp4")).unwrap(), b"precious");
 }
 

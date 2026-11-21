@@ -1,0 +1,103 @@
+{"plan":[{"tool":"inspect_document","args":{"input":"sample.png"}}]}
+{"plan":[{"tool":"inspect_document","args":{"input":"sample-scanned.pdf"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.pdf"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.docx"}}]}
+{"plan":[{"tool":"find_in_document","args":{"input":"sample.pdf","query":"gamma","ignore_case":true}}]}
+{"plan":[{"tool":"convert_document","args":{"input":"sample.txt","to_format":"md"}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"sample.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"ocr_document","args":{"input":"sample-scanned.pdf","language":"eng"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"2-3"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":90}}]}
+{"plan":[{"tool":"remove_pages","args":{"input":"sample.pdf","pages":"3"}}]}
+{"plan":[{"tool":"reorder_pages","args":{"input":"sample.pdf","order":"2,3,1"}}]}
+{"plan":[{"tool":"watermark","args":{"input":"sample.pdf","text":"DRAFT"}}]}
+{"plan":[{"tool":"add_page_numbers","args":{"input":"sample.pdf","position":"bottom-center","start_at":1}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What password should I use to protect sample.pdf?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which documents should I merge?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Which document, and what would you like done with it?"}}]}
+{"plan":[{"tool":"reject","args":{"reason":"Bulk-deleting files would destroy your documents; that is outside this skill's safety policy."}}]}
+{"plan":[{"tool":"inspect_document","args":{"input":"sample.pdf"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":90,"pages":"1"}}]}
+{"plan":[{"tool":"reorder_pages","args":{"input":"sample.pdf","order":"3,2,1"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["sample.pdf","sample-scanned.pdf"],"output":"merged.pdf"}}]}
+{"plan":[{"tool":"add_page_numbers","args":{"input":"sample.pdf","position":"bottom-center","start_at":1}}]}
+{"plan":[{"tool":"protect_pdf","args":{"input":"sample.pdf","password":"secret"}}]}
+{"plan":[{"tool":"unlock_pdf","args":{"input":"sample-protected.pdf","password":"secret"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["sample.pdf","sample-scanned.pdf"],"output":"combined.pdf"}},{"tool":"add_page_numbers","args":{"input":"combined.pdf","position":"bottom-center","start_at":1}}]}
+{"plan":[{"tool":"inspect_document","args":{"input":"sample.pdf"}}]}
+{"plan":[{"tool":"inspect_document","args":{"input":"sample-scanned.pdf"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.docx"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.pdf"}}]}
+{"plan":[{"tool":"find_in_document","args":{"input":"sample.pdf","query":"Gamma","regex":false,"ignore_case":false}}]}
+{"plan":[{"tool":"convert_document","args":{"input":"sample.md","to_format":"txt","output":"sample.txt"}}]}
+{"plan":[{"tool":"convert_document","args":{"input":"sample.docx","to_format":"pdf"}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"sample.pdf","compress_quality":"high"}}]}
+{"plan":[{"tool":"ocr_document","args":{"input":"sample-scanned.pdf","language":"eng"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"2-3"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":-90}}]}
+{"plan":[{"tool":"remove_pages","args":{"input":"sample.pdf","pages":"-1"}}]}
+{"plan":[{"tool":"reorder_pages","args":{"input":"sample.pdf","order":"1-2-3-4"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["sample.pdf","sample-scanned.pdf"],"output":"one.pdf"}}]}
+{"plan":[{"tool":"watermark","args":{"input":"sample.pdf","text":"DRAFT","position":"center"}}]}
+{"plan":[{"tool":"add_page_numbers","args":{"input":"sample.pdf","position":"bottom-right","start_at":1}}]}
+{"plan":[{"tool":"protect_pdf","args":{"input":"sample.pdf","password":"hunter2"}}]}
+{"plan":[{"tool":"unlock_pdf","args":{"input":"sample-protected.pdf","password":"secret"}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"sample.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["sample.pdf","sample-scanned.pdf"],"output":"one.pdf"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.pdf"}}]}
+{"plan":[{"tool":"add_page_numbers","args":{"input":"sample.pdf","position":"bottom-center","start_at":1}}]}
+{"plan":[{"tool":"protect_pdf","args":{"input":"sample.pdf","password":"hunter2"}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"sample.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"find_in_document","args":{"input":"sample.pdf","query":"Gamma","ignore_case":true}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"2-3"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":90}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"sample.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":90}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"1-2","output":"sample_p1-2.pdf"}},{"tool":"watermark","args":{"input":"sample_p1-2.pdf","text":"DRAFT"}}]}
+{"plan":[{"tool":"remove_pages","args":{"input":"sample.pdf","pages":"-1","output":"sample_trimmed.pdf"}},{"tool":"add_page_numbers","args":{"input":"sample_trimmed.pdf","position":"bottom-center","start_at":1}}]}
+{"plan":[{"tool":"watermark","args":{"input":"sample.pdf","text":"CONFIDENTIAL","output":"sample_watermarked.pdf"}},{"tool":"compress_pdf","args":{"input":"sample_watermarked.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"1-2"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.pdf","pages":"1-2"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"1-2"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"3"}}]}
+{"plan":[{"tool":"remove_pages","args":{"input":"sample.pdf","pages":"3"}}]}
+{"plan":[{"tool":"find_in_document","args":{"input":"sample.pdf","query":"invoice","ignore_case":true}}]}
+{"plan":[{"tool":"convert_document","args":{"input":"sample.docx","to_format":"pdf"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":90}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"sample.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.pdf"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"1-2"}}]}
+{"plan":[{"tool":"inspect_document","args":{"input":"sample.pdf"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":90,"output":"sample_rotated.pdf"}},{"tool":"compress_pdf","args":{"input":"sample_rotated.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"1-2","output":"sample_p1-2.pdf"}},{"tool":"compress_pdf","args":{"input":"sample_p1-2.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"unlock_pdf","args":{"input":"sample-protected.pdf","password":"secret","output":"sample.pdf"}},{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":90,"pages":"all"}}]}
+{"plan":[{"tool":"ocr_document","args":{"input":"sample-scanned.pdf","language":"eng","output":"sample-scanned.pdf"}},{"tool":"compress_pdf","args":{"input":"sample-scanned.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"convert_document","args":{"input":"sample.docx","to_format":"pdf","output":"sample.pdf"}},{"tool":"add_page_numbers","args":{"input":"sample.pdf","position":"bottom-right","start_at":1}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What order should I use?"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["sample.pdf","sample-scanned.pdf"],"output":"merged.pdf"}},{"tool":"split_pdf","args":{"input":"merged.pdf","ranges":"1-2"}}]}
+{"plan":[{"tool":"rotate_pages","args":{"input":"sample.pdf","degrees":180,"output":"sample_rotated.pdf"}},{"tool":"watermark","args":{"input":"sample_rotated.pdf","text":"DRAFT"}}]}
+{"plan":[{"tool":"remove_pages","args":{"input":"sample.pdf","pages":"2","output":"sample_trimmed.pdf"}},{"tool":"watermark","args":{"input":"sample_trimmed.pdf","text":"FINAL","output":"sample_watermarked.pdf"}},{"tool":"compress_pdf","args":{"input":"sample_watermarked.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"sample.pdf","ranges":"1-2","output":"sample_p1-2.pdf"}},{"tool":"reorder_pages","args":{"input":"sample_p1-2.pdf","order":"2,1"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["https://files.knaif.test/documents/report.pdf","sample-scanned.pdf"],"output":"merged.pdf"}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"https://files.knaif.test/documents/report.pdf"}}]}
+{"plan":[{"tool":"convert_document","args":{"input":"https://files.knaif.test/documents/notes.txt","to_format":"md"}}]}
+{"plan":[{"tool":"inspect_document","args":{"input":"https://files.knaif.test/documents/report.pdf"}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"https://files.knaif.test/documents/report.pdf","compress_quality":"balanced"}}]}
+{"plan":[{"tool":"ocr_document","args":{"input":"https://files.knaif.test/documents/scan.pdf","language":"eng"}}]}
+{"plan":[{"tool":"split_pdf","args":{"input":"https://files.knaif.test/documents/report.pdf","ranges":"2-3"}}]}
+{"plan":[{"tool":"find_in_document","args":{"input":"https://files.knaif.test/documents/report.pdf","query":"gamma","ignore_case":true}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Downloading isn't supported - I work on files already on this machine. Should I use the link as-is, or do you want me to download it?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"Uploading isn't supported - I work on documents already on this machine. Is there a local file I should use instead?"}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"sample.pdf","compress_quality":"balanced","output":"sample_small.pdf"}},{"tool":"alert_when_done","args":{}}]}
+{"plan":[{"tool":"extract_text","args":{"input":"sample.pdf"}},{"tool":"alert_when_done","args":{}}]}
+{"plan":[{"tool":"convert_document","args":{"input":"sample.txt","to_format":"md","output":"Documents/sample.md"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["sample.pdf","sample-scanned.pdf"],"output":"Downloads/merged.pdf"}},{"tool":"alert_when_done","args":{}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"https://files.knaif.test/documents/report.pdf","output":"Desktop/report.pdf","compress_quality":"high"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What should I do?"}}]}
+{"plan":[{"tool":"clarify","args":{"question":"What password should I use?"}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"*.pdf","compress_quality":"balanced","output":"*small.pdf"}},{"tool":"add_page_numbers","args":{"input":"*small.pdf","position":"bottom-center","start_at":1}}]}
+{"plan":[{"tool":"compress_pdf","args":{"input":"*.pdf","compress_quality":"balanced","output":"compressed.pdf"}},{"tool":"merge_pdfs","args":{"inputs":["compressed.pdf"],"output":"merged.pdf"}}]}
+{"plan":[{"tool":"add_page_numbers","args":{"input":"*.pdf","position":"bottom-right","start_at":1}}]}
+{"plan":[{"tool":"split_pdf_every","args":{"input":"report.pdf","every":1}}]}
+{"plan":[{"tool":"split_pdf_every","args":{"input":"report.pdf","every":1,"output":"page.pdf"}},{"tool":"watermark","args":{"input":"page.pdf","text":"DRAFT"}}]}
+{"plan":[{"tool":"merge_pdfs","args":{"inputs":["*.pdf"],"output":"merged.pdf"}}]}

@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Uploading isn't supported - I only process files on this machine. Should I prepare clip.mp4 for WhatsApp instead?"}}]}

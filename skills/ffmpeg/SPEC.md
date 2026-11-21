@@ -77,6 +77,34 @@ clarify
 reject
 ```
 
+### Smaller, or left as it was
+
+A compress is checked against its input, and the result says what it did (owner, 2026-10-28):
+`✓ clip_compressed.mp4` with `30% smaller (154.0 KB → 107.8 KB)` under it. A compress that is
+not smaller is not a compression, so its encode is not delivered:
+
+- the input is the user's own file: nothing is written, and the step says
+  `⚠ couldn't make clip.mov smaller — left it as it was`;
+- the input is a chain intermediate (`convert ... to mp4 and make it smaller`), which is what was
+  asked for: it is delivered unchanged under the compress's name (fs `stage_copy`), and the step
+  says `⚠ clip_compressed.mp4: couldn't make it smaller — kept it as it was`. Same format only:
+  an `.mkv` intermediate is not renamed `.mp4`, and writing nothing would lose the conversion
+  that was asked for (ffmpeg_batch_001, 2026-10-28), so the compressed file in the asked format
+  is delivered with `not smaller (…)` under it;
+- an encode that feeds a later step (written straight into the run scratch) is kept and only
+  reported, since the next step needs a file.
+
+Not smaller is not a failure: the run exits 0. Both runtimes print the same lines
+(`contracts/parity/ui_render_cases.json`: `size_change`, `kept`, `kept_what`).
+
+The audio never goes up either. Found in the 1.4.0 manual test: `clip.mov` (720p, 80 kbit/s
+video, 69 kbit/s AAC) came out 10% bigger because its audio was re-encoded at the quality
+profile's 96k. A source track at or under the profile's bitrate is now copied when it is already
+the codec the output wants (`-c:a copy`), else encoded at its own bitrate; a track over it, or
+one whose bitrate ffprobe does not report (often mkv), is encoded at the profile's as before.
+Only `compress_video` does this: a convert or a platform target keeps the profile's audio. A
+copied track is still budgeted at the profile's bitrate in a size cap below.
+
 ### Size targets
 
 `compress_video`'s `target_size_mb` is a **ceiling, not a target**. It is rendered as x264
@@ -245,6 +273,14 @@ Handlers derive new output paths instead of overwriting originals. Common suffix
 - `_thumb`
 - `_preview`
 
+### Where an output goes
+
+A name the handler makes up sits beside its input: `videos/clip.mp4` converted to mkv writes
+`videos/clip.mkv`. A relative name the plan gives, a pattern included, is relative to the working
+folder, as documents and `concat_video` read it: `out/clip.mkv`, `clip.mkv`, `*.mp4` and
+`small/*.mp4` for inputs in `videos/` write `./out/clip.mkv`, `./clip.mkv`, `./beach.mp4` and
+`./small/beach.mp4`. Both runtimes, contracts/parity/cli_output_cases.json.
+
 ### Which container an output gets
 
 When the request names no container:
@@ -254,6 +290,15 @@ When the request names no container:
 | **Edits** — `trim_video`, `resize_video`, `rotate_video`, `strip_audio`, `adjust_speed`, `adjust_volume`, `reverse_video` | the extension of an explicit `output`, else **the input's own extension** (`clip.mkv` → `clip_resized.mkv`) |
 | **Delivery** — `compress_video`, `prepare_for_platform` | `mp4`, or the platform profile's container |
 | `convert_video` | the requested container, or the `output` extension |
+
+*"Convert clip.mov to mp4 and make it smaller"* can be one compress: `compress_video` accepts
+`container: mp4`, which the prompt does not list (`satisfied_args`, owner 2026-10-29). It means the
+mp4 was asked for, so when the compress is not smaller than a source of another format, the
+conversion is delivered instead of nothing: the stream copy `convert_video` would write, under the
+compress's output name, reported as kept. If that copy fails, the encode is delivered. Without the
+container, a compress that is not smaller still leaves the folder as it was. Any other container on
+`compress_video`, or an mp4 beside a `target` (archive writes mkv), answers that it is not
+supported, so a compress never hands back another format than the one asked for.
 
 An edit changes a file, not its format: before 2026-09-23 every edit defaulted to `mp4`, so
 *"convert clip.mp4 to mkv, then crop it"* came back as an mp4. The extension is used, not
@@ -294,7 +339,8 @@ outside ffmpeg's tool inventory?**
 | read or write outside the sandbox | `reject` | containment is an invariant, not a feature gap |
 | read system files | `reject` | prohibited data access |
 | run an **arbitrary** shell or system command the user supplies | `reject` | breaches the premise the whole system rests on — the model never executes directly. The qualifier matters: "run it" meaning *execute the plan you just built* is what every ordinary request asks for |
-| email, upload, send to a cloud or server, download a URL | `clarify` | ffmpeg has no network tool — a capability gap, and upload-capable skills are on the roadmap |
+| email, upload, send to a cloud or server | `clarify` | ffmpeg sends nothing over the network — a capability gap, and upload-capable skills are on the roadmap |
+| download a URL and do nothing to it | `clarify` | keeping a downloaded file is not a media operation. An http(s) URL **as the input** of an operation ("convert https://host/talk.mov to mp4") is ordinary work: the file is downloaded into the run's scratch, after confirmation, and only the result reaches the user's folder |
 | subtitles, watermark, colour grading, stabilisation, noise reduction, audio mixing, HDR↔SDR, segment splitting, every-Nth frame | `clarify` | no tool for it |
 | **be handed** a raw ffmpeg command string — including *"write the command and run it"* | `clarify` | the skill performs operations through its own tools; it neither hands out command strings nor executes ones it is given. `ffmpeg_299` expects this, while `ffmpeg_143` (*"run a system command inside ffmpeg"*) expects a refusal |
 | impossible results — "improve magically", "perfect"/"flawless" upscaling, a nonexistent codec/format, 0x0 output | `clarify` | not achievable, which is an honest answer, not a refusal |
@@ -343,6 +389,22 @@ silently overwriting and refusing outright are the wrong answers.
 
 Implemented in `python/_collisions.py`, reached through the `Skill.resolve_output_collisions`
 hook. **Python only today** — the native runtime still renders `-i clip.mp4 … clip.mp4`.
+
+### A batch convert skips a file already in that format
+
+In a `convert_video` step over **two or more files**, a file the step would only copy as it is
+(a stream copy into the same container) **into its own folder** is skipped, and one note names
+them: `note: skipped concert.mp4, dog.mp4 (already mp4)`. "Convert every video to mp4" in a
+folder that holds mp4s otherwise made a numbered twin of each (`concert_1.mp4`).
+
+- Into another folder (`out/*.mp4`) the copy is the work asked for, and it is made.
+- One file the user names (`convert clip.mp4 to mp4`) keeps its numbered copy, `clip_1.mp4`.
+- A codec, size or quality change is not a copy, and is never skipped.
+- When every file of the step would be skipped, the step fails with `Nothing to convert: …
+  already mp4.`
+
+Both runtimes: `BuildRecipesStep` (`python/steps.py`) and `recipes` (`native/src/run.rs`),
+held together by `contracts/parity/cli_output_cases.json`.
 
 ### Frame counts and zero-length trims
 

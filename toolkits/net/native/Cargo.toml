@@ -1,0 +1,12 @@
+[package]
+name = "knaif-toolkit-net"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "The net toolkit for native skills: download one http(s) URL into the run scratch under knaif's network policy."
+
+[dependencies]
+knaif-core = { workspace = true }
+ureq = { workspace = true }

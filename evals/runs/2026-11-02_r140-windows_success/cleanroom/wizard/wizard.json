@@ -1,0 +1,46 @@
+﻿{
+    "M0_sac_enforcing_and_frozen_installer":  {
+                                                  "pass":  true,
+                                                  "detail":  "SAC state 1; installer sha256 993ebbd68c416d12595a0caa9ede683ab9589c3c7d9affa25f3b96f7f480e5bb"
+                                              },
+    "M0_sac_blocks_unsigned":  {
+                                   "pass":  true,
+                                   "detail":  "unsigned probe: Program \u0027sac-probe.exe\u0027 failed to run: An Application Control policy has blocked this fileAt C:\\r140\\in\\wizard.ps1:104 char:14"
+                               },
+    "setup_exit_0":  {
+                         "pass":  true,
+                         "detail":  "exit 0"
+                     },
+    "M1_tools_disabled_with_reason":  {
+                                          "pass":  false,
+                                          "detail":  "FFmpeg:  | Tesseract: "
+                                      },
+    "M2_no_ghostscript_choice":  {
+                                     "pass":  true,
+                                     "detail":  "0 Ghostscript choices"
+                                 },
+    "M1b_no_cuda_offer":  {
+                              "pass":  true,
+                              "detail":  "0 controls mention CUDA"
+                          },
+    "M3_finish_page_names_tools":  {
+                                       "pass":  true,
+                                       "detail":  "    FFmpeg: not installed (Smart App Control blocks it)\r /     Ghostscript: not installed (Smart App Control blocks it)\r /     LibreOffice: not installed\r /     Tesseract OCR: not installed (Smart App Control blocks it)\r / Smart App Control is on: Windows blocks tools that are not validly signed by their makers (knaif itself is signed). They work only with Smart App Control off.\r"
+                                   },
+    "M5_no_old_version_named":  {
+                                    "pass":  true,
+                                    "detail":  "0 controls name 1.2.x: "
+                                },
+    "M4_skills_deps_marks_tools":  {
+                                       "pass":  true,
+                                       "detail":  "[MISS] libreoffice    (optional) install: download from https://www.libreoffice.org/download/download-libreoffice/ / [MISS] tesseract      (optional) not installed — Smart App Control blocks it on this PC / ffmpeg: / [MISS] ffmpeg         (required) not installed — Smart App Control blocks it on this PC / The `ffmpeg` skill needs ffmpeg, which Smart App Control blocks on this PC: Windows runs only programs that are validly signed or that it trusts, and this one is not. It works only with Smart App Control off: Windows Security \u003e App \u0026 browser control \u003e Smart App Control. / Smart App Control is on. Windows then runs only programs that are validly signed or that it trusts, and it blocks ghostscript, tesseract, ffmpeg (knaif itself is signed). They work only with Smart App Control off: Windows Security \u003e App \u0026 browser control \u003e Smart App Control."
+                                   },
+    "sac_enforcing_at_end":  {
+                                 "pass":  true,
+                                 "detail":  "SAC state 1"
+                             },
+    "run_completed":  {
+                          "pass":  true,
+                          "detail":  "every page walked"
+                      }
+}

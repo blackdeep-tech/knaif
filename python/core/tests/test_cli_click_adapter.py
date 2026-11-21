@@ -117,10 +117,10 @@ def test_from_click_choice_option_schema():
 
 def test_from_click_callback_is_wrapped():
     """The callback from the click command is called via FunctionStep."""
-    from knaif.cli.function_step import FunctionStep
+    from knaif.cli.function_handler import FunctionHandler
 
     app = from_click(cli)
-    assert isinstance(app._tool_map["greet"], FunctionStep)
+    assert isinstance(app._tool_map["greet"], FunctionHandler)
 
 
 def test_from_click_raises_on_non_group():

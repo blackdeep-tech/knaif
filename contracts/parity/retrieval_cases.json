@@ -8,7 +8,8 @@
     "macos": "CI"
   },
   "registries": {
-    "demo": "convert_video:\n  description: \"Convert a video to a different container or codec.\"\n  keywords: [convert, transcode, mp4, webm, convertir, 转换]\n  required_args: [inputs]\n  optional_args: [container, output]\n  arg_schemas:\n    container: {type: enum, enum: [mp4, webm, mkv], help: \"target container\"}\ncompress_video:\n  description: \"Compress a video to a smaller file size.\"\n  keywords: [compress, smaller, shrink, comprimir, 压缩]\n  required_args: [inputs]\n  optional_args: [quality]\n  arg_schemas:\n    quality: {type: enum, enum: [low, high]}\ntrim_video:\n  description: \"Trim a video to a time range.\"\n  keywords: [trim, cut, shorten]\n  required_args: [inputs, start]\n  optional_args: [end]\nlist_formats:\n  description: \"List the container formats this skill supports.\"\n  keywords: [formats, list]\nrun_batch:\n  description: \"Internal batch executor.\"\n  internal: true\n  required_args: [commands]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"
+    "demo": "convert_video:\n  description: \"Convert a video to a different container or codec.\"\n  keywords: [convert, transcode, mp4, webm, convertir, 转换]\n  required_args: [inputs]\n  optional_args: [container, output]\n  arg_schemas:\n    container: {type: enum, enum: [mp4, webm, mkv], help: \"target container\"}\ncompress_video:\n  description: \"Compress a video to a smaller file size.\"\n  keywords: [compress, smaller, shrink, comprimir, 压缩]\n  required_args: [inputs]\n  optional_args: [quality]\n  arg_schemas:\n    quality: {type: enum, enum: [low, high]}\ntrim_video:\n  description: \"Trim a video to a time range.\"\n  keywords: [trim, cut, shorten]\n  required_args: [inputs, start]\n  optional_args: [end]\nlist_formats:\n  description: \"List the container formats this skill supports.\"\n  keywords: [formats, list]\nrun_batch:\n  description: \"Internal batch executor.\"\n  internal: true\n  required_args: [commands]\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n",
+    "twins": "twins:\n  description: \"Shrink a file.\"\n  keywords: [compress, compresser, compressez]\n  required_args: []\ntwo_words:\n  description: \"Shrink a file.\"\n  keywords: [compress, shrink]\n  required_args: []\nother:\n  description: \"Something else.\"\n  keywords: [rotate]\n  required_args: []\nclarify:\n  description: \"Ask the user one question.\"\n  required_args: [question]\nreject:\n  description: \"Refuse the request.\"\n  required_args: [reason]\ndone:\n  description: \"Nothing to do.\"\n"
   },
   "cases": [
     {
@@ -112,6 +113,123 @@
       "top_k": 5,
       "min_score": 1,
       "expected_order": [
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "imperative_matches_infinitive_keyword",
+      "why": "'comprime' is the imperative of the keyword 'comprimir' (a shared stem)",
+      "registry": "demo",
+      "query": "comprime clip.mp4 por favor",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "compress_video",
+        "trim_video",
+        "list_formats",
+        "convert_video",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "word_extends_keyword",
+      "why": "'compresse' is the keyword 'compress' plus a short ending",
+      "registry": "demo",
+      "query": "compresse la video",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "compress_video",
+        "trim_video",
+        "convert_video",
+        "list_formats",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "edge_punctuation_is_not_the_word",
+      "why": "'.webm.' is the keyword 'webm'",
+      "registry": "demo",
+      "query": "make it a .webm.",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "convert_video",
+        "trim_video",
+        "compress_video",
+        "list_formats",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "hyphenated_word_counts_as_its_parts",
+      "why": "'compresse-le' also counts as 'compresse' and 'le'",
+      "registry": "demo",
+      "query": "puis compresse-le",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "compress_video",
+        "trim_video",
+        "list_formats",
+        "convert_video",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "short_word_is_no_stem",
+      "why": "'conversation' shares only 'conv' with 'convert', and a keyword under 5 letters ('trim') takes no endings",
+      "registry": "demo",
+      "query": "a conversation about trimming",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "trim_video",
+        "convert_video",
+        "compress_video",
+        "list_formats",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "inflected_twins_count_once",
+      "why": "'compress' matches 'compress' exactly, so the twins tool gets one keyword, not three; two_words matches two words",
+      "registry": "twins",
+      "query": "compress and shrink it",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "two_words",
+        "twins",
+        "other",
+        "clarify",
+        "reject",
+        "done"
+      ]
+    },
+    {
+      "name": "best_twin_for_an_inflected_word",
+      "why": "'compressons' is an inflection of all three twins; it counts once, through the keyword with the fewest claimants, ties on the keyword",
+      "registry": "twins",
+      "query": "compressons ce fichier",
+      "top_k": 5,
+      "min_score": 0,
+      "expected_order": [
+        "twins",
+        "two_words",
+        "other",
         "clarify",
         "reject",
         "done"

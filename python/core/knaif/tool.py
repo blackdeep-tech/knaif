@@ -1,4 +1,4 @@
-"""Step and Intent ABCs — the two tool interface kinds."""
+"""Handler and Intent ABCs — the two kinds of tool implementation."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ if TYPE_CHECKING:
     from .handler_api import HandlerContext
 
 
-class Step(ABC):
-    """Leaf tool: executes deterministically and returns a result dict."""
+class Handler(ABC):
+    """A tool that executes: runs deterministically and returns a result dict."""
 
     name: str
 
@@ -22,7 +22,7 @@ class Step(ABC):
 
 
 class Intent(ABC):
-    """Macro tool: expands into a sub-plan of Steps before execution."""
+    """A tool that expands into a sub-plan of plan steps before execution."""
 
     name: str
 

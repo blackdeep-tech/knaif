@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["video.mp4"], "target_size_mb": 72, "target_resolution": "720p"}}]}

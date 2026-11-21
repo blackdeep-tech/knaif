@@ -322,11 +322,112 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
 
 # Open / Next (no dedicated plan yet)
 
-- [ ] **Toolchain and llama.cpp refresh as the first task of the next minor** (the first opened
-  after 1.3.0). Agreed 2026-10-14; the procedure is [RELEASE.md](RELEASE.md#toolchain-and-llamacpp-refresh--first-task-of-every-minor).
+- [x] **Toolchain and llama.cpp refresh as the first task of the next minor** — done 2026-10-27 on
+  `release/1.4.0` (`chore/deps-1.4.0`): Rust 1.99.1, `llama-cpp-2`/`-sys-2` 0.1.160; see the
+  [1.4.0 index](plans/2026-10-26-release-1.4.0.md) *Decisions*. Agreed 2026-10-14 for the first
+  minor opened after 1.3.0; the procedure is [RELEASE.md](RELEASE.md#toolchain-and-llamacpp-refresh--first-task-of-every-minor).
   On 2026-10-14 the pins were Rust 1.96.0 (stable 1.99.0), `llama-cpp-2`/`-sys-2` 0.1.150 (0.1.159)
   and `llama-cpp-python` 0.3.35 (0.3.36), all unchanged since 1.0.1. Not done on 1.3.0 because
   its evals are already underway.
+
+- [ ] **The Linux container's warm cache breaks after a llama.cpp bump.** Found 2026-10-30 building
+  the 1.4.0 CUDA payload: `llama-cpp-sys-2`'s `build.rs` hard-links its libraries into
+  `target/release/`, `examples/` and `deps/` only `if !dst.exists()`, and `exists()` follows
+  symlinks, so the previous version's SONAME links (`libggml.so -> libggml.so.0`, target gone)
+  read as absent and the hard link panics with `AlreadyExists` after the whole llama.cpp compile.
+  `build-in-container.sh`'s one-volume-per-kind rule covers a kind switch, not a version bump within
+  a kind. Fixed by hand in both volumes (`knaif-target-cuda`, `-vulkan`: dangling `lib*.so*` links
+  removed). Durable fix: the script removes dangling `lib*.so*` links in those three folders before
+  the build, as `build_native_kind.sh` already replaces stale staged libs on Windows (#102).
+
+- [ ] **Small leftovers from the 1.4.0 freeze** (2026-10-30), none blocking:
+  - Three code comments still name the 1.3.0 `--overwrite` flag, which `--allow overwrite`
+    replaced: `apps/cli/src/main.rs` (the overwrite gate, two places) and
+    `python/core/knaif/app.py` (`_confirm_overwrites`'s docstring).
+  - `rehearse-backend-install.sh --platform linux-x64` from a Windows checkout: the container
+    leaves the Linux payload in `dist/`, not `dist/staging/`, so `--stage`/`--fragment` must be
+    given, and read through `/mnt/c` the CRLF manifest fails the `status:` match; it passes from LF
+    copies. Either look in both places and strip `\r`, or say in RELEASE.md §7 to run it from the
+    WSL clone.
+  - `just site-check` needs `mise x --`: the PATH's Corepack pnpm (12.14.0) is refused by the
+    site's pinned 12.4.1.
+
+- [ ] **The next model rejects "overwrite the original" on every backend** (owner, 2026-11-02).
+  On 1.4.0, 4B on Vulkan asks instead (`ffmpeg_safety_overwrite_original`, accepted as the owner's
+  exception: release index, *Decisions*). More train rows for overwriting the source in other
+  words ("replace the original", "save over clip.mov", "write it back into the same file"),
+  each a reject, and the safety row checked on every backend of the acceptance matrix.
+
+- [ ] **The Python eval never applies "a compress is never bigger"** (2026-11-02). Its replay
+  runs the rendered ffmpeg command, so `_shrunk` (`skills/ffmpeg/python/steps.py`) never decides,
+  and a compress that came out bigger is graded as delivered: `ffmpeg_039` ("compress clip.mp4 to
+  crf18", 292 KB → 452 KB) passes in Python and fails on the binary, which keeps nothing as the
+  owner's rule says. Either the replay goes through the handler's check, or the row gets the
+  `no_larger_than` criterion the `compress_result` rows carry; a corpus change, so G2 applies.
+
+- [ ] **The macOS `libpdfium.dylib` declares macOS 13; knaif's floor is 12** (2026-11-04).
+  `check_macho_deps.py --min-os 12.0` fails on it in the 1.4.0 CI zip and in the published 1.3.0
+  zip alike; nothing ran it on the final 1.3.0 files. No clean room had loaded PDFium (the macOS 12
+  room's request is a rotate), so OCR of a PDF and the smallest compress without Ghostscript are
+  unproven on macOS 12. 1.4.0's macOS 12 room runs a smallest compress (it rasterizes through
+  PDFium) to answer it; the Windows room's `fresh_pdfium_loads` passed. Then: a PDFium build that
+  targets 12.0, or the floor raised to 13 for those tools, and the Mach-O check in the release path.
+  **Answered 2026-11-19:** in 1.4.0's macOS 12 VM the smallest compress loaded PDFium and
+  rasterized (2.2 KB → 114.5 KB, so knaif kept the original), exit 0
+  (`evals/runs/2026-11-02_r140-macos_success/cleanroom/run1-zip/pdfium-macos12.log`). It works on
+  12 today; what is left is the library's declared floor, which a later macOS or PDFium could make
+  binding.
+
+- [ ] **Two scratch folders in one process can share a name** (2026-11-04, after 1.4.0: `native/`
+  is frozen). `RunScratch::in_root` (`native/crates/knaif-core/src/scratch.rs`) shifts its counter
+  32 bits left and then masks the tag to 32 bits, so the counter is dropped and the tag is the
+  clock's sub-second nanoseconds alone. On macOS that clock moves in microseconds, so
+  `two_runs_never_share_a_folder` fails when both calls land in the same one (PR #113's `macos`
+  job). The shipped CLI makes one folder per `knaif run`, named with its process id, so a release
+  binary cannot collide. Fix test-first: keep the counter in the tag.
+
+- [ ] **`watch_run.sh` cannot run on a stock Mac** (2026-11-06, found by the Mac's 1.4.0 setup):
+  `scripts/watch_run.sh:131` uses `declare -A`, which macOS's bash 3.2 does not have, though the
+  release scripts are written for 3.2. The Mac watches with `tail -f $R/COMPLETE` meanwhile. Fix
+  without associative arrays and run the watcher's test under bash 3.2. It also needs GNU tools
+  (2026-11-20, the Mac's pre-push hook): `stat -c` (lines 50, 58, 159), `find -printf` (61, 178)
+  and `date -d` (77), which macOS ships in their BSD form, so even Homebrew's bash 5 fails at line
+  185. Until then the Mac's push deselects its two tests (owner); CI on Linux runs them.
+
+- [ ] **Golden CLI outputs compare byte counts that depend on the machine** (2026-11-20, after
+  1.4.0: `contracts/` is frozen). `contracts/parity/cli_output_cases.json` masks times as `<t>` but
+  not sizes: "a document inspected" expects the generated `sample.pdf` at 2227 bytes (2221 on the
+  Mac), and the two ffmpeg batch cases expect 436.8 KB from this box's ffmpeg (Homebrew's 8.1.1
+  writes other bytes). Mask sizes the way times are masked, in both runtimes' tests. Until then the
+  Mac's pre-push hook deselects the three (owner); CI on Linux runs them.
+
+- [ ] **The release queue's first run, what to fix** (2026-11-20, from 1.4.0's Mac run on #120).
+  In `evals/runs/<run>/queue.sh` and `scripts/release_queue.sh` / `relay.py`: the `SHA256SUMS`
+  check must accept `<sha> *<name>` (the release writes the `*`; preflight failed on a good file);
+  `reply-check --recorded` must take the retry a failed parse makes (two replies, not one); a
+  preflight that the program running the queue may reach the VMs (macOS Local Network privacy
+  dropped every connection until it ran from Terminal); run the queue under `caffeinate -i` (the
+  Mac slept with the clean room waiting); and a supported way to hold `open-pr` until the
+  contributor confirms (done by hand with `queue/done/open-pr`).
+
+- [x] **DCO: write the rule down, and sign our own commits** (2026-11-20). **Done 2026-11-20:** the
+  rule was already on `main` (#119: `CONTRIBUTING.md`, `DCO`, `.github/dco.yml`, organisation
+  members exempt by design), merged into `release/1.4.0`; our own commits are now signed off by
+  the `dco-signoff` prepare-commit-msg hook (`scripts/add_signoff.py`), no `-s` needed.
+
+- [ ] **`watch_run.sh` and a run's `void/` folder** (2026-11-02): it lists a voided stage's logs
+  as finished stages and starts the clock at the first `START` in `COMPLETE`. Skip `void/` (done),
+  and time from the last stage's `START`.
+
+- [x] **A stopped batch-planning cell loses its plans** (owner, 2026-11-02, after 1.4.0). The lane
+  stages each reply beside the sandbox and promotes the batch into the store only when it ends,
+  then wipes the staging folder on the next start: pausing 1.4.0's 4B CPU ffmpeg cell at 188 of
+  234 plans would have cost ~37 min (saved by hand, amendment in the Windows run script). Make a
+  restart keep a stopped batch's replies where the device check cannot fail or can be re-proved.
+  **Done 2026-11-04** (owner: fix it first, after the Linux daemon stage lost 1 h 29 min to a
+  pause): the batch's load trace goes to a file and its staging folder names the binary, namespace
+  and device, so a restart keeps those replies when all three match; a resumed stage also keeps
+  its finished cells and the daemon check's complete lines (RELEASE.md §4, step 3).
 
 - [ ] **For discussion when the next release is planned: a signed FFmpeg for Smart App Control.**
   Owner, 2026-10-16. On a Windows PC with Smart App Control enforcing, knaif installs and runs
@@ -337,7 +438,8 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   **Owner, 2026-10-20:** reopened as a test on its own branch (does a reduced, signed build keep
   every feature; a new media skill instead?); the release is chosen after the test.
 
-- [ ] **Release evidence on other machines (parked, owner 2026-10-19).** The faster-release-evidence
+- [ ] **Release evidence on other machines (parked, owner 2026-10-19; planned 2026-11-03 in
+  [release-evidence-in-ci](plans/2026-11-03-release-evidence-in-ci.md), after 1.4.0).** The faster-release-evidence
   plan sped up the process on the release box first; other machines come later (owner, 2026-10-17).
   Left from its T0b: `.github/workflows/evidence-cell.yml` runs one cell's shards by hand on GitHub's
   runners, but has no join job (compose the shards, safety on the binary, `accept-native`) and takes
@@ -372,7 +474,14 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   Also: `schema_validity` no longer counts `parse_error` as valid; the train/eval verbatim-copy test covers **both** skills (it was ffmpeg-only, which is why `documents_079` was never caught). The native lane keeps its own lowerable coverage floor — `check_acceptance` takes `coverage_floor`, so there is one rule, not two that can disagree.
 - [x] **Safety population count is still unbound** — DONE 2026-10-07: `accept` and `accept-native` pass the corpus row ids, and a safety record that misses a row, or has one the corpus does not, fails `safety/coverage` (by ids, else by total). Was: the gate now checks the safety record names the right skill and is non-empty, but not that it covers *all* of that skill's corpus (a truncated 5-of-11 run would pass). Needs the expected row count alongside the bar.
 - [ ] **Strengthen the documents corpus criteria** — 87 of 132 plan rows (102 of 151 utterances) are graded only on tool identity plus file existence, so a wrong transformation scores 1.0. `documents_036` is the proof: it rotates page 1 of 3 and the benchmark gives it full credit. Extend to real semantic checks (rotation, page order/content, bitrate units, gain direction). This is probably worth more than another fine-tune, since it is the instrument every future candidate is judged on.
-- [ ] **Previewing a chain that changes pages of a file an earlier step creates** — found
+- [x] **Previewing a chain that changes pages of a file an earlier step creates** — **done
+  2026-10-27** on `release/1.4.0`: Python's `_pending` guard (split, rotate, remove, reorder) came
+  with the 1.4.0 features, native already guarded all four (`input.exists()` in its preview), and
+  `fix/1.4.0-bugs` adds the L2 cases (`page_op_after_a_step_that_writes_its_input_*` in
+  `contracts/parity/documents_expansion_cases.json`: rotate, reorder, remove, split), shown to fail
+  in both runtimes with the guard switched off. The four rows below, run for real on the 4B
+  (`success`): 7 of 8 wordings plan and execute, no "No such file" left; `hard2_008#1` clarifies
+  (a model choice). The re-lock measures them. Found
   2026-10-07 while fixing the `remove_pages` preview (documents_105's sibling). Native now checks
   the pages in a preview only when the input exists, so "merge, then remove page 2" still
   previews. **Python fails that preview** (it always read the input's page count), and the Mac
@@ -392,7 +501,12 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   but there is no fix. A validly signed FFmpeg is the only one, which is the parked media-runtime
   plan (branch `docs/media-runtime-and-mobile`; owner, 2026-10-07: leave it for now). Ghostscript and Tesseract are blocked too: neither maker signs validly (Tesseract's
   certificate expired in 2023, including on the newer `tesseract-ocr.tesseract` 5.5.3 package).
-- [ ] **`strip_audio` stream-copies h264 into a `.webm` output** — found 2026-10-18 by the
+- [x] **`strip_audio` stream-copies h264 into a `.webm` output** — renderer half **fixed
+  2026-10-27** on `release/1.4.0` (`fix/1.4.0-bugs`): `strip_audio` and `adjust_volume` copy the
+  video only when the output container can hold the source codec, else encode with the
+  container's encoder (`libvpx-vp9` for webm), both runtimes, run for real on h264 → webm. The
+  model half ("save it as webm" as a `convert_video` step) is left to training; the plan now
+  works as the models write it. Found 2026-10-18 by the
   corpus v2 run (`ffmpeg_hard2_005`, "scale clip_4k.mp4 down to 720p, drop the audio and save it as
   webm"): both models plan resize → strip_audio with no `convert_video`, and `strip_audio` renders
   `-c:v copy` into the `.webm` the request named, which ffmpeg refuses ("Only VP8 or VP9 or AV1
@@ -400,7 +514,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   that cannot hold it (re-encode, or keep the source container and say so), and the prompt or
   training should make "save it as webm" a `convert_video` step. Measured on the row; a fix
   re-locks ffmpeg.
-- [ ] **Exact last-frame extraction** — `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame. Both runtimes; needs mixed/variable-frame-rate tests.
+- [x] **Exact last-frame extraction** — **fixed 2026-10-27** on `release/1.4.0` (`fix/1.4.0-bugs`): "last" stays the `LAST_FRAME` token instead of a time and renders `-sseof -1 … -update 1`, which leaves exactly the final frame and needs no duration. Both runtimes, mirrored tests and the L2 case `thumbnail_of_the_last_frame`; checked byte for byte against the frame selected by number on 30 fps, 24 fps, variable-fps, 0.4 s and long-GOP clips, and run for real in both CLIs. Was: `_LAST_FRAME_EPSILON = 0.1` is ~3 frames at 30 fps, so symbolic `last` never lands on the final frame.
 - [x] **Default the CLI confirmations to Yes (`[Y/n]`)** — BUILT 2026-10-06 on `feat/1.3.0` (as built: no prompt unless `--confirm`; see the 1.3.0 index) — — owner, 2026-09-29, from the RC3 manual
   tests. **Chosen for 1.3.0 (owner, 2026-10-01)**, together with making `--yes` the default and adding
   an opt-in flag to ask first; keep `--yes` as an accepted no-op, and keep the first-run model
@@ -445,7 +559,7 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   knaif stays Apache), and a separate mobile media skill on AVFoundation / Media3 that shares the
   ffmpeg skill's deterministic engine. **Plan: [plans/2026-10-03-media-runtime-and-mobile.md](plans/2026-10-03-media-runtime-and-mobile.md)**
   (Draft; first step is a Smart App Control experiment with winget's ffmpeg).
-- [ ] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
+- [x] **Retire `_KNOWN_EVAL_OVERLAPS["documents"]`** — **done 2026-10-28** (owner) at the 1.4.0 corpus revision: the train side is reworded in `scripts/gen_train.py` ("Handle one of my files for me.", same clarify), `train.jsonl` regenerated (one line), the exception removed. Was: `documents_079` ("Do something with a file.") is in both `train.jsonl` and `eval.jsonl`. It is a clarify row, so nothing transformational leaks, and it is left alone because both files are frozen references. Reword the train side at the next documents corpus revision.
 
 This **Open / Next** section is the live backlog (originally distilled from the
 2026-06-10 project audit, which is no longer kept as a separate file). Highest-value first:

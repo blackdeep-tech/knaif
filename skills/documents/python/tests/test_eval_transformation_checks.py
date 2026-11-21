@@ -196,3 +196,24 @@ def test_text_excludes_for_read_rows() -> None:
     )
     crit = {"expected_tool": "extract_text", "text_contains": "Beta", "text_excludes": "Gamma"}
     assert VERIFIERS["success"](output, crit, Path(".")).score < 1.0
+
+
+def test_no_larger_than_finds_the_input_among_the_fixtures(tmp_path: Path) -> None:
+    """An output in a known folder (`<row>.known/Desktop/`) or from a downloaded URL has no copy
+    of the input beside it: the row's fixture folder holds the original."""
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    shutil.copy(FIXTURE / "sample.pdf", fixtures / "sample.pdf")
+    out = tmp_path / "row.known" / "Desktop" / "report-compressed.pdf"
+    out.parent.mkdir(parents=True)
+    shutil.copy(FIXTURE / "sample.pdf", out)
+    output = SimpleNamespace(
+        outcome="plan",
+        plan={"plan": [{"tool": "compress_pdf", "args": {}}]},
+        execution_results=[{"tool": "compress_pdf", "result": {"output": str(out)}}],
+        artifact_path=out,
+        artifact_paths=[out],
+        fixture_path=fixtures / "sample.pdf",
+    )
+    crit = {"expected_tool": "compress_pdf", "no_larger_than": "sample.pdf"}
+    assert VERIFIERS["success"](output, crit, tmp_path / "lane").score == 1.0

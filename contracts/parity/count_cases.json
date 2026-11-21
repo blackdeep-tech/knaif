@@ -1,0 +1,441 @@
+{
+  "_comment": "Counts (owner, 2026-10-22): a count attached to a file word (\"2 of the videos\", \"three of the videos\", \"both mov files\", \"all 3 files\", \"2 от клиповете\", \"两个视频\"; digits and number words in the corpora's languages, the plural file words of many-files batches, at most two words between) must equal the number of files the plan touches, else the run asks. The files touched are the plan's folder and glob inputs after widening, listed like the per-file batch (the skill's file_kinds, natural order), plus any file named beside them; an earlier step's output is not counted again. Only a plan with a folder or a glob is checked: files named one by one are the request's own choice. A number on anything else never counts (seconds, parts, fps, a speed factor). More files than asked: \"Which N of the M <noun>? Name them.\"; fewer: \"I found M <noun> here, not N. Which ones do you mean?\". The noun follows the files' kind (videos, audio files, documents, images, text files), else files. A position word (\"the 3 biggest\") is a count like any other. Python `knaif.nl_clarify_gate.count_question`, Rust `knaif_core::nl_clarify_gate::count_question`.",
+  "file_kinds": {
+    "mp4": "video",
+    "mov": "video",
+    "mkv": "video",
+    "mp3": "audio",
+    "pdf": "document",
+    "jpg": "image",
+    "txt": "text"
+  },
+  "cases": [
+    {
+      "name": "a count of a file word over more files asks",
+      "utterance": "convert three of the videos to gif",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "gif"
+          }
+        }
+      ],
+      "expected": "Which 3 of the 7 videos? Name them."
+    },
+    {
+      "name": "both means two",
+      "utterance": "convert both mov files to mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": "Which 2 of the 3 videos? Name them."
+    },
+    {
+      "name": "both with exactly two runs",
+      "utterance": "convert both mov files to mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "dog.mp4"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "Bulgarian digit before the file word",
+      "utterance": "направи миниатюри на 2 от клиповете",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "create_thumbnail",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ]
+          }
+        }
+      ],
+      "expected": "Which 2 of the 7 videos? Name them."
+    },
+    {
+      "name": "Chinese count word with a measure word",
+      "utterance": "把两个视频转换为mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": "Which 2 of the 7 videos? Name them."
+    },
+    {
+      "name": "a position word with a count asks",
+      "utterance": "compress the 3 biggest videos",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "compress_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ]
+          }
+        }
+      ],
+      "expected": "Which 3 of the 7 videos? Name them."
+    },
+    {
+      "name": "German both",
+      "utterance": "konvertiere beide Videos in mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": "Which 2 of the 7 videos? Name them."
+    },
+    {
+      "name": "all N matching the folder runs",
+      "utterance": "convert all 3 files to mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "more asked for than found",
+      "utterance": "convert the 4 clips to mp4",
+      "files": [
+        "clip1.mp4",
+        "clip2.mp4"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": "I found 2 videos here, not 4. Which ones do you mean?"
+    },
+    {
+      "name": "a number on seconds never counts",
+      "utterance": "trim 2 seconds from the start of every video",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "start": "00:00:02"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "a number on parts never counts",
+      "utterance": "split every video into 3 parts",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "split_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "every": "3s"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "a frame rate never counts",
+      "utterance": "convert every video to mp4 at 30 fps",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "a speed factor never counts",
+      "utterance": "speed up the videos 2x",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "adjust_speed",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "speed": 2
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "files named one by one are not a batch",
+      "utterance": "convert both a.mov and b.mov to mp4",
+      "files": [
+        "a.mov",
+        "b.mov",
+        "c.mov"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "a.mov",
+              "b.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "no count, no question",
+      "utterance": "convert every video to mp4",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4",
+              "*.mkv",
+              "*.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "the digit of an extension is not a count",
+      "utterance": "把所有mp4文件转换成mov，然后把它们的音频提取为mp3",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "container": "mov"
+          }
+        }
+      ],
+      "expected": null
+    },
+    {
+      "name": "a German count before a compound file word",
+      "utterance": "Zwei MP4-Dateien zusammenfuegen",
+      "files": [
+        "beach.mov",
+        "city.mov",
+        "silent.mov",
+        "concert.mp4",
+        "dog.mp4",
+        "party.mp4",
+        "garden.mkv"
+      ],
+      "plan": [
+        {
+          "tool": "concat_video",
+          "args": {
+            "inputs": [
+              "*.mp4"
+            ],
+            "output": "combined.mp4"
+          }
+        }
+      ],
+      "expected": "Which 2 of the 3 videos? Name them."
+    }
+  ]
+}

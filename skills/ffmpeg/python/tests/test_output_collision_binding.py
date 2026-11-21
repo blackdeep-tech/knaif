@@ -51,7 +51,7 @@ def agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CommandAgent:
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffprobe",
-        lambda f: {
+        lambda f, *_: {
             "streams": [
                 {"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080},
                 {"codec_type": "audio", "codec_name": "aac"},
@@ -62,7 +62,7 @@ def agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> CommandAgent:
     monkeypatch.setattr(
         handlers_mod._deps,
         "run_ffmpeg",
-        lambda c: {"returncode": 0, "stdout": "", "stderr": ""},
+        lambda c, *_: {"returncode": 0, "stdout": "", "stderr": ""},
     )
     return CommandAgent.from_skill(FFMPEG_SKILL_DIR, sandbox=tmp_path, root=tmp_path)
 

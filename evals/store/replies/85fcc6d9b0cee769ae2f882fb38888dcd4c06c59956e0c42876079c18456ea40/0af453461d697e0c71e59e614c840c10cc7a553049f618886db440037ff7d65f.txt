@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "Sending files isn't outside this skill's safety policy, but I can't email, upload, or send files. Is there a media operation I can help with instead?"}}]}

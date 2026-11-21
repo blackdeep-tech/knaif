@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "clarify", "args": {"question": "What should the ffmpeg settings be changed to, and on which platform?"}}]}

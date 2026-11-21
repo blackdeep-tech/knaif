@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reorder_pages", "args": {"input": "sample.pdf", "pages": "3,1,2", "output": "sample_reordered.pdf"}}, {"tool": "protect_pdf", "args": {"input": "sample_reordered.pdf", "password": "secret"}}]}

@@ -33,6 +33,15 @@ def language_slice(utterance: str) -> str:
     return "latin"
 
 
+def chain_hit(expected_tools: list[str], shown: list[str], top_k: int | None = None) -> bool:
+    """True when every non-core tool of a chain is shown (core tools are always shown).
+
+    *shown* is what the prompt lists: ``retrieve_tools(utt, registry, top_k)``. Given a full
+    ranking with *top_k*, its first *top_k* entries are taken instead (the older call)."""
+    seen = set(shown if top_k is None else shown[:top_k])
+    return all(t in seen for t in expected_tools if t not in _CORE)
+
+
 def _skill_paths(skill: str) -> tuple[Path, Path]:
     base = Path("skills") / skill
     return base / "tools.yaml", base / "data" / "eval.jsonl"
@@ -48,6 +57,10 @@ def evaluate_skill(skill: str, top_k: int = 5) -> dict[str, Any]:
     hits: dict[str, list[int]] = {}
     rr: dict[str, list[float]] = {}
     misses: list[dict[str, Any]] = []
+    # Chain rows count in `overall` by their first tool (expected_tool = expected_tools[0]);
+    # here they are scored on every tool, kept apart so the locked `overall` is unchanged.
+    chain_hits: list[int] = []
+    chain_misses: list[dict[str, Any]] = []
 
     for row in load_corpus(eval_path):
         expected = row.expected_tool
@@ -55,10 +68,28 @@ def evaluate_skill(skill: str, top_k: int = 5) -> dict[str, Any]:
             continue
         for utt in row.utterances:
             sl = language_slice(utt)
-            # Full ranked order (min_score=0 returns every scored tool, ranked).
+            # Full ranked order (min_score=0 returns every scored tool, ranked), and what the
+            # prompt shows: the top-k plus any tool its triggers add (`split_video` for "split …",
+            # ranked far below). A shown tool is a hit whatever its rank (2026-10-28).
             ranked = list(retrieve_tools(utt, registry, top_k=n_tools + 8))
-            rank = ranked.index(expected) + 1 if expected in ranked else None
-            hit = 1 if (rank is not None and rank <= top_k) else 0
+            shown = list(retrieve_tools(utt, registry, top_k=top_k))
+            if row.expected_tools:
+                chain_ok = chain_hit(row.expected_tools, shown)
+                chain_hits.append(int(chain_ok))
+                if not chain_ok:
+                    chain_misses.append(
+                        {
+                            "id": row.id,
+                            "tools": [t for t in row.expected_tools if t not in shown],
+                            "slice": sl,
+                            "utterance": utt,
+                        }
+                    )
+            if expected in shown:
+                rank: int | None = shown.index(expected) + 1
+            else:
+                rank = ranked.index(expected) + 1 if expected in ranked else None
+            hit = 1 if expected in shown else 0
             hits.setdefault(sl, []).append(hit)
             rr.setdefault(sl, []).append(1.0 / rank if rank else 0.0)
             if not hit:
@@ -80,6 +111,11 @@ def evaluate_skill(skill: str, top_k: int = 5) -> dict[str, Any]:
         "overall": agg(all_h, all_r),
         "by_slice": {sl: agg(hits.get(sl, []), rr.get(sl, [])) for sl in ("ascii", "latin", "cjk")},
         "misses": misses,
+        "chains": {
+            "n": len(chain_hits),
+            "recall_at_k": round(sum(chain_hits) / len(chain_hits), 4) if chain_hits else None,
+        },
+        "chain_misses": chain_misses,
     }
 
 
@@ -127,4 +163,10 @@ def format_report(results: dict[str, Any]) -> str:
                 lines.append(
                     f"{'':12s} {sl:8s} {s['n']:>4}  {str(s['recall_at_k']):>7}  {str(s['mrr']):>6}"
                 )
+        c = r.get("chains") or {}
+        if c.get("n"):
+            # Every tool of the chain in the top-k; no MRR for a set of tools.
+            lines.append(
+                f"{'':12s} {'chains':8s} {c['n']:>4}  {str(c['recall_at_k']):>7}  {'-':>6}"
+            )
     return "\n".join(lines)

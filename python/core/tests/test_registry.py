@@ -91,6 +91,39 @@ def test_grounded_args_default_empty(registry):
         assert tool_def.grounded_args == ()
 
 
+def test_satisfied_args_parsed(tmp_path):
+    y = tmp_path / "t.yaml"
+    y.write_text(
+        "foo:\n"
+        "  description: d\n"
+        "  required_args: [inputs]\n"
+        "  satisfied_args:\n"
+        "    container: {value: .MP4, unless: [target]}\n"
+        "    codec: {value: h264}\n",
+        encoding="utf-8",
+    )
+    reg = load_registry(y)
+    assert reg["foo"].satisfied_args["container"].value == "mp4"
+    assert reg["foo"].satisfied_args["container"].unless == ("target",)
+    assert reg["foo"].satisfied_args["codec"].unless == ()
+
+
+@pytest.mark.parametrize(
+    "decl",
+    [
+        "{container: mp4}",
+        "{container: {value: 4}}",
+        "{container: {value: mp4, unless: target}}",
+        "{container: {value: mp4, when: [target]}}",
+    ],
+)
+def test_satisfied_args_must_name_a_value(tmp_path, decl):
+    y = tmp_path / "t.yaml"
+    y.write_text(f"foo:\n  description: d\n  satisfied_args: {decl}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="satisfied_args"):
+        load_registry(y)
+
+
 def test_missing_yaml_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_registry(tmp_path / "nonexistent.yaml")
@@ -333,6 +366,62 @@ def test_multilingual_retrieval(ffmpeg_registry, query, expected_tool):
     assert (
         expected_tool in result
     ), f"Expected '{expected_tool}' in top-5 for query {query!r}, got {list(result)}"
+
+
+@pytest.mark.parametrize(
+    "query,expected_tool",
+    [
+        # A command is an imperative; the keywords are infinitives.
+        ("comprime el video clip.mp4", "compress_video"),
+        ("komprimiere urlaub.mp4", "compress_video"),
+        ("compresse la video demo.mp4", "compress_video"),
+        ("konvertiere clip.mov in eine andere datei", "convert_video"),
+        # Punctuation at a word's edge is not part of the word.
+        ("Make every .mkv here 1080p.", "resize_video"),
+        # A hyphenated word also counts as its parts ("compresse-le" is "compresse" + "le").
+        ("convertis clip.mov en mp4, redimensionne en 360p, puis compresse-le", "compress_video"),
+    ],
+)
+def test_retrieval_matches_inflected_words_and_ignores_edge_punctuation(
+    ffmpeg_registry, query, expected_tool
+):
+    result = retrieve_tools(query, ffmpeg_registry, top_k=5)
+    assert expected_tool in result, f"{expected_tool!r} not in {list(result)} for {query!r}"
+
+
+def test_one_word_counts_once_per_tool(ffmpeg_registry):
+    """ "compress" is the keyword "compress" and a stem of "compresser": one word, one match.
+
+    And "pages." is the word "pages" once, not "pages." and "pages" both.
+    """
+    from knaif.registry import _query_tokens
+
+    assert _query_tokens("number the pages.") == {"number", "the", "pages"}
+
+
+def test_inflected_twin_keywords_do_not_multiply_one_word(tmp_path):
+    """A tool listing "compress", "compresser" and "compressez" gets one match for the word
+    "compress", so it does not outrank a tool that matches two different words."""
+    path = tmp_path / "tools.yaml"
+    path.write_text(
+        "twins:\n  description: x\n  keywords: [compress, compresser, compressez]\n"
+        "  required_args: []\n"
+        "two_words:\n  description: x\n  keywords: [compress, shrink]\n  required_args: []\n",
+        encoding="utf-8",
+    )
+    ranked = list(retrieve_tools("compress shrink", load_registry(path), top_k=2))
+    assert ranked[0] == "two_words"
+
+
+def test_a_short_word_is_not_a_stem_of_a_longer_keyword():
+    """ "extra" shares five letters with "extract" and means something else."""
+    from knaif.registry import _keyword_matches
+
+    assert not _keyword_matches("extra", "extract")
+    assert _keyword_matches("extracts", "extract")
+    assert _keyword_matches("comprime", "comprimir")
+    assert not _keyword_matches("convert", "conversation")
+    assert not _keyword_matches("poster", "post")
 
 
 def test_diacritic_query_matches_plain_keyword(ffmpeg_registry):

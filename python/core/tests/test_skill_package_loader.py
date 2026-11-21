@@ -27,6 +27,7 @@ from knaif.skill import Skill
 
 _TOOLS = textwrap.dedent("""\
     do_thing:
+      effects: []
       description: "Do a thing."
       required_args: []
       safety_category: safe
@@ -46,7 +47,6 @@ def _write_package_skill(
         textwrap.dedent("""\
             name: pkg_skill
             description: "package-style skill"
-            skill_class: handlers.FooSkill
             """),
         encoding="utf-8",
     )
@@ -63,16 +63,16 @@ _PLAIN_INIT = """\
     """
 
 _PLAIN_HANDLERS = """\
-    from knaif.tool import Step
+    from knaif.tool import Handler
     from knaif.skill_base import Skill as SkillBase
 
-    class DoThingStep(Step):
+    class DoThingStep(Handler):
         name = "do_thing"
         def handle(self, args, ctx):
             return {"did": True}
 
     class FooSkill(SkillBase):
-        tools = [DoThingStep]
+        pass
     """
 
 
@@ -96,17 +96,17 @@ def test_package_skill_allows_relative_import(tmp_path):
         tmp_path / "foo",
         init_body=_PLAIN_INIT,
         handlers_body="""\
-            from knaif.tool import Step
+            from knaif.tool import Handler
             from knaif.skill_base import Skill as SkillBase
             from ._recipe import RECIPE_VALUE
 
-            class DoThingStep(Step):
+            class DoThingStep(Handler):
                 name = "do_thing"
                 def handle(self, args, ctx):
                     return {"recipe": RECIPE_VALUE}
 
             class FooSkill(SkillBase):
-                tools = [DoThingStep]
+                pass
             """,
         extra_files={"_recipe.py": 'RECIPE_VALUE = "from-sibling"\n'},
     )
@@ -168,18 +168,18 @@ def test_pop_legacy_alias_forces_fresh_reload(tmp_path):
         tmp_path / "foo",
         init_body=_PLAIN_INIT,
         handlers_body="""\
-            from knaif.tool import Step
+            from knaif.tool import Handler
             from knaif.skill_base import Skill as SkillBase
 
             _SENTINEL = "original"
 
-            class DoThingStep(Step):
+            class DoThingStep(Handler):
                 name = "do_thing"
                 def handle(self, args, ctx):
                     return {"did": True}
 
             class FooSkill(SkillBase):
-                tools = [DoThingStep]
+                pass
             """,
     )
 

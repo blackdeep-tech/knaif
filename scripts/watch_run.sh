@@ -20,9 +20,12 @@
 #      the total. The optional third column prices a stage that has not started (an encode row
 #      costs ~10x a planning row); without it the run's average pace stands in.
 # Without either, a log's total is unknown and the progress line says so instead of guessing.
+# `scripts/release_evidence.sh` writes TOTALS for each stage it runs. Logs under `void/` (a voided
+# stage's, kept as evidence) are not counted.
 R="${1:?usage: watch_run.sh <run folder>}"
 R="${R%/}"
 INTERVAL="${WATCH_INTERVAL:-10}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"   # the checkout: a lane's sandbox path is relative to it
 # One finished row in either producer's format: `evalsuite native --verbose` carries an
 # `N file(s)` column; `evalsuite run --verbose` prints `  [ffmpeg_001]  OK    plan   877ms  …`
 # (same pattern as watch_run_progress.sh; matching `file(s)` alone counted 0 for the latter).
@@ -87,6 +90,24 @@ rows_in() {
   else grep -cE "$ROW_RE" "$1" 2>/dev/null; fi
 }
 header_total() { [ -f "$1" ] && grep -m1 -oE "$HEADER_RE" "$1" 2>/dev/null | grep -oE '[0-9]+' | head -1; }
+# A cell that plans its rows in one batch (`planning    : N row(s) with the model`) prints no row
+# until every plan is in, ~40 min for 234 rows on a CPU. Each reply is recorded as it comes, beside
+# the lane's sandbox (`<sandbox>/.batch*.record/`) and then moved into the store namespace the log
+# names (`evals/store/replies/<key>...`): those since the log started are the plans so far.
+# -> "<planned> <of>", or nothing when the log plans nothing with the model.
+planned_in() {
+  local log=$1 n sb key since dirs
+  [ -f "$log" ] || return 0
+  n=$(grep -m1 -oE 'planning +: [0-9]+ row\(s\) with the model' "$log" | grep -oE '[0-9]+' | head -1)
+  [ -n "$n" ] && [ "$n" -gt 0 ] || return 0
+  sb=$(sed -n 's/^ *sandbox *: *//p' "$log" | head -1 | tr -d '\r' | tr '\\' '/')
+  case "$sb" in /* | ?:/*) ;; *) sb="$ROOT/$sb" ;; esac
+  dirs=("$sb"/.batch*.record)
+  key=$(sed -n 's/^ *store *: *\([0-9a-f][0-9a-f]*\) .*/\1/p' "$log" | head -1)
+  [ -n "$key" ] && dirs+=("$ROOT/evals/store/replies/$key"*)
+  since=$(started "$log")
+  echo "$(find "${dirs[@]}" -maxdepth 1 -name '*.txt' -newermt "@$since" 2>/dev/null | wc -l | tr -d ' ') $n"
+}
 bar() { # done total width -> [█████░░░░░]
   local d=$1 t=$2 w=$3 fill i s=""
   fill=$(( t > 0 ? w * d / t : 0 )); [ "$fill" -gt "$w" ] && fill=$w
@@ -94,6 +115,9 @@ bar() { # done total width -> [█████░░░░░]
   printf '%s' "$s"
 }
 strip() { local s=$1; s=${s#"${s%%[![:space:]]*}"}; printf '%s' "$s"; }
+# A stage's name: its log's path in the run folder, or from `parity/` for one TOTALS names there
+# (L3's and the daemon's, `../../parity/...`).
+stage_name() { local n=${1#"$R"/}; n=${n#../../}; n=${n%.log}; printf '%s' "$n"; }
 # `... exit=0 Sun Oct 11 11:51:19 RDT 2026` -> `11:51:19  ... exit=0`
 event() {
   sed -E 's/^(.*[^ ]) +[A-Z][a-z]{2} [A-Z][a-z]{2} +[0-9]+ ([0-9]{2}:[0-9]{2}:[0-9]{2}) [A-Z]+ [0-9]{4}(.*)$/\2  \1\3/'
@@ -108,6 +132,7 @@ while true; do
   if [ -f "$R/TOTALS" ]; then
     while read -r name n spr; do
       [ -z "$name" ] && continue
+      n=${n%$'\r'}; spr=${spr%$'\r'}   # a TOTALS saved with Windows line ends
       logs+=("$R/$name"); want["$R/$name"]=$n
       [ -n "$spr" ] && pace["$R/$name"]=$spr
     done < "$R/TOTALS"
@@ -117,7 +142,7 @@ while true; do
     [ "$(rows_in "$p")" -gt 0 ] || [ -n "$(header_total "$p")" ] || continue
     logs+=("$p")
   done < <(find "$R" -name '*.log' ! -name 'fixtures*' ! -name '*_rerun.log' ! -name '*_compose.log' \
-    -printf '%T@ %p\n' 2>/dev/null | sort -n)
+    ! -path "$R/void/*" -printf '%T@ %p\n' 2>/dev/null | sort -n)
 
   done_all=0; total_all=0; unknown=0
   for p in "${logs[@]}"; do
@@ -153,13 +178,18 @@ while true; do
   # The newest log of any kind: a build or probe has no rows, but it is what is running.
   newest=$(find "$R" -maxdepth 1 -name '*.log' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
 
-  stage_left=""; run_left=""
+  stage_left=""; run_left=""; pd=""; pn=""
   if [ -n "$f" ]; then
     # The current stage's own rate: stages differ by 10x (a planning row vs an encode).
     sd=$(rows_in "$f"); st=$(header_total "$f"); st=${st:-${want[$f]:-}}
     se=$((now - $(started "$f")))
+    pd=""; pn=""
+    [ "$sd" = 0 ] && read -r pd pn <<< "$(planned_in "$f")"
     if [ "$sd" -gt 0 ] && [ -n "$st" ]; then
       stage_left=$(( (st - sd) * se / sd )); [ "$stage_left" -lt 0 ] && stage_left=0
+    elif [ "${pd:-0}" -gt 0 ]; then
+      # Still planning: the plans left at the pace so far (running the rows after is minutes).
+      stage_left=$(( (pn - pd) * se / pd )); [ "$stage_left" -lt 0 ] && stage_left=0
     fi
     # The rest of the run: this stage's own estimate, plus every later stage priced by its
     # TOTALS pace, else by the run's average pace so far. A rough number, marked as such.
@@ -200,10 +230,10 @@ while true; do
 
   if [ "${#logs[@]}" -gt 0 ]; then
     out+="${B}Stages${N}"$'\n'
-    w=0; for p in "${logs[@]}"; do n=${p#"$R"/}; n=${n%.log}; [ "${#n}" -gt "$w" ] && w=${#n}; done
+    w=0; for p in "${logs[@]}"; do n=$(stage_name "$p"); [ "${#n}" -gt "$w" ] && w=${#n}; done
     seen_active=0
     for p in "${logs[@]}"; do
-      n=${p#"$R"/}; n=${n%.log}
+      n=$(stage_name "$p")
       d=$(rows_in "$p"); t=$(header_total "$p"); t=${t:-${want[$p]:-?}}
       if [ "$p" = "$f" ]; then
         mark="${YEL}▶${N}"; extra=""; [ -n "$stage_left" ] && extra="   ${DIM}~$(fmt "$stage_left") left${N}"
@@ -216,7 +246,11 @@ while true; do
       else
         mark="${DIM}·${N}"; extra=""
       fi
-      out+=$(printf '  %s  %-*s  %5s / %-5s%s' "$mark" "$w" "$n" "$d" "$t" "$extra")$'\n'
+      if [ "$p" = "$f" ] && [ -n "$pd" ]; then
+        out+=$(printf '  %s  %-*s  planning %s / %s%s' "$mark" "$w" "$n" "$pd" "$pn" "$extra")$'\n'
+      else
+        out+=$(printf '  %s  %-*s  %5s / %-5s%s' "$mark" "$w" "$n" "$d" "$t" "$extra")$'\n'
+      fi
     done
     out+=$'\n'
   fi
@@ -224,8 +258,11 @@ while true; do
   if [ -n "$f" ]; then
     errs=$(grep -cE "$ERR_RE" "$f")
     ecol=$DIM; [ "$errs" -gt 0 ] && ecol=$RED
-    n=${f#"$R"/}
-    out+="${B}Now${N}      ${n%.log}   $(rows_in "$f") rows   ${ecol}${errs} errors${N}"$'\n'
+    if [ -n "$pd" ]; then
+      out+="${B}Now${N}      $(stage_name "$f")   planning ${pd} / ${pn} rows with the model (no row runs until all are planned)"$'\n'
+    else
+      out+="${B}Now${N}      $(stage_name "$f")   $(rows_in "$f") rows   ${ecol}${errs} errors${N}"$'\n'
+    fi
     last2=$(grep -E "$ROW_RE" "$f" | tail -n 2)
     if [ -n "$last2" ]; then
       prev=$(printf '%s\n' "$last2" | sed -n '1p'); cur=$(printf '%s\n' "$last2" | sed -n '2p')

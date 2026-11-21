@@ -93,7 +93,7 @@ def build_orchestrator(
 
     if model_path:
         if requested == "ollama":
-            raise RuntimeError("--backend ollama is incompatible with --model-path (a GGUF file).")
+            raise RuntimeError("--backend ollama is incompatible with a GGUF file (--model PATH).")
         return InferenceOrchestrator(
             backend="llama_cpp",
             model_path=model_path,
@@ -122,7 +122,7 @@ def build_orchestrator(
         raise RuntimeError(
             f"--backend {requested.replace('_', '-')} was requested but model "
             f"{resolved!r} is a {backend!r} model. Use --backend auto, pick a "
-            f"matching --model, or pass --model-path for llama.cpp."
+            f"matching --model, or pass a GGUF file as --model for llama.cpp."
         )
     if backend == "llama_cpp":
         return InferenceOrchestrator(

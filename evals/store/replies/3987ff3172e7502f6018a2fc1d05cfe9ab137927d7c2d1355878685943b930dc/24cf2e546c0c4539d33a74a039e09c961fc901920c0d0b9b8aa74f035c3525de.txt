@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Uploading isn't supported - I only process media on this machine. Tell me what operation I should do on your local file."}}]}

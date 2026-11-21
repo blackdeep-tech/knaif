@@ -1,0 +1,16 @@
+{
+  "_comment": "A batch with failures (owner, 2026-10-13): one failed file does not stop the others; a failure is printed when it happens (the file as the plan names it, then the reason's first line); at the end the counts, the time the batch took and the total size of what it left, no per-output list. Both runtimes print the same text, on stderr, so stdout (the parsed result) is unchanged. Sizes count 1024 bytes to the KB, one decimal; under 1 KB in bytes. Python `knaif.batch_chain.failure_line` / `summary_line`, Rust `knaif_core::batch_chain`.",
+  "summary": [
+    {"done": 5, "failed": 0, "seconds": 3.14, "bytes": 12582912, "line": "5 done in 3.1s, 12.0 MB"},
+    {"done": 8, "failed": 2, "seconds": 12.44, "bytes": 36909875, "line": "8 done, 2 failed in 12.4s, 35.2 MB"},
+    {"done": 0, "failed": 3, "seconds": 0.5, "bytes": 0, "line": "0 done, 3 failed in 0.5s, 0 B"},
+    {"done": 2, "failed": 0, "seconds": 61.0, "bytes": 512, "line": "2 done in 61.0s, 512 B"},
+    {"done": 1, "failed": 1, "seconds": 0.04, "bytes": 1536, "line": "1 done, 1 failed in 0.0s, 1.5 KB"},
+    {"done": 4, "failed": 0, "seconds": 600.0, "bytes": 3221225472, "line": "4 done in 600.0s, 3.0 GB"}
+  ],
+  "failure": [
+    {"file": "silent.mov", "reason": "No audio to extract: silent.mov has no audio track.", "line": "✗ silent.mov: No audio to extract: silent.mov has no audio track."},
+    {"file": "videos\\broken.mov", "reason": "\n  moov atom not found\nbroken.mov: Invalid data found when processing input", "line": "✗ videos/broken.mov: moov atom not found"},
+    {"file": "locked.pdf", "reason": "", "line": "✗ locked.pdf: failed"}
+  ]
+}

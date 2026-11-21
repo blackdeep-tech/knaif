@@ -1,0 +1,302 @@
+{
+  "_comment": "L2 contract for the `alert_when_done` core tool (contracts/runtime/core_tools.yaml): a run option the model asks for, never a step that runs. `split` cases: given a parsed plan, the plan the pipeline goes on with and whether the run alerts (an alert is a desktop notification and a beep; the tool takes no args, and any the model gives it are ignored). `triggers` cases: whether a request brings the tool into the prompt (a whole word or phrase of its `triggers`, ignoring case, accents and a typographic apostrophe). Consumed by python/core/tests/test_alert_parity.py; the native consumer comes with the native mirror.",
+  "_expected_values": "Produced by the reference runtime (knaif.planner.split_alert, knaif.registry.triggered). DO NOT regenerate to make a failing test pass.",
+  "split": [
+    {
+      "name": "the_alert_leaves_the_plan",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4"
+          }
+        },
+        {
+          "tool": "alert_when_done",
+          "args": {
+            "kind": "beep"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected_alert": true
+    },
+    {
+      "name": "args_the_model_gives_the_alert_are_ignored",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4"
+          }
+        },
+        {
+          "tool": "alert_when_done",
+          "args": {
+            "kind": "desktop"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "mp4"
+          }
+        }
+      ],
+      "expected_alert": true
+    },
+    {
+      "name": "the_alert_may_stand_anywhere",
+      "plan": [
+        {
+          "tool": "alert_when_done",
+          "args": {}
+        },
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:05"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "trim_video",
+          "args": {
+            "input": "clip.mp4",
+            "end": "00:00:05"
+          }
+        }
+      ],
+      "expected_alert": true
+    },
+    {
+      "name": "two_alerts_are_one",
+      "plan": [
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": [
+              "a.pdf",
+              "b.pdf"
+            ],
+            "output": "m.pdf"
+          }
+        },
+        {
+          "tool": "alert_when_done",
+          "args": {
+            "kind": "beep"
+          }
+        },
+        {
+          "tool": "alert_when_done",
+          "args": {
+            "kind": "notify"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "merge_pdfs",
+          "args": {
+            "inputs": [
+              "a.pdf",
+              "b.pdf"
+            ],
+            "output": "m.pdf"
+          }
+        }
+      ],
+      "expected_alert": true
+    },
+    {
+      "name": "no_alert_is_no_change",
+      "plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "webm"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "convert_video",
+          "args": {
+            "inputs": [
+              "clip.mov"
+            ],
+            "container": "webm"
+          }
+        }
+      ],
+      "expected_alert": false
+    },
+    {
+      "name": "a_plan_that_only_clarifies_gets_no_alert",
+      "plan": [
+        {
+          "tool": "clarify",
+          "args": {
+            "question": "Which file?"
+          }
+        },
+        {
+          "tool": "alert_when_done",
+          "args": {
+            "kind": "beep"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "clarify",
+          "args": {
+            "question": "Which file?"
+          }
+        }
+      ],
+      "expected_alert": false
+    },
+    {
+      "name": "a_plan_that_only_rejects_gets_no_alert",
+      "plan": [
+        {
+          "tool": "reject",
+          "args": {
+            "reason": "Unsafe."
+          }
+        },
+        {
+          "tool": "alert_when_done",
+          "args": {
+            "kind": "notify"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "reject",
+          "args": {
+            "reason": "Unsafe."
+          }
+        }
+      ],
+      "expected_alert": false
+    },
+    {
+      "name": "an_alert_with_no_work_becomes_a_clarify",
+      "plan": [
+        {
+          "tool": "alert_when_done",
+          "args": {
+            "kind": "beep"
+          }
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "clarify",
+          "args": {
+            "question": "I can alert you when a task finishes, but there is no task in this request. What should I do first?"
+          }
+        }
+      ],
+      "expected_alert": false
+    },
+    {
+      "name": "done_alone_is_no_work_either",
+      "plan": [
+        {
+          "tool": "alert_when_done",
+          "args": {}
+        },
+        {
+          "tool": "done",
+          "args": {}
+        }
+      ],
+      "expected_plan": [
+        {
+          "tool": "clarify",
+          "args": {
+            "question": "I can alert you when a task finishes, but there is no task in this request. What should I do first?"
+          }
+        }
+      ],
+      "expected_alert": false
+    }
+  ],
+  "triggers": [
+    {
+      "utterance": "convert clip.mov to mp4 and beep when it's done",
+      "expected": true
+    },
+    {
+      "utterance": "compress clip.mp4, let me know when it's done",
+      "expected": true
+    },
+    {
+      "utterance": "trim clip.mp4 and NOTIFY me",
+      "expected": true
+    },
+    {
+      "utterance": "convert clip.mov, tell me when it finishes",
+      "expected": true
+    },
+    {
+      "utterance": "merge a.pdf and b.pdf, when it’s done ping me",
+      "expected": true
+    },
+    {
+      "utterance": "convert clip.mov to mp4",
+      "expected": false
+    },
+    {
+      "utterance": "beeper.mp4 to gif",
+      "expected": false
+    },
+    {
+      "utterance": "remove sound from clip.mp4",
+      "expected": false
+    },
+    {
+      "utterance": "Empty the recycle bin and the sandbox folder when you're done.",
+      "expected": false
+    },
+    {
+      "utterance": "I need to know whether sample.pdf mentions Delta",
+      "expected": false
+    },
+    {
+      "utterance": "tell me about the pdf at https://files.knaif.test/documents/report.pdf",
+      "expected": false
+    }
+  ]
+}

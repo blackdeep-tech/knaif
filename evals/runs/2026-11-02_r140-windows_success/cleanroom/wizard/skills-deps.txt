@@ -1,0 +1,10 @@
+﻿documents:
+  [MISS] ghostscript    (optional) not installed — Smart App Control blocks it on this PC
+  [MISS] libreoffice    (optional) install: download from https://www.libreoffice.org/download/download-libreoffice/
+  [MISS] tesseract      (optional) not installed — Smart App Control blocks it on this PC
+ffmpeg:
+  [MISS] ffmpeg         (required) not installed — Smart App Control blocks it on this PC
+The `ffmpeg` skill needs ffmpeg, which Smart App Control blocks on this PC: Windows runs only programs that are validly signed or that it trusts, and this one is not. It works only with Smart App Control off: Windows Security > App & browser control > Smart App Control.
+
+Smart App Control is on. Windows then runs only programs that are validly signed or that it trusts, and it blocks ghostscript, tesseract, ffmpeg (knaif itself is signed). They work only with Smart App Control off: Windows Security > App & browser control > Smart App Control.
+

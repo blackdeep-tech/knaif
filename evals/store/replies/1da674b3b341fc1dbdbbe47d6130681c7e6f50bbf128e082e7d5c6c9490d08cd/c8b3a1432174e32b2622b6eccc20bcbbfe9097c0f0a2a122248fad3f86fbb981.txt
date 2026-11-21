@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Reading system files is outside this skill's safety policy."}}]}

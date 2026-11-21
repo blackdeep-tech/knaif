@@ -1,0 +1,82 @@
+2026-11-06 18:44:54 START check (macos)
+2026-11-06 18:44:56 ABORTED check: unpacking sandbox/r140/ci/knaif-1.4.0-macos-arm64.zip failed
+2026-11-09 00:07:08 START check (macos)
+2026-11-09 00:07:14 END check: preflight passed
+2026-11-09 00:21:21 START check (macos)
+2026-11-09 00:21:27 END check: preflight passed
+2026-11-10 02:30:49 START l3 (macos)
+2026-11-10 03:44:13 l3 4b ffmpeg: parity_check exit 0 (bound 0.0411)
+2026-11-10 03:59:50 l3 4b documents: parity_check exit 0 (bound 0.0183)
+2026-11-10 04:34:41 l3 1.7b ffmpeg: parity_check exit 0 (bound 0.0411)
+2026-11-10 04:42:20 l3 1.7b documents: parity_check exit 0 (bound 0.0183)
+2026-11-10 04:42:20 END l3
+2026-11-18 19:45:56 START gpu (macos)
+2026-11-18 19:55:44 FAILED gpu: ffmpeg r140-mac-4b: the lane run failed (see evals/runs/2026-11-02_r140-macos_success/4b/metal/ffmpeg.log)
+2026-11-18 19:56:13 PAUSED gpu (operator): stopped by hand, because the owner had not approved gpu; the FAILED line above is that interrupt, not a lane failure
+2026-11-18 19:59:51 RESUMED gpu (owner)
+2026-11-18 19:59:56 START gpu (macos)
+2026-11-18 20:32:22 gpu ffmpeg r140-mac-4b: placement MTL0; store       : ad002156b6c0 holds 0 of 234 replies
+2026-11-18 20:33:39 gpu ffmpeg r140-mac-4b: safety exit 1
+2026-11-18 20:33:40 gpu 4b metal ffmpeg: NOT ACCEPTED - 3 of 255 thresholds unmet:
+2026-11-18 20:33:40 GATE MISS gpu: 4b metal ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-18 20:42:24 gpu documents r140-mac-4b: placement MTL0; store       : ad002156b6c0 holds 0 of 103 replies
+2026-11-18 20:42:34 gpu documents r140-mac-4b: safety exit 0
+2026-11-18 20:42:34 gpu 4b metal documents: ACCEPTED - 124 thresholds met.
+2026-11-18 21:04:31 gpu ffmpeg r140-mac-1.7b: placement MTL0; store       : 757b05355a66 holds 0 of 234 replies
+2026-11-18 21:05:06 gpu ffmpeg r140-mac-1.7b: safety exit 0
+2026-11-18 21:05:06 gpu 1.7b metal ffmpeg: NOT ACCEPTED - 1 of 255 thresholds unmet:
+2026-11-18 21:05:06 GATE MISS gpu: 1.7b metal ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-18 21:09:08 gpu documents r140-mac-1.7b: placement MTL0; store       : 757b05355a66 holds 0 of 103 replies
+2026-11-18 21:09:13 gpu documents r140-mac-1.7b: safety exit 0
+2026-11-18 21:09:13 GATE MISS gpu: 1.7b metal documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-18 21:09:13 END gpu: ran, with gate misses for the owner
+2026-11-18 21:09:24 START cpu (macos)
+2026-11-18 22:52:30 cpu ffmpeg r140-mac-cpu-4b: placement CPU; store       : e4476c3fc13b holds 0 of 234 replies
+2026-11-18 22:56:10 cpu ffmpeg r140-mac-cpu-4b: safety exit 1
+2026-11-18 22:56:10 cpu 4b cpu ffmpeg: NOT ACCEPTED - 4 of 255 thresholds unmet:
+2026-11-18 22:56:10 GATE MISS cpu: 4b cpu ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-18 23:16:36 cpu documents r140-mac-cpu-4b: placement CPU; store       : e4476c3fc13b holds 0 of 103 replies
+2026-11-18 23:16:58 cpu documents r140-mac-cpu-4b: safety exit 0
+2026-11-18 23:16:58 cpu 4b cpu documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-18 23:16:58 GATE MISS cpu: 4b cpu documents NOT ACCEPTED: goes to the owner
+2026-11-19 00:11:01 FAILED cpu: ffmpeg r140-mac-cpu-1.7b: the lane run failed (see evals/runs/2026-11-02_r140-macos_success/1.7b/cpu/ffmpeg.log)
+2026-11-19 00:21:24 cpu documents r140-mac-cpu-1.7b: placement CPU; store       : 5b09e0d0aa0a holds 0 of 103 replies
+2026-11-19 00:21:36 cpu documents r140-mac-cpu-1.7b: safety exit 0
+2026-11-19 00:21:36 GATE MISS cpu: 1.7b cpu documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-19 00:21:36 END cpu with failures
+2026-11-19 02:42:27 RESUMED cpu (owner)
+2026-11-19 02:42:27 START cpu (macos)
+2026-11-19 02:42:34 cpu 4b cpu ffmpeg: kept, finished in an earlier attempt of this stage
+2026-11-19 02:42:34 cpu 4b cpu ffmpeg: NOT ACCEPTED - 4 of 255 thresholds unmet:
+2026-11-19 02:42:34 GATE MISS cpu: 4b cpu ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-19 02:42:34 cpu 4b cpu documents: kept, finished in an earlier attempt of this stage
+2026-11-19 02:42:34 cpu 4b cpu documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-19 02:42:34 GATE MISS cpu: 4b cpu documents NOT ACCEPTED: goes to the owner
+2026-11-19 02:55:10 cpu ffmpeg r140-mac-cpu-1.7b: placement CPU; store       : 5b09e0d0aa0a holds 234 of 234 replies
+2026-11-19 02:57:00 cpu ffmpeg r140-mac-cpu-1.7b: safety exit 0
+2026-11-19 02:57:00 cpu 1.7b cpu ffmpeg: NOT ACCEPTED - 3 of 255 thresholds unmet:
+2026-11-19 02:57:00 GATE MISS cpu: 1.7b cpu ffmpeg NOT ACCEPTED: goes to the owner
+2026-11-19 02:57:00 cpu 1.7b cpu documents: kept, finished in an earlier attempt of this stage
+2026-11-19 02:57:00 GATE MISS cpu: 1.7b cpu documents: the cold-start sample did not hold; the cell re-runs live on the subset (Part I, I5)
+2026-11-19 02:57:00 END cpu: ran, with gate misses for the owner
+2026-11-19 02:57:00 START daemon (macos)
+2026-11-19 04:08:48 daemon 4b ffmpeg: IDENTICAL
+2026-11-19 04:15:17 daemon 4b documents: IDENTICAL
+2026-11-19 04:47:09 daemon 1.7b ffmpeg: IDENTICAL
+2026-11-19 04:50:04 daemon 1.7b documents: IDENTICAL
+2026-11-19 04:50:04 END daemon
+2026-11-19 04:50:04 START store (macos)
+2026-11-19 04:50:05 store: 1414 new or changed file(s) under evals/store to commit
+2026-11-19 04:50:05 END store
+2026-11-19 21:11:07 START live (macos)
+2026-11-19 21:14:52 live documents r140-mac-1.7b: placement MTL0; 
+2026-11-19 21:14:56 live documents r140-mac-1.7b: safety exit 0
+2026-11-19 21:14:57 live 1.7b metal documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-19 21:14:57 GATE MISS live: 1.7b metal documents NOT ACCEPTED: goes to the owner
+2026-11-19 21:14:57 END live: ran, with gate misses for the owner
+2026-11-19 21:15:00 START live (macos)
+2026-11-19 21:25:58 live documents r140-mac-cpu-1.7b: placement CPU; 
+2026-11-19 21:26:10 live documents r140-mac-cpu-1.7b: safety exit 0
+2026-11-19 21:26:10 live 1.7b cpu documents: NOT ACCEPTED - 1 of 124 thresholds unmet:
+2026-11-19 21:26:10 GATE MISS live: 1.7b cpu documents NOT ACCEPTED: goes to the owner
+2026-11-19 21:26:10 END live: ran, with gate misses for the owner

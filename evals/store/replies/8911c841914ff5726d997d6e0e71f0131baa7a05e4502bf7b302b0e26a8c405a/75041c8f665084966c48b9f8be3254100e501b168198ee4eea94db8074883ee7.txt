@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["clip_tiny.mov"], "container": "mp4", "target_size_mb": 15}}]}

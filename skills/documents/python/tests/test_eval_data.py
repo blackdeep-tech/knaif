@@ -46,6 +46,17 @@ _VALID_TOOLS = frozenset(
 )
 
 
+def _bundle_tools() -> frozenset[str]:
+    """Every tool the skill declares (`tools.yaml`): the 1.4.0 `split_pdf_every` and any later
+    one are known without a hand edit."""
+    from knaif.registry import load_registry
+
+    return frozenset(load_registry(Path(__file__).parents[2] / "tools.yaml"))
+
+
+_VALID_TOOLS = _VALID_TOOLS | _bundle_tools()
+
+
 @pytest.fixture(scope="module")
 def corpus():
     from knaif.evalsuite.corpus import load_corpus
@@ -76,21 +87,33 @@ def test_documents_expected_tools_are_known(corpus):
     assert not unknown
 
 
+def _folder_fixtures() -> frozenset[str]:
+    """A folder row's fixture (`batch_pdf/`) is one of the folders the fixture generator fills
+    (`FOLDER_DIRS`; the many-files rows, eval.jsonl since 2026-10-28)."""
+    import importlib.util
+
+    path = Path(__file__).parents[2] / "eval" / "fixtures.py"
+    spec = importlib.util.spec_from_file_location("documents_eval_fixtures", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return frozenset(f"{folder}/" for folder in module.FOLDER_DIRS)
+
+
 def test_documents_eval_fixtures_are_known(corpus):
-    unknown = [
-        (row.id, row.fixture)
-        for row in corpus
-        if row.fixture and row.fixture not in _VALID_FIXTURES
-    ]
+    valid = _VALID_FIXTURES | _folder_fixtures()
+    unknown = [(row.id, row.fixture) for row in corpus if row.fixture and row.fixture not in valid]
     assert not unknown
 
 
 def test_documents_plan_rows_have_success_criteria(corpus):
+    # A folder row is graded on the files it leaves (`expect_files`, `expect_gone`), not on
+    # `success_criteria` (the many-files rows, eval.jsonl since 2026-10-28).
     missing = [
         row.id
         for row in corpus
         if row.expected_outcome == "plan"
         and row.expected_tool not in {"compress_pdf"}
+        and not row.is_folder_row
         and not row.success_criteria
     ]
     assert not missing

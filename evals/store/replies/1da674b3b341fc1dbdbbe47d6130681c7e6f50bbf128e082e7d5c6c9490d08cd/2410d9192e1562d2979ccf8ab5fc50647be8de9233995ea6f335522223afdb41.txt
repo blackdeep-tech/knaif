@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "convert_video", "args": {"inputs": ["clip_trimmed.mp4"], "container": "mkv", "output": "clip_trimmed.mkv", "resize_video": {"inputs": ["clip_trimmed.mkv"], "height": 1080, "keep_aspect_ratio": true}}]}

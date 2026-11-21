@@ -106,10 +106,15 @@ fn every_plan_step_produces_an_output() {
     for case in doc["cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let steps = case["plan"]["plan"].as_array().unwrap().len();
+        // A step that writes many files (a split) says how many its case makes.
+        let want = case
+            .get("output_count")
+            .and_then(Value::as_u64)
+            .map_or(steps, |n| n as usize);
         let got = produced(&case["plan"], &base, &bundle);
         assert_eq!(
             got.len(),
-            steps,
+            want,
             "case {name}: {steps} plan steps produced {} outputs — a step was dropped or duplicated",
             got.len()
         );

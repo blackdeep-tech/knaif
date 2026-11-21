@@ -197,11 +197,14 @@ fn example_selection_parity_cases() {
             .map(|v| v.as_str().unwrap().to_string())
             .collect();
 
+        let alert: std::collections::HashSet<String> =
+            std::iter::once("alert_when_done".to_string()).collect();
         let selected = knaif_core::select_examples(
             &examples,
             &retrieved,
             case["query"].as_str().unwrap(),
             max_tool_examples,
+            &alert,
         );
         let got: Vec<&str> = selected.iter().map(|e| e.request.as_str()).collect();
         let want: Vec<&str> = case["expected_requests"]
@@ -269,6 +272,7 @@ fn example_selection_matches_the_shipped_bundles() {
             &set,
             utterance,
             knaif_core::MAX_TOOL_EXAMPLES,
+            &knaif_core::triggered_tools(&registry),
         );
         let got: Vec<&str> = selected.iter().map(|e| e.request.as_str()).collect();
         let want: Vec<&str> = row["expected_requests"]
@@ -413,10 +417,22 @@ fn nl_clarify_gate_parity_cases() {
         let registry =
             load_registry_str(reg_yaml).unwrap_or_else(|e| panic!("{name}: registry {e}"));
 
+        // The plain-word rule needs the folder's listing; absent means an empty folder.
+        let known_files: std::collections::HashSet<String> = case
+            .get("sandbox_files")
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(Value::as_str)
+                    .map(|s| s.to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
         let got = knaif_core::nl_clarify_gate(
             case["plan"].clone(),
             case["utterance"].as_str().unwrap(),
             &registry,
+            &known_files,
         );
         assert_eq!(
             got, case["expected_payload"],

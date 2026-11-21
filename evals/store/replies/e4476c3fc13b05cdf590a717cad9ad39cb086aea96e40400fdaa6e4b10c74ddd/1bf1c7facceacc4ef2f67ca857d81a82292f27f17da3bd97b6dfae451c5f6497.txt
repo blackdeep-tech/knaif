@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "adjust_speed", "args": {"inputs": ["input.mp4"], "speed": 0.5, "output": "input_slow.mp4"}}, {"tool": "convert_video", "args": {"inputs": ["input_slow.mp4"], "crf": 25}}]}

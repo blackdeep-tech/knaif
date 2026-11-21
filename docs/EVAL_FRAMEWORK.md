@@ -706,6 +706,47 @@ It writes `summary.json` and `summary.md` (both committed; the per-cell scoreboa
 them are not). Adopting a winner is a separate, deliberate act: re-lock the snapshot in its
 own commit with the new `prompt_config` recorded in it.
 
+### Retrieval quality on its own: `evalsuite retrieval`
+
+`uv run -m knaif.evalsuite retrieval` scores, with no model, whether `retrieve_tools` puts each
+row's expected tool in the top-k: recall@k and MRR per skill and per script (`ascii`, `latin`,
+`cjk`), gated against `evals/retrieval/2026-07-02_phase1.json`. A chain row counts there by its
+first tool; its own `chains` line asks whether **every** tool of the chain was shown, and is
+reported apart so the locked numbers keep their meaning.
+
+### Where a wrong row went wrong: `evalsuite error-split`
+
+A scoreboard says *that* a row failed, not *where*. Retrieval runs before the model and gates run
+after it, so a wrong answer can come from any of the three. `error-split` puts every row of a
+saved scoreboard in one bucket:
+
+| expected | buckets |
+|---|---|
+| a plan | `retriever_miss` (an expected tool was not shown, and the plan left it out) · `model_asked` / `model_refused` · `gate_asked` (the model planned; a validation gate asked instead) · `gate_invented_file` (the plan named a file the request never gave) · `wrong_tool` · `execution_failed` · `parse_error` · `arg_error` (right tools, score below 1) |
+| a question or a refusal | `acted_instead` · `refused_instead` · `asked_instead` · `parse_error` |
+
+A row with the right outcome and a full score is `correct` even when its tools differ from the
+corpus row's: the grade decides. Those rows are listed apart, because they usually mean the row
+names only the first tool of a chain.
+
+What each prompt showed is not in a scoreboard, so it is captured separately, and it must be
+captured with the retrieval code the scored run used (`--capture` runs this checkout's):
+
+```bash
+uv run -m knaif.evalsuite error-split --skill ffmpeg --capture shown.json
+uv run -m knaif.evalsuite error-split --skill ffmpeg --scoreboard <run>/ffmpeg_<model>_success.json \
+  --shown shown.json [--shown-now today.json] [--compare <other model's scoreboard>] --save <dir>
+```
+
+The report breaks the buckets down by language (per utterance: a row's paraphrases are often in
+other languages than its tags say) and by tag, compares the tools shown as served with today's,
+and, with `--compare`, pairs the two scoreboards row by row: bucket changes and McNemar's exact
+test. `evalsuite compare` prints the same paired test for every pair of backends it runs.
+
+Scoreboards written before the runner recorded `model_plan` store the plan after core's gates,
+so `gate_asked` and `gate_invented_file` are read from what the gates leave behind (a tool plan
+beside a `clarify` outcome; the invented-file gate's fixed question).
+
 ## CLI usage
 
 ```bash

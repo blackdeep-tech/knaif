@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Bulk-deleting documents would destroy your files; that is outside this skill's safety policy."}}]}

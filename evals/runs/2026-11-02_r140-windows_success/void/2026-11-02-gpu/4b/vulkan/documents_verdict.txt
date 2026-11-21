@@ -1,0 +1,9 @@
+
+=== L4 acceptance on the release subset: documents ===
+  baseline    : knaif-qwen3-4b-v2 / success
+  python run  : evals/runs/2026-10-28_relock-1.4.0_success/4b/documents_qwen3-4b-sft-v4-flat-q4_success.json
+  subset      : 103 utterances (corpus 45a535d1b25d)
+  coverage    : 1.0 (floor 1.0000)
+  planning    : batch, cold start 29/30 equal
+ACCEPTED - 124 thresholds met.
+  recorded L4 evidence: evals/acceptance/documents.json

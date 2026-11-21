@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "compress_video", "args": {"inputs": ["clip_4k.mp4"], "target_resolution": "1080p", "output": "clip_1080p.mp4"}}, {"tool": "prepare_for_platform", "args": {"inputs": ["clip_1080p.mp4"], "platform": "youtube", "preview": true}}]}

@@ -1,0 +1,8 @@
+2026-10-28 17:15:44 START run
+2026-10-28 17:15:44 run 4b ffmpeg
+2026-10-28 17:19:44 run 1.7b ffmpeg
+2026-10-28 17:23:13 ALL DONE run
+2026-10-28 17:23:13 START compare
+2026-10-28 17:23:13 compare 4b vs the 1.4.0 re-lock:  113 / 113 same grade 113 / 113 same plan 
+2026-10-28 17:23:14 compare 1.7b vs the 1.4.0 re-lock:  113 / 113 same grade 113 / 113 same plan 
+2026-10-28 17:23:14 ALL DONE compare

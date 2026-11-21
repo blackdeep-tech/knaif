@@ -176,7 +176,7 @@ jobs:
 
       # `just` itself comes from mise.toml, so this job needs mise even though its Rust pin
       # does not: the first run failed here with `just: command not found`. mise.toml and
-      # rust-toolchain.toml name the same 1.96.0 — the latter stays authoritative, and
+      # rust-toolchain.toml name the same 1.99.1 — the latter stays authoritative, and
       # rustup honours it whichever cargo ends up first on PATH.
       - uses: jdx/mise-action@v2
 

@@ -1,0 +1,45 @@
+{
+  "_comment": "Golden parity fixtures for declared effects: what a tool may do to the world, declared in tools.yaml as `effects: [...]` and read by both runtimes. The vocabulary is `fs.read`, `fs.write`, `net` and `exec:<program>` (a program name of lowercase letters, digits, `_` or `-`). `[]` declares a tool with no effects (an Intent that only expands, a pure lookup). A skill's or toolkit's tool that declares nothing is refused when the bundle loads; core control tools are core's and exempt. Each case loads `tools_yaml` as a registry and then applies the skill-bundle rule; `expected` maps each tool to its effects, sorted, or `error_contains` is a phrase the refusal must carry (the same phrase in both runtimes). Consumed by python/core/tests/test_effects_parity.py and native/crates/knaif-core/tests/effects_parity.rs. WHY: Python enforces declared effects at run time (ctx.exec, ctx.call_tool) and native validates them at load until a native context exists (audit F11); both runtimes must agree on what a declaration means.",
+  "cases": [
+    {
+      "name": "declared_effects_are_read",
+      "tools_yaml": "convert:\n  description: Convert a file.\n  required_args: [input]\n  effects: [fs.write, exec:ffmpeg, fs.read]\n",
+      "expected": {"convert": ["exec:ffmpeg", "fs.read", "fs.write"]}
+    },
+    {
+      "name": "an_empty_list_declares_no_effects",
+      "tools_yaml": "plan_it:\n  description: Expand into steps.\n  required_args: []\n  effects: []\n",
+      "expected": {"plan_it": []}
+    },
+    {
+      "name": "a_tool_without_effects_is_refused",
+      "tools_yaml": "convert:\n  description: Convert a file.\n  required_args: [input]\n",
+      "error_contains": "declares no effects"
+    },
+    {
+      "name": "an_unknown_effect_is_refused",
+      "tools_yaml": "wipe:\n  description: Wipe.\n  required_args: []\n  effects: [disk.wipe]\n",
+      "error_contains": "unknown effect"
+    },
+    {
+      "name": "exec_needs_a_program_name",
+      "tools_yaml": "run:\n  description: Run.\n  required_args: []\n  effects: [\"exec:\"]\n",
+      "error_contains": "unknown effect"
+    },
+    {
+      "name": "a_program_name_is_plain",
+      "tools_yaml": "run:\n  description: Run.\n  required_args: []\n  effects: [\"exec:../bin/sh\"]\n",
+      "error_contains": "unknown effect"
+    },
+    {
+      "name": "effects_must_be_a_list",
+      "tools_yaml": "read:\n  description: Read.\n  required_args: []\n  effects: fs.read\n",
+      "error_contains": "effects must be a list"
+    },
+    {
+      "name": "net_and_several_programs",
+      "tools_yaml": "fetch:\n  description: Fetch.\n  required_args: []\n  effects: [net, exec:gs, exec:soffice]\n",
+      "expected": {"fetch": ["exec:gs", "exec:soffice", "net"]}
+    }
+  ]
+}

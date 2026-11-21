@@ -1,0 +1,324 @@
+{
+  "_comment": "Output names (owner, 2026-10-23): how an ffmpeg step names what it writes. A file's own name, with the tool's suffix (_compressed, _trimmed, _audio, …) except convert_video, which keeps the plain name (beach.mov -> beach.mkv). A default name that is taken (on disk, an input, or another output of the same run) gets the first free number: beach_1.mkv, beach_2.mkv; this replaces _converted as the clash repair and the old source-name suffixes (beach_mp4.mkv). One literal output name over many files names none of them: each file keeps its own name, in the literal's folder. A name the user wrote for one file is kept as written, even when it exists (the CLIs ask before replacing it). The plan is rendered as a dry run in a folder holding `files` (empty); `expected_outputs` are the output paths, in command order, relative to that folder. Python skills/ffmpeg/python/tests/test_output_name_parity.py, Rust skills/ffmpeg/native/tests/output_name_parity.rs.",
+  "cases": [
+    {
+      "name": "convert to another format keeps the plain name",
+      "files": [
+        "beach.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach.mkv"
+      ],
+      "_why": "a format change cannot clash, so no suffix"
+    },
+    {
+      "name": "a default name that exists gets _1",
+      "files": [
+        "beach.mov",
+        "beach.mkv"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach_1.mkv"
+      ],
+      "_why": "owner 2026-10-23: never overwrite, number"
+    },
+    {
+      "name": "_1 taken too gets _2",
+      "files": [
+        "beach.mov",
+        "beach.mkv",
+        "beach_1.mkv"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach_2.mkv"
+      ],
+      "_why": "the first free number"
+    },
+    {
+      "name": "a same-format convert is numbered, never written over its input",
+      "files": [
+        "clip.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "clip.mp4"
+              ],
+              "container": "mp4"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "clip_1.mp4"
+      ],
+      "_why": "the input is taken"
+    },
+    {
+      "name": "two sources sharing a name in one run",
+      "files": [
+        "beach.mov",
+        "beach.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "beach.mp4"
+              ],
+              "container": "mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach.mkv",
+        "beach_1.mkv"
+      ],
+      "_why": "another output of the run is taken; replaces beach_mp4.mkv"
+    },
+    {
+      "name": "one literal name for many files: each keeps its own name",
+      "files": [
+        "beach.mov",
+        "city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ],
+              "container": "mkv",
+              "output": "mov.mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach.mkv",
+        "city.mkv"
+      ],
+      "_why": "replaces mov.mkv + mov_city.mkv"
+    },
+    {
+      "name": "one literal name for many, a tool with a suffix",
+      "files": [
+        "beach.mov",
+        "city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "extract_audio",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ],
+              "audio_format": "mp3",
+              "output": "audio.mp3"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach_audio.mp3",
+        "city_audio.mp3"
+      ],
+      "_why": "replaces audio.mp3 + audio_city.mp3"
+    },
+    {
+      "name": "one literal name for many keeps its folder",
+      "files": [
+        "beach.mov",
+        "city.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov",
+                "city.mov"
+              ],
+              "container": "mkv",
+              "output": "out/x.mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "out/beach.mkv",
+        "out/city.mkv"
+      ],
+      "_why": "only the literal's folder and extension are used"
+    },
+    {
+      "name": "other tools keep their suffix",
+      "files": [
+        "beach.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach_compressed.mp4"
+      ],
+      "_why": "they change the content, not the format"
+    },
+    {
+      "name": "a suffixed default that exists gets _1",
+      "files": [
+        "beach.mov",
+        "beach_compressed.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "compress_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ]
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "beach_compressed_1.mp4"
+      ],
+      "_why": "the same rule for every tool"
+    },
+    {
+      "name": "a name the user gave is kept",
+      "files": [
+        "beach.mov"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ],
+              "container": "mkv",
+              "output": "holiday.mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "holiday.mkv"
+      ],
+      "_why": "one file, one name: as given"
+    },
+    {
+      "name": "a name the user gave is kept even when it exists",
+      "files": [
+        "beach.mov",
+        "holiday.mkv"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "beach.mov"
+              ],
+              "container": "mkv",
+              "output": "holiday.mkv"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "holiday.mkv"
+      ],
+      "_why": "the skill never renames it; the CLI asks Replace?"
+    },
+    {
+      "name": "a gif keeps the plain name",
+      "files": [
+        "dog.mp4"
+      ],
+      "plan": {
+        "plan": [
+          {
+            "tool": "convert_video",
+            "args": {
+              "inputs": [
+                "dog.mp4"
+              ],
+              "container": "gif"
+            }
+          }
+        ]
+      },
+      "expected_outputs": [
+        "dog.gif"
+      ],
+      "_why": "a format change cannot clash, so no suffix"
+    }
+  ]
+}

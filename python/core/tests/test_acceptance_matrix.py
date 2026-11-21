@@ -241,6 +241,49 @@ def test_a_release_record_names_the_matrix_s_release(tree: Path) -> None:
         write_release_record(tree, "1.0.0", skills=["demo"])
 
 
+def test_a_minor_whose_matrix_was_not_bumped_is_recorded_saying_so(tree: Path) -> None:
+    """1.4.0: the matrix still named 1.3.0 at the freeze, and bumping it later stales every record.
+    The owner may record the release against that matrix by name, with a reason, and the record
+    says which matrix it used and why (owner, 2026-11-20)."""
+    import json
+
+    from knaif.evalsuite.gate import write_release_record
+
+    _matrix(tree)  # current_release 9.9.0
+    _contracts_and_l3(tree)
+    out = write_release_record(
+        tree, "9.10.0", skills=["demo"], matrix_release="9.9.0", reason="not bumped at the freeze"
+    )
+    release = json.loads((out / "release.json").read_text(encoding="utf-8"))
+    assert release["version"] == "9.10.0"
+    assert release["matrix_release"] == "9.9.0"
+    assert release["matrix_reason"] == "not bumped at the freeze"
+    assert release["matrix"]["models"] == [MODEL]
+
+
+@pytest.mark.parametrize(
+    ("version", "matrix_release", "reason", "match"),
+    [
+        ("9.10.0", "9.9.0", "", "reason"),  # no reason given
+        ("9.10.0", "9.8.0", "x", "9.9.0"),  # not the matrix's current release
+        ("9.8.0", "9.9.0", "x", "later"),  # an older release under a newer matrix
+        ("9.9.1", "9.9.0", "x", "later"),  # a patch keeps its minor's matrix: equivalences
+        ("9.10.0-rc1", "9.9.0", "x", "later"),
+    ],
+)
+def test_a_matrix_named_by_hand_is_refused_unless_it_fits(
+    tree: Path, version: str, matrix_release: str, reason: str, match: str
+) -> None:
+    from knaif.evalsuite.gate import write_release_record
+
+    _matrix(tree)
+    _contracts_and_l3(tree)
+    with pytest.raises(ValueError, match=match):
+        write_release_record(
+            tree, version, skills=["demo"], matrix_release=matrix_release, reason=reason
+        )
+
+
 def test_the_live_gate_ignores_release_records(tree: Path) -> None:
     from knaif.evalsuite.gate import write_release_record
 

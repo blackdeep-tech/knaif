@@ -363,6 +363,8 @@ SUCCESS_CRITERIA_FIELDS: dict[str, str] = {
     "filters": "List of substrings that must appear in filter arguments",
     "flags": "List of substrings that must appear as ffmpeg CLI flags",
     "frames": "Exact number of video frames the output must contain",
+    "no_larger_than": "Input file name the output must be no larger than (a compress)",
+    "max_audio_kbps": "Highest audio bitrate in kbit/s the output may carry",
 }
 
 
@@ -405,7 +407,7 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
         else:
             failed.append(f"filter:{filt} not in command")
 
-    for enc in ([criteria["encoder"]] if "encoder" in criteria else []):
+    for enc in [criteria["encoder"]] if "encoder" in criteria else []:
         if enc in command_text:
             matched.append(f"encoder:{enc}")
         else:
@@ -422,6 +424,8 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
         "max_size_kb",
         "duration_s",
         "frames",
+        "no_larger_than",
+        "max_audio_kbps",
     }
     has_file_criteria = any(k in criteria for k in _FILE_FIELDS)
 
@@ -512,6 +516,39 @@ def success(output: Any, criteria: dict[str, Any], sandbox: Path) -> VerifyResul
                 matched.append(f"max_size_kb<={want_kb:g} (got {got_kb:.0f} KB)")
             else:
                 failed.append(f"max_size_kb: expected <={want_kb:g} KB, got {got_kb:.0f} KB")
+
+    if "no_larger_than" in criteria:
+        # A compress that hands back a bigger file passed every compress row (2026-10-28: a
+        # container and codecs are all a bigger file needs). Same rule as documents': the input
+        # beside the artifact (each row runs in its own folder), else among the row's fixtures.
+        name = str(criteria["no_larger_than"])
+        final = Path(artifact_path)
+        places = [final.parent / name, Path(sandbox) / name]
+        fixture = getattr(output, "fixture_path", None)
+        if isinstance(fixture, (str, Path)):
+            # A folder row's fixture is the folder; a file row's, the file beside the others.
+            fixture = Path(fixture)
+            places.append((fixture if fixture.is_dir() else fixture.parent) / name)
+        source = next((p for p in places if p.is_file()), None)
+        if source is not None and final.stat().st_size <= source.stat().st_size:
+            matched.append(f"no_larger_than:{name}")
+        else:
+            had = source.stat().st_size if source is not None else None
+            failed.append(f"no_larger_than: {final.stat().st_size} bytes vs {name} {had}")
+
+    if "max_audio_kbps" in criteria:
+        # The compress that grew re-encoded 69k audio at 96k. Read off the stream, failing
+        # closed when there is no audio or no bitrate to read.
+        want = float(criteria["max_audio_kbps"])
+        try:
+            got = int((audio or {})["bit_rate"]) / 1000
+        except (KeyError, TypeError, ValueError):
+            failed.append("max_audio_kbps: could not read an audio bitrate from the output")
+        else:
+            if got <= want:
+                matched.append(f"max_audio_kbps<={want:g} (got {got:.0f})")
+            else:
+                failed.append(f"max_audio_kbps: expected <={want:g}, got {got:.0f}")
 
     if "container" in criteria:
         containers = [n.strip() for n in fmt.get("format_name", "").lower().split(",")]

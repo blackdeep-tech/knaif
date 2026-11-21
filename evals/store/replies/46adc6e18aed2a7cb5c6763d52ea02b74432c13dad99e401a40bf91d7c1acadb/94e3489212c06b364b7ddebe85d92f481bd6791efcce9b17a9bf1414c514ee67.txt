@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "rotate_pages", "args": {"input": "sample.pdf", "degrees": 90, "output": "sample_rotated.pdf"}}, {"tool": "compress_pdf", "args": {"input": "sample_rotated.pdf", "compress_quality": "balanced"}}]}

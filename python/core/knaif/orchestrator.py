@@ -77,6 +77,26 @@ class OllamaModelNotFoundError(RuntimeError):
     """
 
 
+#: The C callback that drops llama.cpp's log, kept alive for the whole process: llama.cpp calls
+#: it until the model is freed, at exit too.
+_QUIET_LOG: Any = None
+
+
+def _drop_log(level: int, text: bytes, user_data: Any) -> None:
+    return None
+
+
+def _quiet_llama_log(llama_cpp: Any) -> None:
+    """Turn llama.cpp's log off (and ggml's: `llama_log_set` sets both), as native does
+    (`send_logs_to_tracing`, logs disabled). llama-cpp-python's own callback prints to
+    `sys.stderr`: `llama_context: …` in a terminal, and "Exception ignored … llama_log_callback"
+    when it is called again while Python shuts down (owner, 2026-10-24)."""
+    global _QUIET_LOG
+    if _QUIET_LOG is None:
+        _QUIET_LOG = llama_cpp.llama_log_callback(_drop_log)
+    llama_cpp.llama_log_set(_QUIET_LOG, ctypes.c_void_p(0))
+
+
 def _perf_reset(llm: Any) -> None:
     """Zero llama.cpp's counters so the next call is measured alone, not cumulatively."""
     try:
@@ -158,6 +178,15 @@ def perf_timings(
     }
 
 
+def with_no_think(system: str) -> str:
+    """The system turn with Qwen3's `/no_think` suffix, as served when thinking is off.
+
+    The training set is built with this too (`python/training/build_dataset.py`), so the model
+    is tuned on the system turn it is served; native appends the same suffix (`llama.rs`).
+    """
+    return f"{system}\n\n/no_think" if system else "/no_think"
+
+
 class InferenceOrchestrator:
     """
     Orchestrates model inference for command planning.
@@ -178,6 +207,8 @@ class InferenceOrchestrator:
         self.ollama_url = ollama_url
         self.model_name = model_name
         self.model_config = model_config or {}
+        # The GGUF a llama.cpp backend loaded: the CLI names the model by it.
+        self.model_file: Path | None = None
         # Defaults to False: a JSON constraint demands valid JSON from the first token,
         # which a reasoning model cannot satisfy while emitting its preamble — the request
         # then hangs until it times out rather than failing fast. Opting in is a per-model
@@ -367,9 +398,14 @@ class InferenceOrchestrator:
             )
             return
 
+        self.model_file = full_path
         if verbose:
             print(f"Loading: {model_name}")
             print(f"   Path: {full_path}")
+        if not verbose:
+            import llama_cpp
+
+            _quiet_llama_log(llama_cpp)
         try:
             self.llm = Llama(
                 model_path=str(full_path),
@@ -437,7 +473,7 @@ class InferenceOrchestrator:
         # <think> block. No-op on other model families. llama.cpp has no native
         # thinking toggle in chat completions, unlike Ollama 0.5+.
         if not self.thinking_enabled:
-            return f"{system}\n\n/no_think" if system else "/no_think"
+            return with_no_think(system)
         return system
 
     def infer(

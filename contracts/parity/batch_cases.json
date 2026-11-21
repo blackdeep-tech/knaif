@@ -1,0 +1,208 @@
+{
+  "_comment": "Folder and glob order (owner, 2026-10-19): a glob or a folder expands to its files in natural order, numbers counted as numbers (clip1, clip2, clip10), any case, ties (clip02 / clip2) by the name as written. One order for every tool, so a merge and a batch agree. Each entry expands on its own and the entries keep their order. `files` are created under a fresh folder (with their own folders), `paths` are resolved against it, `expected` are the results relative to it. `exclude` drops a glob's or a folder's match that is one of the given paths (a join's own output, which a second run would otherwise read back); a file named on its own is kept. Python: the fs toolkit's `resolve_inputs` (knaif.batch_chain.natural_key); Rust: `knaif_toolkit_fs::resolve_inputs`.",
+  "expand": [
+    {
+      "name": "a glob counts numbers as numbers",
+      "files": [
+        "clip10.mp4",
+        "clip2.mp4",
+        "clip1.mp4"
+      ],
+      "paths": [
+        "*.mp4"
+      ],
+      "expected": [
+        "clip1.mp4",
+        "clip2.mp4",
+        "clip10.mp4"
+      ]
+    },
+    {
+      "name": "a folder lists its files in the same order",
+      "files": [
+        "clips/clip10.mp4",
+        "clips/clip2.mp4",
+        "clips/clip1.mp4"
+      ],
+      "paths": [
+        "clips"
+      ],
+      "expected": [
+        "clips/clip1.mp4",
+        "clips/clip2.mp4",
+        "clips/clip10.mp4"
+      ]
+    },
+    {
+      "name": "case does not decide the order",
+      "files": [
+        "City.mov",
+        "apple.mov",
+        "Beach.mov"
+      ],
+      "paths": [
+        "*.mov"
+      ],
+      "expected": [
+        "apple.mov",
+        "Beach.mov",
+        "City.mov"
+      ]
+    },
+    {
+      "name": "a zero-padded number ties, then the name decides",
+      "files": [
+        "clip2.mp4",
+        "clip02.mp4",
+        "clip1.mp4"
+      ],
+      "paths": [
+        "*.mp4"
+      ],
+      "expected": [
+        "clip1.mp4",
+        "clip02.mp4",
+        "clip2.mp4"
+      ]
+    },
+    {
+      "name": "every number in the name counts",
+      "files": [
+        "s2e1.mkv",
+        "s1e10.mkv",
+        "s1e2.mkv"
+      ],
+      "paths": [
+        "*.mkv"
+      ],
+      "expected": [
+        "s1e2.mkv",
+        "s1e10.mkv",
+        "s2e1.mkv"
+      ]
+    },
+    {
+      "name": "numbers after a space",
+      "files": [
+        "page 10.pdf",
+        "page 9.pdf",
+        "page 1.pdf"
+      ],
+      "paths": [
+        "*.pdf"
+      ],
+      "expected": [
+        "page 1.pdf",
+        "page 9.pdf",
+        "page 10.pdf"
+      ]
+    },
+    {
+      "name": "entries keep their order, each sorted on its own",
+      "files": [
+        "intro.mp4",
+        "parts/p10.mp4",
+        "parts/p2.mp4"
+      ],
+      "paths": [
+        "intro.mp4",
+        "parts/*.mp4"
+      ],
+      "expected": [
+        "intro.mp4",
+        "parts/p2.mp4",
+        "parts/p10.mp4"
+      ]
+    },
+    {
+      "name": "a filtered glob keeps the order",
+      "files": [
+        "notes.txt",
+        "clip10.mp4",
+        "clip9.mp4"
+      ],
+      "paths": [
+        "*"
+      ],
+      "extensions": [
+        "mp4"
+      ],
+      "expected": [
+        "clip9.mp4",
+        "clip10.mp4"
+      ]
+    },
+    {
+      "name": "a filtered folder keeps the order",
+      "files": [
+        "batch/b10.pdf",
+        "batch/b9.pdf",
+        "batch/readme.txt"
+      ],
+      "paths": [
+        "batch"
+      ],
+      "extensions": [
+        "pdf"
+      ],
+      "expected": [
+        "batch/b9.pdf",
+        "batch/b10.pdf"
+      ]
+    },
+    {
+      "name": "a join's own output is not one of its matches",
+      "files": [
+        "clip1.mp4",
+        "all.mp4",
+        "clip2.mp4"
+      ],
+      "paths": [
+        "*.mp4"
+      ],
+      "exclude": [
+        "all.mp4"
+      ],
+      "expected": [
+        "clip1.mp4",
+        "clip2.mp4"
+      ]
+    },
+    {
+      "name": "nor in a folder",
+      "files": [
+        "docs/b.pdf",
+        "docs/a.pdf",
+        "docs/all.pdf"
+      ],
+      "paths": [
+        "docs"
+      ],
+      "exclude": [
+        "docs/all.pdf"
+      ],
+      "expected": [
+        "docs/a.pdf",
+        "docs/b.pdf"
+      ]
+    },
+    {
+      "name": "a file named on its own stays",
+      "files": [
+        "a.pdf",
+        "all.pdf"
+      ],
+      "paths": [
+        "all.pdf",
+        "a.pdf"
+      ],
+      "exclude": [
+        "all.pdf"
+      ],
+      "expected": [
+        "all.pdf",
+        "a.pdf"
+      ]
+    }
+  ]
+}

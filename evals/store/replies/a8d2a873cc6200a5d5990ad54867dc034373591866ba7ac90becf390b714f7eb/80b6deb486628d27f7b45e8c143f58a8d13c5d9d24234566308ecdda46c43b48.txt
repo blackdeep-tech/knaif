@@ -1,0 +1,5 @@
+<think>
+
+</think>
+
+{"plan": [{"tool": "reject", "args": {"reason": "Overwriting the original source file would destroy it; outputs are written alongside."}}]}
