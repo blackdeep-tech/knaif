@@ -262,9 +262,10 @@ check-contracts:
 
 # At the tag: keep the acceptance records and the gate's verdict for this release under
 # evals/acceptance/releases/<version>/ (written once). e.g.: just release-record 1.2.0
-# A matrix nobody bumped at the freeze: just release-record 1.4.0 --matrix-release 1.3.0 --reason '...'
-release-record version *args:
-    uv run python -m knaif.evalsuite gate --release-record {{version}} {{args}}
+# A matrix nobody bumped at the freeze, by name and with a reason (no apostrophes in it):
+#   just release-record 1.4.0 1.3.0 "the matrix was not bumped at the freeze"
+release-record version matrix_release="" reason="":
+    uv run python -m knaif.evalsuite gate --release-record {{version}} {{ if matrix_release != "" { "--matrix-release " + matrix_release + " --reason " + quote(reason) } else { "" } }}
 
 # G1/G2 — a skill may not claim a native status its evidence does not support. Reads
 # contracts/release/native_status.yaml; `supported` needs an L4 acceptance record, `parity`

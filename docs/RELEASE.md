@@ -1016,7 +1016,8 @@ except a patch of it whose results an equivalence named `<ver>-…` carried over
 minor's matrix: editing the contract would stale every record). That record names the release it
 was carried from and the equivalence. A later minor or major whose matrix nobody bumped at the
 freeze (§0) is recorded against the matrix's current release by name, with the owner's reason:
-`just release-record 1.4.0 --matrix-release 1.3.0 --reason '…'`; the record keeps both.
+`just release-record 1.4.0 1.3.0 "<reason>"` (gate's `--matrix-release 1.3.0 --reason`); the record
+keeps both. The recipe quotes the reason; leave apostrophes out of it.
 
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
