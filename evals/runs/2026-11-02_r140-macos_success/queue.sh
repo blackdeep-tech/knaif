@@ -17,7 +17,7 @@ set -uo pipefail
 R="evals/runs/2026-11-02_r140-macos_success"
 RELAY_REPO=blackdeep-tech/knaif
 RELAY_TITLE="1.4.0 macOS evidence and clean room"
-RELAY_AUTHORS="GalinDinkov,masterpigz"
+RELAY_AUTHORS="GalinDinkov"
 : "${MAC_HEAD:?MAC_HEAD=<fork owner>:<branch> names the PR head}" "${MAC_REMOTE:?MAC_REMOTE names the fork remote}"
 # shellcheck source=../../../scripts/release_queue.sh
 source scripts/release_queue.sh

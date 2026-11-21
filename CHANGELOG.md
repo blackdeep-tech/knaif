@@ -5,7 +5,7 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.0] — 2026-10-30
+## [1.4.0] — 2026-11-21
 
 **Links, many files at once, and "beep when done".** Same models as 1.2.0 (`knaif-qwen3-4b-v2`
 and `knaif-qwen3-1.7b-v2`). A request can name a file by its link, cover every file in a folder,
