@@ -149,6 +149,13 @@ The bump happens **at freeze, on the release branch** — never on `main` or on 
 Tags are semver (`v*.*.*`) — use `v1.0.0`, never a bare `v1`. Per-skill `skills/*/skill.yaml`
 versions are a **separate namespace** and are deliberately not bumped in step.
 
+**A minor or major also bumps the acceptance matrix at the freeze, before any evidence:**
+`contracts/release/acceptance_matrix.yaml` gets the release's entry and `current_release` names
+it. It is a contract, so editing it later moves the `contracts` fingerprint and stales every
+L1–L4 record; and `release-record` refuses a version the matrix does not name. 1.4.0 froze
+without it (found by the Codex audit, 2026-11-20) and was recorded against 1.3.0's identical
+matrix with `--matrix-release` (§5). A patch keeps its minor's matrix.
+
 The model manifest is a **bill of materials, not a live catalog**: it ships inside the artifact and
 binds the release to the models it was tested with. `python/core/tests/test_model_manifest_release_ready.py`
 fails the build if a recommended model still has `url: TODO` (since default-model auto-select, the
@@ -1007,7 +1014,9 @@ go stale on `main` as soon as anything changes, as they should. The copy is what
 was true for `<ver>`?" later. It refuses a version other than the acceptance matrix's release,
 except a patch of it whose results an equivalence named `<ver>-…` carried over (a patch keeps its
 minor's matrix: editing the contract would stale every record). That record names the release it
-was carried from and the equivalence.
+was carried from and the equivalence. A later minor or major whose matrix nobody bumped at the
+freeze (§0) is recorded against the matrix's current release by name, with the owner's reason:
+`just release-record 1.4.0 --matrix-release 1.3.0 --reason '…'`; the record keeps both.
 
 The tag and every release URL must be **born in the final org** — never redirected into it. The
 repository home is `blackdeep-tech/knaif`, created **fresh** rather than transferred, so no release
