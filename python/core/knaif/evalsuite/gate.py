@@ -1422,11 +1422,22 @@ def record_from_parity_run(skill: str, root: Path, run_dir: Path) -> Path:
 RELEASES_DIR = ACCEPTANCE_DIR / "releases"
 
 
+def _is_later_minor(version: str, base: str) -> bool:
+    """`1.4.0` is a later minor (or major) than `1.3.0`: plain semver, a higher major.minor."""
+    parts = [p.split(".") for p in (version, base)]
+    if not all(len(p) == 3 and all(x.isdigit() for x in p) for p in parts):
+        return False
+    (vmaj, vmin, _), (bmaj, bmin, _) = parts
+    return (int(vmaj), int(vmin)) > (int(bmaj), int(bmin))
+
+
 def write_release_record(
     root: Path,
     version: str,
     skills: list[str] | None = None,
     native_binary: Path | list[Path] | None = None,
+    matrix_release: str | None = None,
+    reason: str | None = None,
 ) -> Path:
     """Keep what was true for *version*: the acceptance records and the gate's verdict at the tag.
 
@@ -1437,12 +1448,31 @@ def write_release_record(
     another's number would be a false statement about that release. The one exception is a patch
     of that release whose results an honoured equivalence named `<patch>-…` carried over (1.2.1):
     its record says so in `carried_from` and `equivalences`.
+
+    *matrix_release* (with a *reason*) is the owner's way past a matrix nobody bumped at the
+    freeze (1.4.0): bumping it afterwards moves the `contracts` fingerprint and stales every
+    record. It must be the matrix's current release, *version* a later minor or major, and the
+    record keeps both, so it never reads as that release's own matrix (owner, 2026-11-20).
     """
     from .matrix import load_matrix
 
     matrix = load_matrix(root)
     carried: list[str] = []
-    if matrix is not None and matrix["current_release"] != version:
+    if matrix_release is not None:
+        if not (reason or "").strip():
+            raise ValueError("naming the matrix by hand needs a reason, written into the record")
+        current = matrix["current_release"] if matrix is not None else None
+        if matrix_release != current:
+            raise ValueError(
+                f"the acceptance matrix's current release is {current}, not {matrix_release}"
+            )
+        if not _is_later_minor(version, matrix_release):
+            raise ValueError(
+                f"{version} is not a later minor or major than {matrix_release}; a patch keeps its "
+                "minor's matrix through an equivalence, and an older release is never recorded "
+                "under a newer matrix"
+            )
+    elif matrix is not None and matrix["current_release"] != version:
         # A patch keeps its minor's matrix: bumping the contract moves the `contracts`
         # fingerprint and stales every record. It may be recorded under its own number only
         # when an honoured equivalence named for it carried the results over.
@@ -1480,12 +1510,17 @@ def write_release_record(
             "derived": gate.derived,
             "layers": {s.layer: {"state": s.state, "detail": s.detail} for s in gate.layers},
         }
-    matrix_release = matrix["current_release"] if carried and matrix else version
-    release = (matrix or {}).get("releases", {}).get(matrix_release) if matrix else None
+    named = matrix_release
+    if named is None:
+        named = matrix["current_release"] if carried and matrix else version
+    release = (matrix or {}).get("releases", {}).get(named) if matrix else None
     doc: dict[str, Any] = {"version": version, "skills": verdicts, "matrix": release}
     if carried:
-        doc["carried_from"] = matrix_release
+        doc["carried_from"] = named
         doc["equivalences"] = carried
+    if matrix_release is not None:
+        doc["matrix_release"] = matrix_release
+        doc["matrix_reason"] = reason
     (out / "release.json").write_text(
         json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
