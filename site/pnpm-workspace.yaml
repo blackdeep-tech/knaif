@@ -7,3 +7,9 @@ packages:
   - dev
 allowBuilds:
   esbuild: true
+# Security floors for transitive dependencies that the packages using them pin below a fix.
+# undici (via Astro's font provider `unifont`, build time only): advisories fixed in 8.13.0;
+# Dependabot could not raise it itself, because pnpm resolves a transitive one to the newest
+# (2026-11-21).
+overrides:
+  undici: ">=8.13.0 <9"
