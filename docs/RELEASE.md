@@ -1057,6 +1057,15 @@ that path once against throwaway outputs:
    `release.yml`, which uploads the Linux artifacts to a draft Release. Add the Windows artifacts,
    and the macOS `.zip` and `.pkg` from the freeze-time run (§2, *macOS*) after checking their
    sha256 against that run's summary: `gh release upload vX.Y.Z <files>`.
+   - **The draft's Linux files are rebuilt at the tag, not the tested ones.** Replace them with the
+     files the evidence measured (`dist/`, sha256 as the Linux run script names) with
+     `gh release upload vX.Y.Z <files> --clobber`, and delete any extra the job attached (1.3.0:
+     a stray `.AppImage.sha256`). The release ships the bytes the evidence names, on every OS.
+   - **The CUDA payload files that moved to this release** (§7, step 3): upload exactly the files
+     whose `url:` in `contracts/backends/backend-manifest.yaml` points at
+     `releases/download/vX.Y.Z/`, checked against the manifest's `sha256`. A file that kept an
+     older release's URL is not uploaded again. 1.4.0: `ggml-cuda.dll` and `libggml-cuda.so`
+     only. Without them `knaif backend install cuda` gets a 404 once the release is public.
 5. **Publish** the GitHub Release on that tag: upload the artifacts + `SHA256SUMS`, draft → publish,
    public. Re-run `installers/smoke.sh` on the staged set first; it takes seconds and is the last
    chance to catch a stale artifact.
@@ -1067,7 +1076,9 @@ that path once against throwaway outputs:
    does not exempt a binary from Defender's heuristics, and an installer that ships loadable
    `ggml-*.dll` backends and then downloads a 2.5 GB file is the shape that draws a false positive.
    Note the submission IDs in the release index.
-7. **Refresh the website's download data — now automatic.** Publishing the release fires
+7. **Refresh the website's download data.** Expect the local fallback, `just release-data` on a
+   branch and your own PR: the workflow below could not push its branch in 1.2.1 or 1.3.0, because
+   the `restrict-creations` ruleset lets only repository admins create branches. Publishing the release fires
    `.github/workflows/release-data.yml`, which regenerates `site/data/release.json` and
    **pushes a branch** if it changed; the run summary links straight to the compare page.
    Open that PR and merge it. The knaif.org download buttons are built from that snapshot
@@ -1092,6 +1103,12 @@ that path once against throwaway outputs:
    `knaif --version`, `knaif skills list` and one real request. **A cask, never a formula:** a
    formula install rewrites the bundled `.dylib` install names and re-signs them ad hoc, and the
    Developer ID `knaif` then refuses to load them ("different Team IDs", 1.3.0, 2026-10-16).
+10. **Update the Scoop bucket** (Windows; the README and knaif.org advertise
+    `scoop install knaif/knaif`). Render `bucket/knaif.json` from the published Windows `.zip` —
+    the file `SHA256SUMS` covers — with `installers/windows/scoop/render-manifest.sh` (on
+    `feat/package-managers` until that branch lands) and commit it to
+    `blackdeep-tech/scoop-knaif`. Check it on Windows: `scoop update`, `scoop update knaif` (or
+    `scoop install knaif/knaif`), `knaif --version`.
 
 ---
 
@@ -1328,7 +1345,9 @@ whole reason for the split.
 
 **3. Upload the product half to the release tag**, alongside the normal artifacts. Everything the
 fragment tags `product`: the ggml CUDA lib, `llama.cpp-LICENSE.txt`, and on Windows the four VC++
-runtime DLLs.
+runtime DLLs — **except a file whose bytes did not change**: it keeps the older release's URL in the
+manifest and is not uploaded again (1.4.0 uploads only the two ggml CUDA libs; the licence and the
+VC++ DLLs stay at `v1.2.0`). The manifest's `url:` lines are the upload list.
 
 Both licence texts are payload files that land on the user's disk, not release-page attachments —
 under loose-file publishing the page is not what reaches a user. Omitting the EULA breaks the
