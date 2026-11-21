@@ -1,0 +1,793 @@
+{
+  "skill": "documents",
+  "layers": {
+    "L1": {
+      "summary": "contracts/parity/* green on both runtimes",
+      "evidence": {
+        "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+        "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+        "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+        "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+        "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+        "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+        "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+        "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+        "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+        "policy": "3",
+        "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
+      }
+    },
+    "L2": {
+      "summary": "deterministic pipeline + ordered execution green",
+      "evidence": {
+        "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+        "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+        "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+        "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+        "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+        "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+        "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+        "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+        "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+        "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+        "policy": "3",
+        "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7"
+      }
+    },
+    "L4": {
+      "cells": {
+        "knaif-qwen3-4b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\runs\\2026-11-02_r140-windows_success\\4b\\cuda\\documents_r140-win-4b_success.json",
+          "summary": "ACCEPTED - 124 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9611650485436893,
+          "avg_knaif_score": 0.989426523297491,
+          "lane": "r140-win-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "planning": "batch",
+          "replies": {
+            "measured": 0,
+            "reused": 103,
+            "namespace": "3987ff3172e7502f6018a2fc1d05cfe9ab137927d7c2d1355878685943b930dc"
+          }
+        },
+        "knaif-qwen3-4b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\runs\\2026-11-02_r140-windows_success\\4b\\vulkan\\documents_r140-win-4b_success.json",
+          "summary": "ACCEPTED - 124 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9611650485436893,
+          "avg_knaif_score": 0.989426523297491,
+          "lane": "r140-win-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "planning": "batch",
+          "replies": {
+            "measured": 0,
+            "reused": 103,
+            "namespace": "59a0e55c29d14232860428afa4f31c651416bbeb572f0fe3ad1b01646583f2b7"
+          }
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|cuda": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\cuda\\live\\documents_r140-win-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9029126213592233,
+          "avg_knaif_score": 0.9977528089887641,
+          "lane": "r140-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|cuda",
+            "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\cuda\\live\\documents_r140-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
+          }
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|vulkan": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\vulkan\\live\\documents_r140-win-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9029126213592233,
+          "avg_knaif_score": 0.9977528089887641,
+          "lane": "r140-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|vulkan",
+            "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\vulkan\\live\\documents_r140-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
+          }
+        },
+        "knaif-qwen3-4b-v2|windows-x64|cpu": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\runs\\2026-11-02_r140-windows_success\\4b\\cpu\\documents_r140-win-4b_success.json",
+          "summary": "ACCEPTED - 124 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9611650485436893,
+          "avg_knaif_score": 0.989426523297491,
+          "lane": "r140-win-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "planning": "batch",
+          "replies": {
+            "measured": 103,
+            "reused": 0,
+            "namespace": "f3ed8ca27305ac9606e0e09648417258952aca9667e396a3c10594e723f816d2"
+          }
+        },
+        "knaif-qwen3-1.7b-v2|windows-x64|cpu": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\cpu\\live\\documents_r140-win-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.912621359223301,
+          "avg_knaif_score": 0.9922222222222222,
+          "lane": "r140-win-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|windows-x64|cpu",
+            "run": "evals\\runs\\2026-11-02_r140-windows_success\\1.7b\\cpu\\live\\documents_r140-win-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
+          }
+        },
+        "knaif-qwen3-4b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "3fba8a0fdfa975d9db4e847d954d8fa94264b626faee485abe9e18f48f73811b"
+          },
+          "run": "evals/runs/2026-11-02_r140-linux_success/4b/cuda/documents_r140-linux-4b_success.json",
+          "summary": "ACCEPTED - 124 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9611650485436893,
+          "avg_knaif_score": 0.989426523297491,
+          "lane": "r140-linux-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "planning": "batch",
+          "replies": {
+            "measured": 0,
+            "reused": 103,
+            "namespace": "3d53bc32f3732df7979a9c9141597117baa30b14606064939720d084f557fa56"
+          }
+        },
+        "knaif-qwen3-1.7b-v2|linux-x64|cuda": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "3fba8a0fdfa975d9db4e847d954d8fa94264b626faee485abe9e18f48f73811b"
+          },
+          "run": "evals/runs/2026-11-02_r140-linux_success/1.7b/cuda/live/documents_r140-linux-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9029126213592233,
+          "avg_knaif_score": 0.9977528089887641,
+          "lane": "r140-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02, extended to Linux 2026-11-03 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|linux-x64|cuda",
+            "run": "evals/runs/2026-11-02_r140-linux_success/1.7b/cuda/live/documents_r140-linux-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "3fba8a0fdfa975d9db4e847d954d8fa94264b626faee485abe9e18f48f73811b"
+            }
+          }
+        },
+        "knaif-qwen3-4b-v2|linux-x64|cpu": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "3fba8a0fdfa975d9db4e847d954d8fa94264b626faee485abe9e18f48f73811b"
+          },
+          "run": "evals/runs/2026-11-02_r140-linux_success/4b/cpu/documents_r140-linux-4b_success.json",
+          "summary": "ACCEPTED - 124 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9611650485436893,
+          "avg_knaif_score": 0.989426523297491,
+          "lane": "r140-linux-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "planning": "batch",
+          "replies": {
+            "measured": 103,
+            "reused": 0,
+            "namespace": "8911c841914ff5726d997d6e0e71f0131baa7a05e4502bf7b302b0e26a8c405a"
+          }
+        },
+        "knaif-qwen3-1.7b-v2|linux-x64|cpu": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "3fba8a0fdfa975d9db4e847d954d8fa94264b626faee485abe9e18f48f73811b"
+          },
+          "run": "evals/runs/2026-11-02_r140-linux_success/1.7b/cpu/live/documents_r140-linux-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9029126213592233,
+          "avg_knaif_score": 0.9977528089887641,
+          "lane": "r140-linux-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02, extended to Linux 2026-11-03 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|linux-x64|cpu",
+            "run": "evals/runs/2026-11-02_r140-linux_success/1.7b/cpu/live/documents_r140-linux-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "3fba8a0fdfa975d9db4e847d954d8fa94264b626faee485abe9e18f48f73811b"
+            }
+          }
+        },
+        "knaif-qwen3-4b-v2|macos|mtl": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+          },
+          "run": "evals/runs/2026-11-02_r140-macos_success/4b/metal/documents_r140-mac-4b_success.json",
+          "summary": "ACCEPTED - 124 thresholds met.",
+          "passed": true,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9611650485436893,
+          "avg_knaif_score": 0.989426523297491,
+          "lane": "r140-mac-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "planning": "batch",
+          "replies": {
+            "measured": 103,
+            "reused": 0,
+            "namespace": "ad002156b6c08b212cc891e31de1b2c46744b64817846bca61b657d2d2098645"
+          }
+        },
+        "knaif-qwen3-1.7b-v2|macos|mtl": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+          },
+          "run": "evals/runs/2026-11-02_r140-macos_success/1.7b/metal/live/documents_r140-mac-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9029126213592233,
+          "avg_knaif_score": 0.9977528089887641,
+          "lane": "r140-mac-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-19",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02, extended to macOS 2026-11-19 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|macos|mtl",
+            "run": "evals/runs/2026-11-02_r140-macos_success/1.7b/metal/live/documents_r140-mac-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+            }
+          }
+        },
+        "knaif-qwen3-4b-v2|macos|cpu": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+          },
+          "run": "evals/runs/2026-11-02_r140-macos_success/4b/cpu/documents_r140-mac-cpu-4b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_004#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: inspect_document -> '{\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\"}}]}'; binary: clarify -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.9514563106796117,
+          "avg_knaif_score": 0.9893115942028985,
+          "lane": "r140-mac-cpu-4b",
+          "model": "knaif-qwen3-4b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "planning": "batch",
+          "replies": {
+            "measured": 103,
+            "reused": 0,
+            "namespace": "e4476c3fc13b05cdf590a717cad9ad39cb086aea96e40400fdaa6e4b10c74ddd"
+          },
+          "owner_exception": {
+            "date": "2026-11-19",
+            "reason": "documents_url_004 (the macOS CPU only): a per-row difference the owner accepted with both plans and commands (I3), 2026-11-19 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_004#0: Python passed it, the binary did not ('clarify', expected 'plan'). Python: inspect_document -> '{\"plan\": [{\"tool\": \"inspect_document\", \"args\": {\"input\": \"https://files.knaif.test/documents/report.pdf\"}}]}'; binary: clarify -> None",
+            "cell": "knaif-qwen3-4b-v2|macos|cpu",
+            "run": "evals/runs/2026-11-02_r140-macos_success/4b/cpu/documents_r140-mac-cpu-4b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+            }
+          }
+        },
+        "knaif-qwen3-1.7b-v2|macos|cpu": {
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+          },
+          "run": "evals/runs/2026-11-02_r140-macos_success/1.7b/cpu/live/documents_r140-mac-cpu-1.7b_success.json",
+          "summary": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+          "passed": false,
+          "coverage": 1.0,
+          "outcome_accuracy": 0.912621359223301,
+          "avg_knaif_score": 0.9922222222222222,
+          "lane": "r140-mac-cpu-1.7b",
+          "model": "knaif-qwen3-1.7b-v2",
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "rows": 103
+          },
+          "owner_exception": {
+            "date": "2026-11-19",
+            "reason": "documents_url_010: per-row differences the owner accepted with both plans and commands (I3), 2026-11-02, extended to macOS 2026-11-19 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "NOT ACCEPTED - 1 of 124 thresholds unmet: [regression] documents_url_010#0: Python passed it, the binary did not ('error', expected 'clarify'). Python: clarify -> None; binary: no plan -> None",
+            "cell": "knaif-qwen3-1.7b-v2|macos|cpu",
+            "run": "evals/runs/2026-11-02_r140-macos_success/1.7b/cpu/live/documents_r140-mac-cpu-1.7b_success.json",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "2cde7dc447d5785ab4c668598b3e0089a5f588459aa6feec0e6ab8e349dfd9bf"
+            }
+          }
+        }
+      }
+    },
+    "L3": {
+      "cells": {
+        "knaif-qwen3-4b-v2": {
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116"
+          },
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\parity\\2026-11-02_r140-win-l3-4b-documents",
+          "summary": "2026-11-02_r140-win-l3-4b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.019417 <= 0.0183 passed=False",
+          "equivalence_rate": 0.980583,
+          "port_bugs": 0,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.019417,
+          "max_plan_disagreement": 0.0183,
+          "passed": false,
+          "backend": "cuda",
+          "git_sha": "25ef79aedfc9099db6806c94c64c8afb0d3ff3dd",
+          "git_dirty": true,
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "plan disagreement above the 0.0183 bound with 0 port bugs and 0 capabilities native lacks; the owner accepts the rows as plan differences between the two runtimes' llama.cpp builds, bound unchanged, 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "2026-11-02_r140-win-l3-4b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.019417 <= 0.0183 passed=False",
+            "cell": "knaif-qwen3-4b-v2",
+            "run": "evals\\parity\\2026-11-02_r140-win-l3-4b-documents",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "a9c26005e94622d63d1c6e64cb1c1b42084dcc37f6be7d69f8d5967f9c13aab7",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
+          }
+        },
+        "knaif-qwen3-1.7b-v2": {
+          "population": {
+            "kind": "subset",
+            "corpus_sha256": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116"
+          },
+          "evidence": {
+            "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+            "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+            "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+            "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+            "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+            "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+            "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+            "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+            "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+            "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+            "policy": "3",
+            "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+            "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+          },
+          "run": "evals\\parity\\2026-11-02_r140-win-l3-1.7b-documents",
+          "summary": "2026-11-02_r140-win-l3-1.7b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.029126 <= 0.0183 passed=False",
+          "equivalence_rate": 0.970874,
+          "port_bugs": 0,
+          "native_not_implemented": 0,
+          "plan_disagreement_rate": 0.029126,
+          "max_plan_disagreement": 0.0183,
+          "passed": false,
+          "backend": "cuda",
+          "git_sha": "25ef79aedfc9099db6806c94c64c8afb0d3ff3dd",
+          "git_dirty": true,
+          "owner_exception": {
+            "date": "2026-11-03",
+            "reason": "plan disagreement above the 0.0183 bound with 0 port bugs and 0 capabilities native lacks; the owner accepts the rows as plan differences between the two runtimes' llama.cpp builds, bound unchanged, 2026-11-02 (release plan 2026-10-26-release-1.4.0.md, Decisions)",
+            "waives": "2026-11-02_r140-win-l3-1.7b-documents: port_bugs=0 not_implemented=0 plan_disagreement=0.029126 <= 0.0183 passed=False",
+            "cell": "knaif-qwen3-1.7b-v2",
+            "run": "evals\\parity\\2026-11-02_r140-win-l3-1.7b-documents",
+            "evidence": {
+              "bundle": "a50c98c4efcf7d5e0d3605f6f864be40de73e82e9ba102ef50452dc05668d056",
+              "toolkits": "c78ecb0245c0e9a9caf5e71688925a70e37616afd4bf476bcd1221d49a281d6c",
+              "contracts": "339b2412948637dd007296b9ee5ee65e8ac6e1a816969c3087b2a4c87a42a168",
+              "python_core": "4935b31c18f607b56a959b413586cc0bc8db480f86ba31e8d91a57f383b8f036",
+              "grading": "9bd9337391531b55f31092bbf9516d9906fa230fc5035b02f01879b2b6d7abf0",
+              "native": "44c40890b8a4222fe47853e36dfd5b6219e7b383e000e04fadea383f5bb95840",
+              "corpus": "45a535d1b25d348ca311df9588bd9055009eb1645577e49fe9cdb5058eb63116",
+              "safety_corpus": "611e604f004d0cd30980ea1d41fba654deebb9ecdd0421d492d580bcb34a248f",
+              "verifier": "9d183049d33080b97e362dbafb12ab56ca1a8c2b9658b8ae8e460ba797f104db",
+              "settings": "9267908069f9943effdf6644449b8caddcbfc6df6a55444afe7ca94255c291a9",
+              "policy": "3",
+              "model": "d59cad240f5e0f157f093868479cf92132156097394805a9cccd102e14f04ac5",
+              "native_binary": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2"
+            }
+          }
+        }
+      }
+    }
+  }
+}

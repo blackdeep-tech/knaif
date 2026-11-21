@@ -2,47 +2,47 @@
   "assets": {
     "linux-x64": {
       "appimage": {
-        "name": "knaif-1.3.0-linux-x86_64.AppImage",
-        "size_bytes": 31807992,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.3.0/knaif-1.3.0-linux-x86_64.AppImage"
+        "name": "knaif-1.4.0-linux-x86_64.AppImage",
+        "size_bytes": 31685112,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/knaif-1.4.0-linux-x86_64.AppImage"
       },
       "portable": {
-        "name": "knaif-1.3.0-linux-x64.tar.gz",
-        "size_bytes": 38554663,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.3.0/knaif-1.3.0-linux-x64.tar.gz"
+        "name": "knaif-1.4.0-linux-x64.tar.gz",
+        "size_bytes": 36730753,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/knaif-1.4.0-linux-x64.tar.gz"
       }
     },
     "macos": {
       "installer": {
-        "name": "knaif-1.3.0-macos-arm64.pkg",
-        "size_bytes": 14215879,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.3.0/knaif-1.3.0-macos-arm64.pkg"
+        "name": "knaif-1.4.0-macos-arm64.pkg",
+        "size_bytes": 15838449,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/knaif-1.4.0-macos-arm64.pkg"
       },
       "portable": {
-        "name": "knaif-1.3.0-macos-arm64.zip",
-        "size_bytes": 14212317,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.3.0/knaif-1.3.0-macos-arm64.zip"
+        "name": "knaif-1.4.0-macos-arm64.zip",
+        "size_bytes": 15824920,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/knaif-1.4.0-macos-arm64.zip"
       }
     },
     "windows-x64": {
       "installer": {
-        "name": "knaif-1.3.0-windows-x64-setup.exe",
-        "size_bytes": 16833352,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.3.0/knaif-1.3.0-windows-x64-setup.exe"
+        "name": "knaif-1.4.0-windows-x64-setup.exe",
+        "size_bytes": 17008416,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/knaif-1.4.0-windows-x64-setup.exe"
       },
       "portable": {
-        "name": "knaif-1.3.0-windows-x64.zip",
-        "size_bytes": 33737405,
-        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.3.0/knaif-1.3.0-windows-x64.zip"
+        "name": "knaif-1.4.0-windows-x64.zip",
+        "size_bytes": 31295942,
+        "url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/knaif-1.4.0-windows-x64.zip"
       }
     }
   },
-  "checksums_url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.3.0/SHA256SUMS",
+  "checksums_url": "https://github.com/blackdeep-tech/knaif/releases/download/v1.4.0/SHA256SUMS",
   "generated_by": "scripts/release_data.py",
-  "published_at": "2026-10-16T09:31:49Z",
-  "release_page": "https://github.com/blackdeep-tech/knaif/releases/tag/v1.3.0",
+  "published_at": "2026-11-21T12:30:55Z",
+  "release_page": "https://github.com/blackdeep-tech/knaif/releases/tag/v1.4.0",
   "releases_page": "https://github.com/blackdeep-tech/knaif/releases",
   "schema_version": 1,
-  "tag": "v1.3.0",
-  "version": "1.3.0"
+  "tag": "v1.4.0",
+  "version": "1.4.0"
 }

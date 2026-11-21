@@ -1,6 +1,6 @@
 # URL inputs through the `net` toolkit
 
-**Status:** Active · **Created:** 2026-10-26 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-26 · **Completed:** 2026-11-21
 **Owner:** core + ffmpeg + documents · **Ref:** [toolkits](2026-10-26-toolkits.md) (builds on it);
 [TOOL_SCHEMA.md](../TOOL_SCHEMA.md) (*URL inputs*); `toolkits/net/SPEC.md`
 **Release:** 1.4.0

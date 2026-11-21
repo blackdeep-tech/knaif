@@ -1,6 +1,6 @@
 # Many files, many outputs: a chain per file
 
-**Status:** Active · **Created:** 2026-10-26 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-26 · **Completed:** 2026-11-21
 **Owner:** core + ffmpeg + documents · **Ref:** [alerts-known-folders](2026-10-26-alerts-known-folders.md)
 (builds on it); [chain-source-threading](2026-09-23-chain-source-threading.md) (fan-out, done);
 `contracts/parity/batch_cases.json`, `kind_glob_cases.json`, `many_files_cases.json`
