@@ -262,8 +262,9 @@ check-contracts:
 
 # At the tag: keep the acceptance records and the gate's verdict for this release under
 # evals/acceptance/releases/<version>/ (written once). e.g.: just release-record 1.2.0
-release-record version:
-    uv run python -m knaif.evalsuite gate --release-record {{version}}
+# A matrix nobody bumped at the freeze: just release-record 1.4.0 --matrix-release 1.3.0 --reason '...'
+release-record version *args:
+    uv run python -m knaif.evalsuite gate --release-record {{version}} {{args}}
 
 # G1/G2 — a skill may not claim a native status its evidence does not support. Reads
 # contracts/release/native_status.yaml; `supported` needs an L4 acceptance record, `parity`

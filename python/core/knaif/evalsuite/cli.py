@@ -1737,7 +1737,12 @@ def cmd_gate(args: argparse.Namespace) -> None:
         # records that will go stale on main as the tree moves.
         try:
             out = write_release_record(
-                root, args.release_record, skills=sorted(list_skills()), native_binary=native_bin
+                root,
+                args.release_record,
+                skills=sorted(list_skills()),
+                native_binary=native_bin,
+                matrix_release=getattr(args, "matrix_release", None),
+                reason=getattr(args, "matrix_reason", None),
             )
         except (FileExistsError, ValueError) as exc:
             sys.exit(f"ERROR: {exc}")
@@ -3743,6 +3748,21 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="VERSION",
         help="At the tag: copy the acceptance records and the gate's verdict to "
         "evals/acceptance/releases/VERSION/. Written once; VERSION must be the matrix's release.",
+    )
+    p_gate.add_argument(
+        "--matrix-release",
+        default=None,
+        dest="matrix_release",
+        metavar="VERSION",
+        help="With --release-record: record against the matrix's current release when nobody "
+        "bumped it at the freeze (bumping it later stales every record). Needs --reason; the "
+        "record names both.",
+    )
+    p_gate.add_argument(
+        "--reason",
+        default=None,
+        dest="matrix_reason",
+        help="Why --matrix-release names another release's matrix; written into the record.",
     )
     p_gate.add_argument(
         "--native-bin",
