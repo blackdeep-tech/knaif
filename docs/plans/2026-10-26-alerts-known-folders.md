@@ -1,6 +1,6 @@
 # Completion alerts and known folders
 
-**Status:** Active · **Created:** 2026-10-26 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-26 · **Completed:** 2026-11-21
 **Owner:** core · **Ref:** [url-inputs](2026-10-26-url-inputs.md) (builds on it);
 `contracts/runtime/core_tools.yaml` (`alert_when_done`); `contracts/parity/known_folder_cases.json`
 **Release:** 1.4.0

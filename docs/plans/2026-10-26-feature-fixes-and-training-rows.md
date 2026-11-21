@@ -1,6 +1,6 @@
 # Fixes from using the new features, prompt fixes and their training rows
 
-**Status:** Active · **Created:** 2026-10-26 · **Completed:** —
+**Status:** Done · **Created:** 2026-10-26 · **Completed:** 2026-11-21
 **Owner:** core + training · **Ref:** [toolkits](2026-10-26-toolkits.md),
 [url-inputs](2026-10-26-url-inputs.md), [alerts-known-folders](2026-10-26-alerts-known-folders.md),
 [many-files-many-outputs](2026-10-26-many-files-many-outputs.md) (the features it fixes);
