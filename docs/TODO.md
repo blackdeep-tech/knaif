@@ -350,7 +350,10 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
     copies. Either look in both places and strip `\r`, or say in RELEASE.md §7 to run it from the
     WSL clone.
   - `just site-check` needs `mise x --`: the PATH's Corepack pnpm (12.14.0) is refused by the
-    site's pinned 12.4.1.
+    site's pinned 12.4.1. `just site-build` too (2026-11-21: `ERR_PNPM_BAD_PM_VERSION`; the
+    recipe's `pnpm --dir site` runs from the repo root, where Corepack picks 12.14.0, while
+    running pnpm from inside `site/` honours the pin). Either `cd site` in the recipes or
+    `mise x --` in each.
 
 - [ ] **The next model rejects "overwrite the original" on every backend** (owner, 2026-11-02).
   On 1.4.0, 4B on Vulkan asks instead (`ffmpeg_safety_overwrite_original`, accepted as the owner's
@@ -409,6 +412,53 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   dropped every connection until it ran from Terminal); run the queue under `caffeinate -i` (the
   Mac slept with the clean room waiting); and a supported way to hold `open-pr` until the
   contributor confirms (done by hand with `queue/done/open-pr`).
+  **Checks that passed without measuring** (2026-11-21, after publishing), the worse kind:
+  - `homebrew` passed while `knaif --version` printed `knaif 1.3.0`: it grepped the whole brew log
+    for "1.4.0" and matched brew's own "Cask knaif (1.4.0)" line. The cask had never installed
+    (a `sdl2-compat` link conflict with the Mac's old `sdl2` formula stopped brew), and the 1.3.0
+    `.pkg` in `/usr/local/bin` answered. Check `"$(brew --prefix)/bin/knaif" --version` and
+    `brew list --cask --versions knaif`, record `which -a knaif`, and fail when brew's exit code
+    says so (#120).
+  - The rule for every check here and in the fresh-download script: one that cannot measure
+    reports **not measured**, never PASS (Windows Sandbox runs no Defender engine, and the
+    fresh-download script still printed "scan clean" twice).
+
+- [ ] **The Homebrew cask's deprecation warning** (2026-11-21, #120). Every brew command prints
+  `Calling string comparison format for depends_on macos: is deprecated! Use depends_on macos:
+  :monterey instead`, from line 22 of the cask: `depends_on macos: ">= :monterey"` in
+  `installers/macos/homebrew/knaif-cask.rb.in`, and so in the tap. Change the template, and the
+  tap with the next cask update.
+
+- [ ] **A fresh-download check kept in the repo** (2026-11-21). RELEASE.md §5 step 6 was run for
+  1.4.0 by a Windows Sandbox script written for the day (`sandbox/r140/fresh/`, gitignored): the
+  public release downloaded with the browser's internet mark, `SHA256SUMS` and the signature,
+  a double-click launch with a screenshot for SmartScreen or Smart App Control, a silent install,
+  `knaif --version`, the `.zip`, the Code Integrity block log, Smart App Control enforcing
+  throughout. Commit it as `installers/windows/fresh-download/` with its `.wsb`, take the
+  version from the release, set `$ProgressPreference = 'SilentlyContinue'` (Windows PowerShell
+  5.1's progress bar made a 31 MB download take over a minute), and report Defender as not
+  measured inside the Sandbox, with the scan on the release box as its evidence.
+
+- [ ] **The AppImage's sha256 is in no record before upload** (2026-11-21, the Fable audit). The
+  Linux run script pins only the tarball (`ARTIFACT_SHA256`); the AppImage shipped as built in
+  `dist/` (`a5c4e414…`, now in the release index and `SHA256SUMS`), with `smoke.sh` and the
+  floor check as its only tests. Record it at the freeze beside the tarball, and check it before
+  the upload as the other files are.
+
+- [ ] **The release-data workflow fails at every release** (2026-11-21: 1.2.1, 1.3.0, 1.4.0).
+  `release-data.yml` pushes `chore/release-data-vX.Y.Z`, and the `restrict-creations` ruleset
+  lets only repository admins create branches, so the push is refused (`GH013`) and the local
+  `just release-data` fallback is the real path (RELEASE.md §5 step 7). Either let that branch
+  name through `restrict-creations`, move the workflow to a GitHub App token (the upgrade path
+  noted under *`release.json` refresh*), or retire the workflow and keep the fallback. The
+  owner's call.
+
+- [ ] **The evidence `check` stage refuses an acceptance matrix that does not name the release**
+  (2026-11-21, after 1.4.0 froze with the matrix still on 1.3.0: Codex's audit, #125). A minor's
+  matrix bump must happen at the freeze, before any evidence (RELEASE.md §0), because editing it
+  later stales every record. `scripts/release_evidence.sh` `preflight` can refuse when
+  `current_release`'s major.minor is not `VERSION`'s; a change to the Part I rules, so it is
+  written into the next release's run script as an amendment, before its freeze.
 
 - [x] **DCO: write the rule down, and sign our own commits** (2026-11-20). **Done 2026-11-20:** the
   rule was already on `main` (#119: `CONTRIBUTING.md`, `DCO`, `.github/dco.yml`, organisation
