@@ -20,6 +20,25 @@ export default defineConfig({
         replacesTitle: true,
       },
       favicon: "/favicon.ico",
+      // Link previews (WhatsApp, LinkedIn, X, Slack…). Starlight already emits og:title,
+      // og:description, og:site_name and twitter:card, but no image, so crawlers fell back
+      // to the favicon and showed it upscaled and blurry. The card is knaif.org's press-kit
+      // title card, shared rather than copied so the two sites cannot drift apart.
+      head: [
+        { tag: "link", attrs: { rel: "apple-touch-icon", href: "/apple-touch-icon.png" } },
+        { tag: "meta", attrs: { property: "og:image", content: "https://knaif.org/press/knaif-card.png" } },
+        { tag: "meta", attrs: { property: "og:image:type", content: "image/png" } },
+        { tag: "meta", attrs: { property: "og:image:width", content: "1280" } },
+        { tag: "meta", attrs: { property: "og:image:height", content: "640" } },
+        {
+          tag: "meta",
+          attrs: {
+            property: "og:image:alt",
+            content: "kn[AI]f — tell your command-line tools what you want, in plain English.",
+          },
+        },
+        { tag: "meta", attrs: { name: "twitter:image", content: "https://knaif.org/press/knaif-card.png" } },
+      ],
       customCss: [
         "knaif-shared/fonts.css",
         "knaif-shared/tokens.css",
