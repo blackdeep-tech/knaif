@@ -287,7 +287,10 @@ def test_the_cask_names_the_release_and_its_checksum(cask) -> None:
         (REPO / "contracts/models/model-manifest.yaml").read_text(encoding="utf-8")
     )
     assert f"knaif models pull {manifest['recommendations']['desktop']}" in text
-    assert "depends_on arch: :arm64" in text and 'depends_on macos: ">= :monterey"' in text
+    assert "depends_on arch: :arm64" in text and "depends_on macos: :monterey" in text
+    # 2026-11-21 (#120): Homebrew deprecated the string comparison form (">= :monterey") and
+    # warned on every brew command that loaded the cask; the bare symbol means "this or newer".
+    assert 'depends_on macos: "' not in text
 
 
 def test_it_is_a_cask_that_links_the_published_tree_untouched(cask) -> None:

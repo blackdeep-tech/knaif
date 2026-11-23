@@ -423,11 +423,14 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
     reports **not measured**, never PASS (Windows Sandbox runs no Defender engine, and the
     fresh-download script still printed "scan clean" twice).
 
-- [ ] **The Homebrew cask's deprecation warning** (2026-11-21, #120). Every brew command prints
+- [x] **The Homebrew cask's deprecation warning** (2026-11-21, #120). Every brew command prints
   `Calling string comparison format for depends_on macos: is deprecated! Use depends_on macos:
   :monterey instead`, from line 22 of the cask: `depends_on macos: ">= :monterey"` in
   `installers/macos/homebrew/knaif-cask.rb.in`, and so in the tap. Change the template, and the
-  tap with the next cask update.
+  tap with the next cask update. **Done 2026-11-23:** the template says `depends_on macos:
+  :monterey` (the bare symbol means Monterey or newer) and `test_macos_release.py` refuses the
+  string form; the tap was fixed in place by blackdeep-tech/homebrew-knaif#2, without waiting
+  for a release.
 
 - [ ] **A fresh-download check kept in the repo** (2026-11-21). RELEASE.md §5 step 6 was run for
   1.4.0 by a Windows Sandbox script written for the day (`sandbox/r140/fresh/`, gitignored): the
