@@ -78,6 +78,8 @@ Regenerate with `just eval-fixtures <skill>`.
 | `logo-square.png` | `media/`, `site/shared/assets/mark-square.png` | The `[AI]` mark alone; favicon source |
 | `knaif-logo-rect.svg` | `media/`, `site/shared/assets/wordmark.svg` | Used by the README header |
 | `knaif.ico` | `media/`, `site/{org,dev}/public/favicon.ico` | Browser-tab icon for both sites |
+| `apple-touch-icon.png` | `site/shared/assets/`, `site/{org,dev}/public/` | Derived from `logo-square.png`: the mark at 140 px, centred on an opaque 180×180 `#0c0f16` square (iOS fills transparency with black) |
+| `knaif-card.png` | `site/org/public/press/` | 1280×640 press-kit title card; also the link-preview image (`og:image`) of both sites |
 | `execution-pipeline.svg` | `media/` | Diagram of the pipeline in `ARCHITECTURE.md` |
 
 The wordmark is **also re-authored as inline SVG** in `site/shared/Wordmark.astro`. That is
