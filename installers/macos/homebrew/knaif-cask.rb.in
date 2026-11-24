@@ -19,7 +19,7 @@ cask "knaif" do
   homepage "https://knaif.org"
 
   depends_on arch: :arm64
-  depends_on macos: ">= :monterey"
+  depends_on macos: :monterey
   depends_on formula: "ffmpeg"
 
   binary "knaif-@VERSION@-macos-arm64/bin/knaif"
