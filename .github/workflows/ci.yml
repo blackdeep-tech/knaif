@@ -95,7 +95,12 @@ jobs:
             # D11 (macOS support plan): only what can change the macOS build or its packaging —
             # a Python-only or docs PR must not queue for a macOS runner. `contracts/` too: the
             # job runs the L1/L2 parity contracts, which macOS's `supported` status depends on.
-            echo "macos=$(match "$common|^(native/|apps/|installers/|scripts/|contracts/|skills/[^/]+/native/|skills/[^/]+/skill\.yaml|Cargo\.(toml|lock)|rust-toolchain\.toml)")"
+            # Of `scripts/`, only the ones this job uses: the build, the package checks, the
+            # contract check, and what its installer tests import; and those tests themselves.
+            # Not all of `scripts/` (2026-11-27): an eval harness or a site script queued a macOS
+            # runner. test_ci_workflow.py scans the build/packaging scripts and the tests for the
+            # scripts they use and fails if one is missing here.
+            echo "macos=$(match "$common|^(native/|apps/|installers/|contracts/|skills/[^/]+/native/|skills/[^/]+/skill\.yaml|Cargo\.(toml|lock)|rust-toolchain\.toml|scripts/(build_native_kind\.sh|path_hygiene\.sh|parity_check\.py|l4_rows\.py|check_(macho_deps|macos_signing|no_local_paths|pe_imports|elf_deps)\.py)|python/core/tests/test_(installer_pkg|macos_release|macos_signing|macho_deps|l4_rows)\.py)")"
           } >> "$GITHUB_OUTPUT"
 
   # MATRIX over both ends of requires-python (">=3.10,<3.15"), added 2026-08-08.

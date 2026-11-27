@@ -71,8 +71,9 @@ def test_every_filtered_job_exists_in_the_workflow():
     "path,expected",
     [
         ("python/core/knaif/planner.py", {"python"}),
-        # D11 (macOS support plan): the macOS job takes scripts/ whole.
-        ("scripts/site_data.py", {"python", "macos"}),
+        # The macOS job takes only the scripts it uses (see the tests below), not scripts/ whole.
+        ("scripts/site_data.py", {"python"}),
+        ("scripts/build_native_kind.sh", {"python", "macos"}),
         ("native/crates/knaif-core/src/lib.rs", {"native", "macos"}),
         ("apps/cli/src/main.rs", {"native", "macos"}),
         ("Cargo.toml", {"native", "macos"}),
@@ -154,6 +155,76 @@ def test_a_parity_contract_reaches_the_macos_job(path):
     contracts record coverage there (`_coverage.macos: CI`). The macOS job runs
     `just check-contracts`, so a change to a contract must reach it."""
     assert _decide([path])["macos"]
+
+
+#: What the macOS job runs that can name a script: the build and packaging scripts (directly or
+#: through `just package-native` / `just package-pkg`), the contract check, and the installer
+#: tests it runs under macOS's bash 3.2. Scanned, not listed, so a script one of them starts
+#: using later reaches the macOS job without anyone remembering to add it.
+_MACOS_USERS = (
+    "scripts/build_native_kind.sh",
+    "scripts/parity_check.py",
+    "installers/package.sh",
+    "installers/smoke.sh",
+    *sorted(
+        str(p.relative_to(REPO)).replace("\\", "/")
+        for p in (REPO / "installers" / "macos").glob("*.sh")
+    ),
+)
+_MACOS_TESTS = (
+    "python/core/tests/test_installer_pkg.py",
+    "python/core/tests/test_macos_release.py",
+    "python/core/tests/test_macos_signing.py",
+    "python/core/tests/test_macho_deps.py",
+    "python/core/tests/test_l4_rows.py",
+)
+_SCRIPT_REF = re.compile(r"scripts/[A-Za-z0-9_.-]+\.(?:sh|py|ps1)")
+
+
+def _scripts_the_macos_job_uses() -> set[str]:
+    found = set()
+    for rel in (*_MACOS_USERS, *_MACOS_TESTS):
+        text = (REPO / rel).read_text(encoding="utf-8")
+        found |= {m for m in _SCRIPT_REF.findall(text) if (REPO / m).exists()}
+    # The tests also import scripts by bare name (`check_macho_deps.py`).
+    for rel in _MACOS_TESTS:
+        text = (REPO / rel).read_text(encoding="utf-8")
+        for name in re.findall(r"[\"']([a-z0-9_]+\.(?:py|sh))[\"']", text):
+            if (REPO / "scripts" / name).exists():
+                found.add(f"scripts/{name}")
+    return found
+
+
+def test_the_macos_job_uses_scripts_the_scan_finds():
+    """The scan is not vacuous: it finds the build script and the Mach-O check at least."""
+    found = _scripts_the_macos_job_uses()
+    assert {"scripts/build_native_kind.sh", "scripts/check_macho_deps.py"} <= found, found
+
+
+def test_every_script_the_macos_job_uses_reaches_it():
+    """Narrowing `scripts/` must never leave out a script the macOS build or its tests use."""
+    missing = [s for s in sorted(_scripts_the_macos_job_uses()) if not _decide([s])["macos"]]
+    assert not missing, f"the macOS filter misses scripts its job uses: {missing}"
+
+
+@pytest.mark.parametrize("path", _MACOS_TESTS)
+def test_the_installer_tests_the_macos_job_runs_reach_it(path):
+    """The job runs these under macOS's bash 3.2, so a change to one must queue it."""
+    assert _decide([path])["macos"], path
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/agent_vs_knaif/local_compare.py",
+        "scripts/site_data.py",
+        "scripts/check_site_a11y.py",
+        "scripts/release_data.py",
+    ],
+)
+def test_eval_and_site_scripts_never_queue_for_a_macos_runner(path):
+    """An eval harness or a site script cannot change the macOS build."""
+    assert not _decide([path])["macos"], path
 
 
 def test_a_skill_contract_or_crate_reaches_the_macos_job():
