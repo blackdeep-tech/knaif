@@ -17,11 +17,16 @@ issues, **do not open a public issue** — follow [SECURITY.md](SECURITY.md).
 
 Every commit in a pull request is signed off; see [Licence](#licence).
 
-## There is no CI yet
+## CI
 
-**Run the checks locally.** CI lands after the v1.0.0 release, so until then a green
-`just check` on your machine is the only gate. Say in your PR which platform you ran on —
-knaif ships on Windows and Linux and some failures are platform-specific.
+Every pull request runs CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) on Linux:
+the Python suite on 3.10 and 3.14, the native checks, the git hooks, and a lint of the PR title
+and every commit. A macOS job builds and smoke-tests the native binary when a change touches
+the native code, installers, contracts or a skill's `skill.yaml`. Windows is not in CI.
+
+**Still run `just check` locally first** — CI is a backstop, not the place to find out. Say in
+your PR which platform you ran on: knaif ships on Windows, Linux and macOS, and some failures
+are platform-specific.
 
 ## Setup
 
@@ -125,8 +130,8 @@ type(scope): subject
 | Domain | `eval` `corpus` `snapshot` `model` | knaif's own lifecycle — see below |
 
 The **scope** is optional and unvalidated, but prefer an established one: `core`, `cli`,
-`sdk`, `native`, `contracts`, `training`, `installers`, `site`, or a skill name
-(`ffmpeg`, `documents`, `io`).
+`sdk`, `native`, `contracts`, `training`, `installers`, `site`, or a skill or toolkit name
+(`ffmpeg`, `documents`, `fs`).
 
 Rules the hook enforces:
 
@@ -197,13 +202,13 @@ description, it is probably two PRs — and a `snapshot` re-lock is *always* its
 which for a squash-merged branch means its own PR.
 
 Fill in [the template](.github/PULL_REQUEST_TEMPLATE.md), and say which platform you ran
-`just check` on — CI runs on Linux only, so for Windows and macOS that statement is the only
-evidence a reviewer has.
+`just check` on — CI runs on Linux (and macOS only for native changes), so for Windows that
+statement is the only evidence a reviewer has.
 
 ### Tags and releases
 
 Releases are [SemVer](https://semver.org), tagged `vMAJOR.MINOR.PATCH` (`v1.0.1`) to match
-the `v*.*.*` trigger the release workflow will use. Every release gets a
+the `v*.*.*` trigger the release workflow uses. Every release gets a
 [Keep a Changelog](https://keepachangelog.com) entry in [CHANGELOG.md](CHANGELOG.md)
 written from the subjects that landed on `main` (`git log --first-parent`). Cutting one is a documented procedure —
 [`docs/RELEASE.md`](docs/RELEASE.md).
@@ -223,7 +228,8 @@ Three tiers, split by what they cost:
 
 | Stage | Runs | Cost |
 |---|---|---|
-| `pre-commit` | whitespace/EOF, YAML+TOML+JSON syntax, large-file guard, `nbstripout`, `ruff --fix`, `black`, `cargo fmt`, generated-copy drift | ~3 s |
+| `pre-commit` | whitespace/EOF, YAML+TOML+JSON syntax, large-file guard, `nbstripout`, `ruff --fix`, `black`, `cargo fmt`, generated-copy drift, no local paths | ~3 s |
+| `prepare-commit-msg` | adds your DCO `Signed-off-by` line (see [Licence](#licence)) | instant |
 | `commit-msg` | the commit convention above | instant |
 | `pre-push` | `mypy`, `pytest`, `cargo clippy` | minutes |
 
@@ -258,16 +264,20 @@ Release artifacts are built from the workspace, not by hand:
 ```bash
 just package-native vulkan   # the release artifact: exe + core libs + CPU and Vulkan backends
 just installer vulkan        # Windows: wrap the staged artifact in an Inno Setup installer
+just package-linux           # Linux: build the artifacts in the release container
+just release-macos           # macOS: sign, notarize and staple the .zip and .pkg
 just licenses-all            # regenerate both third-party licence reports
 ```
 
-`just package-native` must run from a "Developer PowerShell for VS" on Windows. Full
-procedure — per OS and kind, CUDA arch range, checksums, publishing — is in
+`just package-native` must run from a "Developer PowerShell for VS" on Windows. A bare
+`cargo build` is fine for development, never for a release: the scripts strip the builder's
+paths from the binaries. Full procedure — per OS and kind, CUDA arch range, checksums,
+publishing — is in
 [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ## Repository layout
 
-Four pillars plus support directories:
+Five pillars plus support directories:
 
 ```text
 python/core/knaif/   the knaif Python package (import path is knaif.*)
@@ -275,7 +285,9 @@ python/training/     LoRA/DPO dataset builders and training scripts
 native/crates/       reusable Rust engine crates (knaif-core, -models, -llm, -skill-api)
 apps/cli/            the native knaif CLI binary
 skills/<name>/       self-contained skill bundles (YAML + python/ + native/ + data/ + eval/)
+toolkits/<name>/     shared tools skills build on (tools.yaml + python/), e.g. toolkits/fs
 contracts/           language-neutral contracts shared by both runtimes
+installers/          Windows, Linux and macOS packaging
 evals/               eval run history, baselines, retrieval and parity results
 docs/                documentation and durable plans
 ```
@@ -295,7 +307,11 @@ after changing a `skill.yaml` (`just gen-skills-check` is part of `just check`).
 
 Start with [`docs/TOOL_SCHEMA.md`](docs/TOOL_SCHEMA.md). A skill is a self-contained
 bundle at `skills/<name>/` — declarative YAML at the top, implementations beneath. Every
-tool is a `Step` or `Intent` class linked to its `tools.yaml` entry by `name`.
+tool is a `Handler` (it executes) or an `Intent` (it expands into more plan steps), linked
+1:1 to its `tools.yaml` entry by `name`. Every tool also declares its `effects:` (`fs.read`,
+`fs.write`, `net`, `exec:<program>` or `[]`); a handler runs programs only through
+`ctx.exec` and writes files only through the `fs` toolkit. Shared tools come from
+`toolkits/`, listed in the skill's `skill.yaml`, never copied into the skill.
 
 Handlers are only step one. A skill is "done" when it is also evaluated, represented in
 the training mix, and — if it ships natively — ported. Corpora and the acceptance bar live
@@ -315,6 +331,16 @@ PATH, and the fixtures the corpus references.
 
 **Quote `success`, not `cheap`, when reporting quality.** `cheap` only checks routing.
 
+A skill is accepted against the written bar in its `acceptance.yaml` (aggregate floors,
+required slices, safety at 100%), not against a feeling:
+
+```bash
+just eval-safety <skill> <save.json>                      # utterances that must be rejected
+just eval-accept <skill> <scoreboard.json> <safety.json>  # the verdict against acceptance.yaml
+```
+
+The full ladder is *The eval ladder* in [`docs/EVAL_FRAMEWORK.md`](docs/EVAL_FRAMEWORK.md).
+
 By default the eval suite uses mock inference. For a real model, add
 `--config eval_backends.yaml --backends <name>` — or use the multi-backend recipes:
 
@@ -325,9 +351,9 @@ just retrieval                          # retrieval quality (recall@k / MRR), mo
 just retrieval-check                    # gate retrieval against the locked baseline
 ```
 
-`just eval-snapshot <skill>` **re-locks the acceptance bar** at
-`skills/<skill>/data/eval_snapshot.json` — do that deliberately, in its own commit, and
-only when adopting a measured improvement.
+`just eval-lock <skill> <scoreboard.json>` **re-locks the baseline** at
+`skills/<skill>/data/eval_snapshot.json` from a saved, accepted run — do that deliberately,
+in its own commit, and only when adopting a measured improvement.
 
 `evals/` is the single home for run history. Save with
 `--save evals/runs/<YYYY-MM-DD>_<label>_<verifier>/` and add a row to
@@ -350,6 +376,9 @@ Verifying results by hand: [`docs/EVAL_VERIFICATION_SOP.md`](docs/EVAL_VERIFICAT
   Skill-specific notebooks live with their skill under
   `skills/<name>/notebooks/`; top-level `notebooks/` is reserved for cross-skill
   experiments and authoring tools. Open one with `just notebook <path>`.
+- **No local paths in committed files.** The repo is public: write paths relative to the
+  repo, or `<repo>/...` / `~/...`, never your home directory or a real username. The
+  `no-local-paths` hook and a test in `just check` enforce it.
 - **Performance claims:** cite [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) rather than
   restating figures — it records which machine produced which number.
 - **Plans** go in `docs/plans/YYYY-MM-DD-<topic>.md`; `docs/TODO.md` holds active
@@ -376,8 +405,9 @@ copyright.
 
 Every commit in a pull request is signed off under the
 [Developer Certificate of Origin](DCO) (DCO 1.1): a statement that you wrote the change, or
-otherwise have the right to submit it under the project's licence. Sign off with `git commit -s`,
-which adds a line to the commit message:
+otherwise have the right to submit it under the project's licence. With the git hooks installed
+(`just hooks-install`) the line is added for you from your git config; without them, sign off
+with `git commit -s`. Either way the commit message gets a line:
 
 ```text
 Signed-off-by: Alice Example <alice@example.com>
