@@ -368,7 +368,10 @@ once; Open Interpreter announced and stopped three times.
   `lib/comparison-examples.ts`, each quote naming its run; non-English requests shown as typed
   with English beside them; no Russian example, owner), then the full table. The /vs article
   now says that Claude Code's refusal cited the test's own "use only ffmpeg" instruction.
-- [ ] **P13 — Clean-up** (below), after the owner has the results.
+- [x] **P13 — Clean-up** (2026-11-27, owner): the tools folder, the run folders with the model
+  traffic, the agents' folders in the user profile and OpenClaw's temp folders are removed; the
+  comparison's Ollama server and the proxy are stopped. Kept: this repository's record and the
+  per-batch result rows under `evals/runs/`.
 
 ## Clean-up
 
