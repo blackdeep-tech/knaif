@@ -19,6 +19,9 @@ scenarios:
     fixture: clip.mp4
     expect: {acodec: mp3, no_video: true}
 
+  # The language in this label is wrong: "ускори" is Bulgarian (corpus row ffmpeg_188, tagged bg).
+  # The label stays as it is because the 2026-07-02 and 2026-10-01 records name the row by it;
+  # knaif.org shows it as Bulgarian.
   - label: "russian: speed 2x"
     utterance: ускори clip.mp4 до 2x
     fixture: clip.mp4

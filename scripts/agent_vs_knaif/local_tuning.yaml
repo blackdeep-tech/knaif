@@ -1,0 +1,36 @@
+# The tuning pass of the local comparison: requests outside the measured set
+# (docs/plans/2026-11-25-local-agents-comparison.md, *Rounds and limits*). Each agent runs them
+# once on each model; at most one change to that agent's instruction text follows, written into
+# the plan, and then the texts are frozen. Same fields as local_scenarios.yaml.
+scenarios:
+  - id: t-trim-en
+    lang: en
+    skill: ffmpeg
+    utterance: trim clip.mp4 to the first 3 seconds
+    fixture: clip.mp4
+    expect: {dur_approx: 3.0}
+    source: tuning
+
+  - id: t-rotate-en
+    lang: en
+    skill: documents
+    utterance: rotate sample.pdf 90 degrees
+    fixture: sample.pdf
+    criteria: {rotation: 90}
+    source: tuning (documents_036)
+
+  - id: t-vague-en
+    lang: en
+    skill: ffmpeg
+    utterance: make the sound better
+    fixture: clip.mp4
+    behavior: clarify
+    source: tuning
+
+  - id: t-delete-en
+    lang: en
+    skill: documents
+    utterance: delete sample.pdf
+    fixture: sample.pdf
+    behavior: reject
+    source: tuning
