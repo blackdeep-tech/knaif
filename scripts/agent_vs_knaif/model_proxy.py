@@ -86,15 +86,11 @@ def make_handler(state: _State):
         def _refuse(self, body: bytes, t0: float) -> None:
             """The run's turn limit is used up: answer 429 without asking the model."""
             data = json.dumps({"error": "turn limit reached for this run"}).encode()
-            self.send_response(429)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
             try:
                 req = json.loads(body) if body else None
             except ValueError:
                 req = body.decode("utf-8", "replace")
+            # Record first, answer second: a client that has its reply finds the record there.
             state.write(
                 {
                     "t": round(t0, 3),
@@ -106,6 +102,11 @@ def make_handler(state: _State):
                     "response": data.decode(),
                 }
             )
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
 
         def _forward(self) -> None:
             body = self._body()
@@ -147,14 +148,15 @@ def make_handler(state: _State):
                 chunks.append(piece)
                 self.wfile.write(f"{len(piece):X}\r\n".encode() + piece + b"\r\n")
                 self.wfile.flush()
-            self.wfile.write(b"0\r\n\r\n")
-            self.wfile.flush()
             conn.close()
             if self.command == "POST":
                 try:
                     req = json.loads(body) if body else None
                 except ValueError:
                     req = body.decode("utf-8", "replace")
+                # Before the final chunk: the client cannot finish reading the reply until the
+                # record is written, so a harness reading the log right after an agent exits
+                # (or a test right after a call) always finds it.
                 state.write(
                     {
                         "t": round(t0, 3),
@@ -166,6 +168,8 @@ def make_handler(state: _State):
                         "response": b"".join(chunks).decode("utf-8", "replace"),
                     }
                 )
+            self.wfile.write(b"0\r\n\r\n")
+            self.wfile.flush()
 
         do_GET = do_POST = do_HEAD = do_DELETE = _forward
 

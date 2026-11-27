@@ -561,6 +561,37 @@ def test_proxy_control_only_from_this_machine(proxy):
     assert proxy.control_allowed("172.23.0.5") is False
 
 
+def test_proxy_writes_the_record_before_the_reply_completes(proxy, tmp_path):
+    """CI on Linux read the run's log the moment the 429 arrived and found it missing
+    (2026-11-27): the proxy answered first and wrote second. A client that has its reply,
+    refused or forwarded, must find the record already there, however slow the write."""
+    import time as _time
+
+    up = ThreadingHTTPServer(("127.0.0.1", 0), _Upstream)
+    _serve(up)
+
+    class SlowState(proxy._State):
+        def write(self, record):
+            _time.sleep(0.3)
+            super().write(record)
+
+    state = SlowState(("127.0.0.1", up.server_address[1]))
+    px = ThreadingHTTPServer(("127.0.0.1", 0), proxy.make_handler(state))
+    _serve(px)
+    base = f"http://127.0.0.1:{px.server_address[1]}"
+    try:
+        log = tmp_path / "run.jsonl"
+        _post(base + "/_proxy/log", {"path": str(log), "max_requests": 1})
+        _post(base + "/api/chat", {"n": 1})
+        assert len(log.read_text(encoding="utf-8").splitlines()) == 1
+        with pytest.raises(urllib.error.HTTPError):
+            _post(base + "/api/chat", {"n": 2})
+        assert len(log.read_text(encoding="utf-8").splitlines()) == 2
+    finally:
+        px.shutdown()
+        up.shutdown()
+
+
 def test_proxy_records_and_limits_turns(proxy, tmp_path):
     up = ThreadingHTTPServer(("127.0.0.1", 0), _Upstream)
     _serve(up)
