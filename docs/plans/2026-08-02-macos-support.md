@@ -681,6 +681,10 @@ open; where a task's older text disagrees, these win and the task is updated to 
   files are the ones tested and published; G6.)* The owner's steps and the secret names: [macos-signing-certificates](2026-09-30-macos-signing-certificates.md). (F1, G6.)
 - **D11 — CI: a macOS arm64 job, path-filtered** to `native/`, `installers/`, `scripts/` and the
   Cargo files, so Python-only and docs PRs do not queue for a macOS runner. (G6.)
+  *(2026-11-27, owner: `scripts/` narrowed to the scripts the job uses — the build, the package
+  checks, the contract check, what its installer tests import — plus those tests, after an eval
+  harness queued a macOS runner. `test_ci_workflow.py` scans the job's scripts and tests and fails
+  if one is missing from the filter.)*
 - **D12 — artifacts: `.pkg` (recommended) + portable `.zip` + a Homebrew tap, all in 1.3.0.** The
   tap is `blackdeep-tech/homebrew-knaif`; the owner creates the repository. **No `.dmg`** — it
   has no install logic to offer a CLI that is not an `.app` (D6). (G5.)

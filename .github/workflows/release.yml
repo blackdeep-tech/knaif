@@ -58,6 +58,10 @@ on:
       - "apps/**"
       - "native/**"
       - "skills/**"
+      # ...except a skill's Python: installers/package.sh copies a skill's runtime files
+      # (skill.yaml, tools.yaml, prompt.yaml, vocab.yaml, profiles/) and its crate is built, but
+      # its python/ is never in a package (2026-11-27: a skill test queued this build).
+      - "!skills/*/python/**"
       - "contracts/**"
       - "Cargo.toml"
       - "Cargo.lock"
