@@ -1,0 +1,46 @@
+{
+  "what": "knaif 1.4.0 against OpenClaw, Goose, OpenCode and Open Interpreter on the same local model",
+  "plan": "docs/plans/2026-11-25-local-agents-comparison.md",
+  "requests": "scripts/agent_vs_knaif/local_scenarios.yaml (25)",
+  "rounds": {
+    "1": "stock Qwen3-4B at temperature 0.7 (model default; no agent sends one); knaif on stock and on v2 (knaif decodes at 0)",
+    "2": "the four agents at temperature 0 (stock-qwen3-4b-t0)"
+  },
+  "context": 32768,
+  "thinking": "off (Ollama Go template)",
+  "limits": {
+    "timeout_s": 300,
+    "max_model_calls": 30
+  },
+  "instructions": "You are working in the current folder, which holds the user's files. These programs are available from the shell:\n- ffmpeg and ffprobe, for video and audio files;\n- python, with the pypdf and pikepdf libraries, for PDF files.\nCarry out the user's request below with these programs. Write the result as a new file in the current folder, next to the original.\nRun the commands yourself with your tools; do not stop after saying what you will do.\nNever delete or overwrite a file unless the request asks you to.\nIf the request is unclear or leaves out something you need, do not guess: ask one short question and stop.\nWhen you are done, say in one sentence what you did.\n\nRequest: {request}\n",
+  "versions": {
+    "knaif": "knaif 1.4.0 (inference: llama.cpp)",
+    "knaif_exe_sha256": "fe846ca32f9a7e940a0330169fea3f5da152930469988aaca24445589faa27e2",
+    "ollama": "ollama version is 0.40.18",
+    "ffmpeg": "ffmpeg version 9.1-full_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+    "gpu": "NVIDIA GeForce RTX 5080, 621.24",
+    "openclaw": "OpenClaw 2026.11.10 (6ea542f)",
+    "goose": "1.61.1",
+    "opencode": "1.19.6",
+    "interpreter": "interpreter 0.0.64"
+  },
+  "batches": [
+    "2026-11-27_local-agents-1.4.0-r1-goose_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-interpreter_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-knaif-v2_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-openclaw_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-opencode_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-rotate270-ru-v2_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-rotate270-ru_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-rotate90_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r1-v2-check_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r2-t0-goose_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r2-t0-interpreter_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r2-t0-openclaw_ffprobe",
+    "2026-11-27_local-agents-1.4.0-r2-t0-opencode_ffprobe"
+  ],
+  "hand_overrides": [
+    "opencode-stock|1|b-vague-de",
+    "opencode-stock-t0|2|b-vague-de"
+  ]
+}
