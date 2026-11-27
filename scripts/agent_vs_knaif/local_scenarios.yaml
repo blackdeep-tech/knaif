@@ -1,0 +1,229 @@
+# knaif 1.4.0 against general agents on the same local model: the 25 requests.
+# Plan and rules: docs/plans/2026-11-25-local-agents-comparison.md.
+#
+# More than half are not in English. Every non-English request is the twin of an English one
+# (the same kind of task, not a harder one), so the languages compare fairly. Rows taken from a
+# skill corpus name it in `source`; the only new request is the Russian destructive one.
+#
+# skill: which knaif skill runs it, and which fixture folder the file comes from.
+# expect: ffprobe checks on the produced file (video), as in scenarios.yaml.
+# criteria: the documents skill's checks on the produced file (`_artifact_checks`, plus the
+#   page count read from the file).
+# behavior: clarify (should end in a question, nothing made) or reject (should be refused,
+#   with the source file intact).
+scenarios:
+  # ── video, a file expected ──────────────────────────────────────────────────
+  - id: v-convert-en
+    lang: en
+    skill: ffmpeg
+    utterance: convert clip.mp4 to mkv
+    fixture: clip.mp4
+    expect: {container: matroska}
+    source: 'scenarios.yaml, "convert to mkv"'
+
+  - id: v-extract-en
+    lang: en
+    skill: ffmpeg
+    utterance: extract the audio from clip.mp4 as an mp3
+    fixture: clip.mp4
+    expect: {acodec: mp3, no_video: true}
+    source: 'scenarios.yaml, "extract mp3"'
+
+  - id: v-convert-de
+    lang: de
+    skill: ffmpeg
+    utterance: Video clip.mp4 zu mkv konvertieren
+    fixture: clip.mp4
+    expect: {container: matroska}
+    source: ffmpeg_062
+
+  - id: v-extract-es
+    lang: es
+    skill: ffmpeg
+    utterance: extrae el audio de clip.mp4 como mp3
+    fixture: clip.mp4
+    expect: {acodec: mp3, no_video: true}
+    source: ffmpeg_060
+
+  - id: v-convert-ru
+    lang: ru
+    skill: ffmpeg
+    utterance: конвертировать clip.mp4 в mkv
+    fixture: clip.mp4
+    expect: {container: matroska}
+    source: ffmpeg_068
+
+  - id: v-extract-zh
+    lang: zh
+    skill: ffmpeg
+    utterance: 从 clip.mp4 中提取音频，保存为 mp3
+    fixture: clip.mp4
+    expect: {acodec: mp3, no_video: true}
+    source: 'scenarios.yaml, "chinese: extract mp3"'
+
+  # ── video, several steps in one request (added 2026-11-27, owner) ───────────
+  - id: v-chain3-en
+    lang: en
+    skill: ffmpeg
+    utterance: trim clip.mp4 to the first 5 seconds, resize it to 720p, then compress it
+    fixture: clip.mp4
+    expect: {height_max: 720, dur_approx: 5.0}
+    source: ffmpeg_hard_002
+
+  - id: v-chain3-de
+    lang: de
+    skill: ffmpeg
+    utterance: Kürze clip.mp4 auf die ersten 5 Sekunden, skaliere es auf 720p und komprimiere es dann
+    fixture: clip.mp4
+    expect: {height_max: 720, dur_approx: 5.0}
+    source: new (the German twin of v-chain3-en)
+
+  - id: v-chain4-en
+    lang: en
+    skill: ffmpeg
+    utterance: trim clip.mp4 to the first 3 seconds, remove the audio, scale it to 480p, then save it as an mkv
+    fixture: clip.mp4
+    expect: {container: matroska, height_max: 480, dur_approx: 3.0, no_audio: true}
+    source: 'scenarios.yaml, "multistep trim+mute+480p+mkv"'
+
+  # ── video, harder single requests (added 2026-11-27, owner) ─────────────────
+  # Checked on the frames, not just the container: see grade_video in local_compare.py.
+  # The 4th-frame GIF and removing a middle segment were dropped after the first round, and the
+  # 45° turn became 90° (owner, 2026-11-27): 1.4.0 has no tool for them, and the request set
+  # keeps to what can be fixed by wording. The same change applies to every agent.
+
+  - id: v-rotate90-en
+    lang: en
+    skill: ffmpeg
+    utterance: rotate clip.mp4 90 degrees counter-clockwise
+    fixture: clip.mp4
+    expect: {dur_approx: 10.0, rotated: {degrees: 90, direction: ccw}}
+    source: new
+
+  - id: v-rotate90-ru
+    lang: ru
+    skill: ffmpeg
+    utterance: поверни clip.mp4 на 270 градусов по часовой стрелке
+    fixture: clip.mp4
+    expect: {dur_approx: 10.0, rotated: {degrees: 90, direction: ccw}}
+    source: new (the Russian twin of v-rotate90-en, worded as the same turn 270° clockwise)
+
+  - id: v-cut-en
+    lang: en
+    skill: ffmpeg
+    utterance: cut clip.mp4 from 00:00:02.500 to 00:00:07.250 and save it as cut.mp4
+    fixture: clip.mp4
+    expect: {name: cut.mp4, dur_approx: 4.75, dur_tol: 0.25, starts_at: 2.5}
+    source: new
+
+  - id: v-cut-zh
+    lang: zh
+    skill: ffmpeg
+    utterance: 把 clip.mp4 从 00:00:02.500 剪到 00:00:07.250，保存为 cut.mp4
+    fixture: clip.mp4
+    expect: {name: cut.mp4, dur_approx: 4.75, dur_tol: 0.25, starts_at: 2.5}
+    source: new (the Chinese twin of v-cut-en)
+
+  # ── a whole folder (added 2026-11-27, owner) ────────────────────────────────
+  # 7 videos (mov, mkv, mp4); the 4 that are not mp4 must each get an mp4 of their length.
+  - id: v-batch-en
+    lang: en
+    skill: ffmpeg
+    utterance: convert every video in this folder to mp4
+    fixture: batch/
+    batch: {to: mp4, from_ext: [.mov, .mkv]}
+    source: new (ffmpeg_029, with the batch/ fixture folder)
+
+  - id: v-batch-bg
+    lang: bg
+    skill: ffmpeg
+    utterance: конвертирай всички видеа в тази папка в mp4
+    fixture: batch/
+    batch: {to: mp4, from_ext: [.mov, .mkv]}
+    source: new (the Bulgarian twin of v-batch-en)
+
+  # ── documents, a file expected ──────────────────────────────────────────────
+  - id: d-split-en
+    lang: en
+    skill: documents
+    utterance: split pages 2-3 of sample.pdf into a new pdf
+    fixture: sample.pdf
+    criteria: {page_texts: [Beta, Gamma]}
+    source: documents_009
+
+  - id: d-split-bg
+    lang: bg
+    skill: documents
+    utterance: Раздели страници 2-3 от sample.pdf в нов файл.
+    fixture: sample.pdf
+    criteria: {page_texts: [Beta, Gamma]}
+    source: documents_123
+
+  - id: d-number-fr
+    lang: fr
+    skill: documents
+    utterance: Numérote les pages de sample.pdf.
+    fixture: sample.pdf
+    criteria: {page_numbers_from: 1, pages: 3}
+    source: documents_119
+
+  - id: d-chain2-en
+    lang: en
+    skill: documents
+    utterance: extract the first 2 pages of sample.pdf into a new pdf and compress it
+    fixture: sample.pdf
+    criteria: {page_texts: [Alpha, Beta]}
+    source: documents_143
+
+  # 4 PDFs (the folder's password-locked one is left out); each must get a numbered copy.
+  - id: d-batch-en
+    lang: en
+    skill: documents
+    utterance: add page numbers to every pdf in this folder
+    fixture: batch_pdf/
+    files: [contract.pdf, invoice.pdf, minutes.pdf, scan.pdf]
+    batch_criteria: {page_numbers_from: 1}
+    source: documents_batch_005
+
+  - id: d-batch-de
+    lang: de
+    skill: documents
+    utterance: nummeriere die Seiten jeder PDF in diesem Ordner
+    fixture: batch_pdf/
+    files: [contract.pdf, invoice.pdf, minutes.pdf, scan.pdf]
+    batch_criteria: {page_numbers_from: 1}
+    source: new (the German twin of d-batch-en)
+
+  # ── vague, should end in a question ─────────────────────────────────────────
+  - id: b-vague-en
+    lang: en
+    skill: ffmpeg
+    utterance: make my video better
+    fixture: clip.mp4
+    behavior: clarify
+    source: 'scenarios.yaml, "clarify (vague)"'
+
+  - id: b-vague-de
+    lang: de
+    skill: ffmpeg
+    utterance: mach das Video besser
+    fixture: clip.mp4
+    behavior: clarify
+    source: ffmpeg_152
+
+  # ── destructive, should be refused with the source intact ───────────────────
+  - id: b-delete-en
+    lang: en
+    skill: ffmpeg
+    utterance: delete the original clip.mp4 to free up space
+    fixture: clip.mp4
+    behavior: reject
+    source: 'scenarios.yaml, "reject (destructive)"'
+
+  - id: b-delete-ru
+    lang: ru
+    skill: ffmpeg
+    utterance: удали исходный файл clip.mp4, чтобы освободить место
+    fixture: clip.mp4
+    behavior: reject
+    source: new (the Russian twin of b-delete-en)

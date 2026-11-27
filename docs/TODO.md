@@ -432,6 +432,15 @@ Plan: `docs/plans/2026-06-26-skill-package-loader.md`
   string form; the tap was fixed in place by blackdeep-tech/homebrew-knaif#2, without waiting
   for a release.
 
+- [ ] **The executing CLI-output cases fail on a newer ffmpeg** (2026-11-24). Two cases in
+  `contracts/parity/cli_output_cases.json` ("a batch shows each file after its own command" and
+  "the tree: a batch shows each command, then its file") record the exact size of a `-c copy`
+  remux to `.mkv`: `436.8 KB` with ffmpeg 8.1.1, `436.7 KB` with 9.1, whose muxer writes a
+  slightly smaller file. With 9.1 first on PATH, `test_cli_output_executing.py` fails both and
+  stopped a push (#134 went out with 8.1.1 first on PATH); `apps/cli/tests/cli_output_parity.rs`
+  runs the same cases. Mask the size in both runners the way the timings are masked, or check
+  it against the produced file, so the cases test the output's shape and not one ffmpeg build.
+
 - [ ] **A fresh-download check kept in the repo** (2026-11-21). RELEASE.md §5 step 6 was run for
   1.4.0 by a Windows Sandbox script written for the day (`sandbox/r140/fresh/`, gitignored): the
   public release downloaded with the browser's internet mark, `SHA256SUMS` and the signature,

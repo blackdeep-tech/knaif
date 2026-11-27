@@ -153,6 +153,12 @@ each — at zero marginal cost and about a tenth of the time. The full table is 
 [knaif.org/vs](https://knaif.org/vs/); the first measurement, with v1 on 2026-07-02, showed
 the same picture.
 
+The model is not the whole story. On 2026-11-27, knaif 1.4.0 passed all 25 requests of a
+second comparison both on `knaif-qwen3-4b-v2` and on the **stock** Qwen3-4B it was trained
+from, while four open agents running that same stock file passed 6–12. The program around the
+model — the tool contracts, validation and deterministic expansion — carries most of the work
+on a model this size ([knaif.org/vs/local](https://knaif.org/vs/local/)).
+
 Across the full 846-utterance corpus — measured with v1 against `opus-4-8` in July, and not
 re-measured since — the premium arm does lead — **0.989 vs 0.967** success — and it is worth
 knowing exactly where. Decomposed, outcome accuracy is 1.000 vs **0.905**,

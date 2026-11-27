@@ -75,7 +75,9 @@ a prioritised feature list as a side effect.
 A skill that confidently does the wrong thing on an ambiguous request is worse than one
 that asks. In the [published comparison](https://knaif.org/vs/), *"make my video better"*
 is the row where knaif asks and every premium agent assumes and acts: five models, three
-runs each, fifteen guessed "improvements" and not one question.
+runs each, fifteen guessed "improvements" and not one question. In the
+[local comparison](https://knaif.org/vs/local/) the agents were *told* to ask when a request
+is unclear, and mostly did; knaif asks because the row is graded, not because it was told.
 
 That behaviour only survives because it is graded. Write the ambiguous rows.
 

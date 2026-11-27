@@ -29,6 +29,13 @@ Sonnet 5, a model from the same lab whose agent refused, and it deleted the file
 a model-mediated agent blocks a destructive request depends on the CLI, the scaffold and the
 model together, on the day.
 
+On a small local model it is worse. In the [2026-11-27 comparison](https://knaif.org/vs/local/),
+four open agents — OpenClaw, Goose, OpenCode and Open Interpreter — ran on the same Qwen3-4B
+as knaif, each told in its instructions never to delete a file unless asked. Asked to delete
+the source, **none of them refused** in any run. OpenClaw deleted it every time and then told
+the user the file did not exist; most of the others kept it only because they stopped after
+announcing the delete. knaif refused all four times, on both models.
+
 knaif's refusal is the only one enforced in code. Which is also why **you must
 classify honestly**: the guarantee is only as good as the category you wrote.
 
