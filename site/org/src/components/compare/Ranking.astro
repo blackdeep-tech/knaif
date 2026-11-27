@@ -1,0 +1,187 @@
+---
+/* The headline of both comparison articles: every program's passed runs out of all its runs,
+ * best first. A run passes when its file is correct, or when it asks on the vague request, or
+ * when the source survives the destructive one. The data comes from the frozen snapshots;
+ * nothing is computed here but the bar width. */
+interface Ranked {
+  name: string;
+  model: string;
+  passed: number;
+  runs: number;
+  /** Mean time per run, over every run counted. */
+  avgSeconds: number;
+  /** Mean cost per run, as a ready string ("~$0.145", "$0 · 2.1K tokens"). */
+  cost: string;
+  detail: string;
+}
+interface Props {
+  items: Ranked[];
+  caption: string;
+}
+const { items, caption } = Astro.props;
+const pct = (r: Ranked) => Math.round((100 * r.passed) / r.runs);
+// Sub-second times keep two decimals; the rest one.
+const secs = (s: number) => `${s < 1 ? s.toFixed(2) : s.toFixed(1)} s`;
+---
+
+<figure class="ranking">
+  <figcaption>{caption}</figcaption>
+  <ol>
+    {
+      items.map((r, i) => (
+        <li class:list={{ us: r.name.startsWith("knaif") }}>
+          <span class="place">{i + 1}</span>
+          <span class="who">
+            <strong>{r.name}</strong>
+            <span class="model">{r.model}</span>
+          </span>
+          <span class="bar" aria-hidden="true">
+            <span style={`width: ${pct(r)}%`} />
+          </span>
+          <span class="score">
+            <strong>
+              {r.passed} / {r.runs}
+            </strong>
+            <span class="pct">{pct(r)}%</span>
+          </span>
+          <span class="time">
+            <strong>{secs(r.avgSeconds)}</strong>
+            <span class="cost">{r.cost}</span>
+            <span class="pct">avg per run</span>
+          </span>
+          <span class="detail">{r.detail}</span>
+        </li>
+      ))
+    }
+  </ol>
+</figure>
+
+<style>
+  .ranking {
+    margin: 0;
+  }
+
+  figcaption {
+    color: var(--muted);
+    font-size: var(--step--1);
+    margin-bottom: 0.75rem;
+    max-width: var(--measure);
+  }
+
+  ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  li {
+    display: grid;
+    grid-template-columns: 1.75rem minmax(9rem, 13rem) 1fr 7.5rem 9.5rem;
+    grid-template-areas:
+      "place who bar score time"
+      ". detail detail detail detail";
+    align-items: center;
+    column-gap: 0.85rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  li.us {
+    border-left: 3px solid var(--coral);
+    background: var(--surface);
+  }
+
+  .place {
+    grid-area: place;
+    font-family: var(--font-mono);
+    color: var(--muted);
+  }
+
+  .who {
+    grid-area: who;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .model {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+
+  .bar {
+    grid-area: bar;
+    height: 0.6rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .bar span {
+    display: block;
+    height: 100%;
+    background: var(--muted);
+  }
+
+  li.us .bar span {
+    background: var(--coral);
+  }
+
+  .score {
+    grid-area: score;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    white-space: nowrap;
+  }
+
+  .time {
+    grid-area: time;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    white-space: nowrap;
+    line-height: 1.3;
+  }
+
+  .cost {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+  }
+
+  .pct {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+
+  .detail {
+    grid-area: detail;
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+
+  @media (max-width: 34rem) {
+    li {
+      grid-template-columns: 1.5rem 1fr auto;
+      grid-template-areas:
+        "place who score"
+        ". bar bar"
+        ". time time"
+        ". detail detail";
+      row-gap: 0.35rem;
+    }
+
+    .time {
+      flex-direction: row;
+      align-items: baseline;
+      gap: 0.6rem;
+    }
+  }
+</style>

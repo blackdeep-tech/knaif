@@ -1,0 +1,223 @@
+---
+/* One worked example: the request as the user typed it (with English beside it when it is in
+ * another language), then what each program ran, what it said, and the verdict. Everything
+ * quoted comes from the run record; the verdict is in words as well as colour. */
+import type { Example } from "../../lib/comparison-local-examples";
+
+interface Props {
+  example: Example;
+}
+const { example } = Astro.props;
+const mark = { good: "✓", bad: "✗", note: "!" } as const;
+// The request's language, so a screen reader reads it as that language.
+const codes: Record<string, string> = {
+  German: "de",
+  Spanish: "es",
+  French: "fr",
+  Chinese: "zh",
+  Bulgarian: "bg",
+};
+const lang = example.lang ? codes[example.lang] : "en";
+---
+
+<figure class="exchange" id={example.id}>
+  <figcaption>
+    <span class="title">{example.title}</span>
+    <span class="ask">
+      <span class="label">You ask</span>
+      <q lang={lang}>{example.request}</q>
+      {example.lang && <span class="tag">{example.lang}</span>}
+    </span>
+    {example.gloss && <span class="gloss">“{example.gloss}”</span>}
+    <span class="expect">Expected: {example.expect}</span>
+  </figcaption>
+
+  <div class="replies">
+    {
+      example.replies.map((r) => (
+        <section class:list={["reply", r.verdict]}>
+          <header>
+            <span class="who">
+              <strong>{r.who}</strong>
+              {r.model && <span class="model">{r.model}</span>}
+            </span>
+            <span class="verdict">
+              <span aria-hidden="true">{mark[r.verdict]}</span> {r.label}
+            </span>
+          </header>
+          {r.ran && r.ran.length > 0 && (
+            <div class="block">
+              <span class="label">ran</span>
+              <pre class="term"><code>{r.ran.join("\n")}</code></pre>
+            </div>
+          )}
+          {r.said && (
+            <div class="block">
+              <span class="label">said</span>
+              <blockquote lang={r.saidGloss ? lang : "en"}>{r.said}</blockquote>
+              {r.saidGloss && <p class="gloss">“{r.saidGloss}”</p>}
+            </div>
+          )}
+          {r.note && <p class="note">{r.note}</p>}
+        </section>
+      ))
+    }
+  </div>
+</figure>
+
+<style>
+  .exchange {
+    margin: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  figcaption {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1rem 1.15rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .title {
+    font-weight: 600;
+  }
+
+  .ask {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+
+  .ask q {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    quotes: "“" "”";
+  }
+
+  .label {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 0.35em;
+  }
+
+  .gloss,
+  .expect {
+    color: var(--muted);
+    font-size: var(--step--1);
+    margin: 0;
+  }
+
+  .replies {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .reply {
+    padding: 1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border-left: 3px solid transparent;
+  }
+
+  .reply + .reply {
+    border-top: 1px solid var(--border);
+  }
+
+  .reply.good {
+    border-left-color: var(--ok);
+  }
+
+  .reply.bad {
+    border-left-color: var(--bad);
+  }
+
+  .reply.note {
+    border-left-color: var(--coral);
+  }
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    align-items: baseline;
+  }
+
+  .who {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+  }
+
+  .model {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+
+  .verdict {
+    font-size: var(--step--1);
+    font-weight: 600;
+  }
+
+  .good .verdict {
+    color: var(--ok);
+  }
+
+  .bad .verdict {
+    color: var(--bad);
+  }
+
+  .note .verdict {
+    color: var(--coral-text);
+  }
+
+  .block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .term {
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    background: #14171c;
+    color: #e8eaed;
+    padding: 0.75rem 0.9rem;
+    border-radius: var(--radius);
+    margin: 0;
+    /* A command must read exactly as it ran: scroll sideways rather than wrap mid-token. */
+    white-space: pre;
+    overflow-x: auto;
+  }
+
+  blockquote {
+    margin: 0;
+    padding-left: 0.85rem;
+    border-left: 2px solid var(--border);
+    white-space: pre-line;
+  }
+
+  .note {
+    margin: 0;
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+</style>

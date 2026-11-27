@@ -1,0 +1,117 @@
+---
+/* Long-form layout for the comparison articles (/vs, /vs/local): a headline and standfirst, a
+ * byline-style line of facts, then prose sections. Prose styles apply to the slot's content. */
+interface Props {
+  eyebrow: string;
+  title: string;
+  standfirst: string;
+  facts: string[];
+}
+const { eyebrow, title, standfirst, facts } = Astro.props;
+---
+
+<article class="article">
+  <header class="head">
+    <p class="eyebrow">{eyebrow}</p>
+    <h1>{title}</h1>
+    <p class="standfirst">{standfirst}</p>
+    <ul class="facts">{facts.map((f) => <li>{f}</li>)}</ul>
+  </header>
+  <slot />
+</article>
+
+<style>
+  .article {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(2.25rem, 5vw, 3.25rem);
+  }
+
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+
+  h1 {
+    font-size: var(--step-3);
+    margin: 0;
+    font-weight: 600;
+    max-width: 24ch;
+  }
+
+  .standfirst {
+    font-size: var(--step-1);
+    color: var(--muted);
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  .facts {
+    list-style: none;
+    padding: 0;
+    margin: 0.25rem 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.25rem;
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    color: var(--muted);
+  }
+
+  .article :global(section) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .article :global(h2) {
+    font-size: var(--step-2);
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .article :global(h3) {
+    font-size: var(--step-1);
+    margin: 0.75rem 0 0;
+    font-weight: 600;
+  }
+
+  .article :global(section > p),
+  .article :global(section > ul),
+  .article :global(section > ol) {
+    margin: 0;
+    max-width: var(--measure);
+  }
+
+  .article :global(section > ul),
+  .article :global(section > ol) {
+    padding-left: 1.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .article :global(.instructions) {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--step--1);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.15rem;
+    white-space: pre-wrap;
+    max-width: var(--measure);
+  }
+
+  .article :global(.examples) {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .article :global(.aside) {
+    color: var(--muted);
+    font-size: var(--step--1);
+  }
+</style>

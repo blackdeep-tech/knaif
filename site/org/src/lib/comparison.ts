@@ -95,7 +95,10 @@ export const rows: Row[] = [
   },
   {
     request: "speed up 2×",
-    lang: "Russian",
+    // Corrected 2026-11-27 (owner): "ускори clip.mp4 до 2x" is Bulgarian (corpus row ffmpeg_188,
+    // tagged bg), not Russian as the harness label "russian: speed 2x" says. A label, not a
+    // measured number; every figure in this row is unchanged.
+    lang: "Bulgarian",
     cells: {
       knaif: { outcome: "ok", seconds: 1.12, cost: "free" },
       opus: { outcome: "ok", seconds: 13.4, cost: 0.158 },
